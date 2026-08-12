@@ -74,16 +74,40 @@
                                 <i class="nav-icon bi bi-circle"></i><p>Viajes / Delivery</p>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a href="{{ route('operaciones.releases.index') }}" class="nav-link">
-                                <i class="nav-icon bi bi-circle"></i><p>Releases</p>
-                            </a>
-                        </li>
+                  
                         <li class="nav-item">
                             <a href="{{ route('operaciones.choferes.index') }}" class="nav-link">
                                 <i class="nav-icon bi bi-circle"></i><p>Choferes</p>
                             </a>
                         </li>
+                    </ul>
+                </li>
+
+                {{--    COMPRAS --}}
+                <li class="nav-item {{ request()->routeIs('operaciones.*') ? 'menu-open' : '' }}">
+                    <a href="#" class="nav-link">
+
+                        <i class="nav-icon bi bi-cart3"></i>
+             
+                        <p>Compras <i class="nav-arrow bi bi-chevron-right"></i></p>
+                    </a>
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{{ route('operaciones.contenedores.index') }}" class="nav-link">
+                                <i class="nav-icon bi bi-circle"></i><p>Proveedores</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('operaciones.rentas.index') }}" class="nav-link">
+                                <i class="nav-icon bi bi-circle"></i><p>Compras</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="{{ route('operaciones.viajes.index') }}" class="nav-link">
+                                <i class="nav-icon bi bi-circle"></i><p>Releases</p>
+                            </a>
+                        </li>
+                        
                     </ul>
                 </li>
 
