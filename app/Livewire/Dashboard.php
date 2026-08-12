@@ -92,12 +92,10 @@ class Dashboard extends Component
             'labels' => [
                 'Pagadas',
                 'Pendientes',
-                'Vencidas',
             ],
 
             'data' => [
                 72,
-                8,
                 3,
             ],
         ];
