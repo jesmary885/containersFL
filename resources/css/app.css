@@ -12,6 +12,10 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
+/* =========================================================
+   SIDEBAR - LOGO NORMAL
+   ========================================================= */
+
 .sidebar-brand {
     height: 90px;
     display: flex;
@@ -35,7 +39,30 @@
     display: block;
     width: auto;
     height: 90px;
-    max-width: 180x;
+    max-width: 180px;
     object-fit: contain;
     margin: 0;
 }
+
+
+/* =========================================================
+   SIDEBAR COLAPSADO - LOGO MINI
+   ========================================================= */
+
+body.sidebar-collapse .sidebar-brand {
+    height: 70px;
+}
+
+body.sidebar-collapse .sidebar-brand .logo-container {
+    width: 70px;
+    height: 70px;
+    padding: 0;
+}
+
+body.sidebar-collapse .sidebar-brand .logo-containers {
+    width: 46px;
+    height: 46px;
+    max-width: 46px;
+    object-fit: contain;
+}
+

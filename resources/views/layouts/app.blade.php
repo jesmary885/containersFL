@@ -21,7 +21,7 @@
     @livewireStyles
 </head>
 
-<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+<body class="layout-fixed sidebar-expand-lg sidebar-mini bg-body-tertiary">
     <div class="app-wrapper">
 
         {{-- NAVBAR SUPERIOR --}}

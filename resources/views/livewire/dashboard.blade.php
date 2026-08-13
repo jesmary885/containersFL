@@ -151,85 +151,6 @@
 
     </div>
 
-
-    {{-- ============================================================
-         GRÁFICAS
-    ============================================================= --}}
-
-    <div class="row g-3 mb-4">
-
-        {{-- Ventas --}}
-        <div class="col-lg-8">
-
-            <div class="card h-100">
-
-                <div class="card-header">
-
-                    <h3 class="card-title">
-
-                        <i class="bi bi-bar-chart-line me-1"></i>
-
-                        Ventas de los últimos 6 meses
-
-                    </h3>
-
-                </div>
-
-                <div class="card-body">
-
-                    <div style="height: 300px;">
-
-                        <canvas id="ventasChart"></canvas>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
-
-        {{-- Cuentas --}}
-        <div class="col-lg-4">
-
-            <div class="card h-100">
-
-                <div class="card-header">
-
-                    <h3 class="card-title">
-
-                        <i class="bi bi-pie-chart me-1"></i>
-
-                        Estado de cuentas
-
-                    </h3>
-
-                </div>
-
-                <div class="card-body">
-
-                    <div
-                        style="
-                            height: 300px;
-                            display: flex;
-                            justify-content: center;
-                        "
-                    >
-
-                        <canvas id="cuentasChart"></canvas>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
     {{-- ============================================================
          PAGOS PENDIENTES
     ============================================================= --}}
@@ -366,6 +287,86 @@
     </div>
 
 
+    
+
+    {{-- ============================================================
+         GRÁFICAS
+    ============================================================= --}}
+
+    <div class="row g-3 mb-4">
+
+        {{-- Ventas --}}
+        <div class="col-lg-8">
+
+            <div class="card h-100">
+
+                <div class="card-header">
+
+                    <h3 class="card-title">
+
+                        <i class="bi bi-bar-chart-line me-1"></i>
+
+                        Ventas de los últimos 6 meses
+
+                    </h3>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div style="height: 300px;">
+
+                        <canvas id="ventasChart"></canvas>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        {{-- Cuentas --}}
+        <div class="col-lg-4">
+
+            <div class="card h-100">
+
+                <div class="card-header">
+
+                    <h3 class="card-title">
+
+                        <i class="bi bi-pie-chart me-1"></i>
+
+                        Estado de cuentas
+
+                    </h3>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div
+                        style="
+                            height: 300px;
+                            display: flex;
+                            justify-content: center;
+                        "
+                    >
+
+                        <canvas id="cuentasChart"></canvas>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
     {{-- ============================================================
          RESUMEN OPERATIVO
     ============================================================= --}}
@@ -488,6 +489,7 @@
         </div>
 
     </div>
+    
 
 
     {{-- ============================================================
