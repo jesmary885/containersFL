@@ -17,6 +17,11 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->string('phone', 30)->nullable();
+            $table->char('locale', 5)->default('es');
+            $table->boolean('is_active')->default(true);
+            $table->timestamp('last_login_at')->nullable();
+            $table->softDeletes();
             $table->rememberToken();
             $table->timestamps();
         });
@@ -42,7 +47,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('users');
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn(['phone', 'locale', 'is_active', 'last_login_at', 'deleted_at']);
+        });
         Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
     }

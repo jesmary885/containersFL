@@ -1,17 +1,20 @@
 <?php
 
-use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\CompanySwitchController;
 use App\Http\Controllers\LoginController;
-use Illuminate\Support\Facades\Route;
+use App\Livewire\Dashboard;
+use App\Livewire\Placeholder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
 
 use App\Livewire\Auth\Login;
 
 
-
-// Route::middleware('guest')->group(function () {
-//     Route::get('/login', Login::class)->name('login');
-// });
+/*
+|--------------------------------------------------------------------------
+| RUTAS PÚBLICAS
+|--------------------------------------------------------------------------
+*/
 
 Route::middleware('guest')->group(function () {
 
@@ -19,38 +22,72 @@ Route::middleware('guest')->group(function () {
 
 });
 
+/*
+|--------------------------------------------------------------------------
+| RUTAS CON SESIÓN INICIADA
+|--------------------------------------------------------------------------
+*/
+
 Route::middleware('auth')->group(function () {
-     Route::post('/logout', function () {
+
+    Route::post('/logout', function () {
         Auth::logout();
         request()->session()->invalidate();
         request()->session()->regenerateToken();
+
         return redirect()->route('login');
     })->name('logout');
 
-     Route::get('/dashboard', \App\Livewire\Dashboard::class)->name('dashboard');
+    /* ---------------------------------------------------------------
+     | CAMBIO DE EMPRESA
+     |
+     | POST y no GET a propósito. Un GET se puede disparar con un
+     | enlace o una imagen escondida en un correo; un POST necesita el
+     | token CSRF que Laravel pone en el formulario.
+     |
+     | Cambiar la empresa activa modifica el estado de la sesión, y
+     | todo lo que modifica estado va por POST.
+     * ------------------------------------------------------------ */
+    Route::post('/empresa/cambiar', CompanySwitchController::class)
+        ->name('company.switch');
 
-     Route::view('/comercial/clientes', 'placeholder')->name('comercial.clientes.index');
-    Route::view('/comercial/presupuestos', 'placeholder')->name('comercial.presupuestos.index');
-    Route::view('/comercial/ventas', 'placeholder')->name('comercial.ventas.index');
+    Route::get('/dashboard', Dashboard::class)->name('dashboard');
 
-    Route::view('/operaciones/contenedores', 'placeholder')->name('operaciones.contenedores.index');
-    Route::view('/operaciones/rentas', 'placeholder')->name('operaciones.rentas.index');
-    Route::view('/operaciones/viajes', 'placeholder')->name('operaciones.viajes.index');
-    Route::view('/operaciones/releases', 'placeholder')->name('operaciones.releases.index');
-    Route::view('/operaciones/choferes', 'placeholder')->name('operaciones.choferes.index');
+    /* ---------------------------------------------------------------
+     | MÓDULOS PENDIENTES
+     |
+     | Todos apuntan al mismo componente provisional. A medida que
+     | construimos cada módulo, se va reemplazando Placeholder::class
+     | por el componente real. El nombre de la ruta NO cambia, así que
+     | el sidebar no hay que tocarlo nunca.
+     * ------------------------------------------------------------ */
 
-    Route::view('/inventario/insumos', 'placeholder')->name('inventario.insumos.index');
-    Route::view('/inventario/camiones', 'placeholder')->name('inventario.camiones.index');
+    // COMERCIAL
+    Route::get('/comercial/clientes',      Placeholder::class)->name('comercial.clientes.index');
+    Route::get('/comercial/presupuestos',  Placeholder::class)->name('comercial.presupuestos.index');
+    Route::get('/comercial/ventas',        Placeholder::class)->name('comercial.ventas.index');
 
-    Route::view('/finanzas/facturacion', 'placeholder')->name('finanzas.facturacion.index');
-    Route::view('/finanzas/pagos', 'placeholder')->name('finanzas.pagos.index');
-    Route::view('/finanzas/gastos', 'placeholder')->name('finanzas.gastos.index');
+    // OPERACIONES
+    Route::get('/operaciones/contenedores', Placeholder::class)->name('operaciones.contenedores.index');
+    Route::get('/operaciones/rentas',       Placeholder::class)->name('operaciones.rentas.index');
+    Route::get('/operaciones/viajes',       Placeholder::class)->name('operaciones.viajes.index');
+    Route::get('/operaciones/releases',     Placeholder::class)->name('operaciones.releases.index');
+    Route::get('/operaciones/choferes',     Placeholder::class)->name('operaciones.choferes.index');
 
-    Route::view('/administracion/usuarios', 'placeholder')->name('administracion.usuarios.index');
-    Route::view('/administracion/roles', 'placeholder')->name('administracion.roles.index');
+    // INVENTARIO
+    Route::get('/inventario/insumos',  Placeholder::class)->name('inventario.insumos.index');
+    Route::get('/inventario/camiones', Placeholder::class)->name('inventario.camiones.index');
 
-    Route::view('/reportes', 'placeholder')->name('reportes.index');
-    Route::view('/configuracion', 'placeholder')->name('configuracion.index');
+    // FINANZAS
+    Route::get('/finanzas/facturacion', Placeholder::class)->name('finanzas.facturacion.index');
+    Route::get('/finanzas/pagos',       Placeholder::class)->name('finanzas.pagos.index');
+    Route::get('/finanzas/gastos',      Placeholder::class)->name('finanzas.gastos.index');
+
+    // ADMINISTRACIÓN
+    Route::get('/administracion/usuarios', Placeholder::class)->name('administracion.usuarios.index');
+    Route::get('/administracion/roles',    Placeholder::class)->name('administracion.roles.index');
+
+    Route::get('/reportes',      Placeholder::class)->name('reportes.index');
+    Route::get('/configuracion', Placeholder::class)->name('configuracion.index');
 
 });
-
