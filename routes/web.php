@@ -7,6 +7,10 @@ use App\Livewire\Placeholder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
+use App\Livewire\Estimates\Form   as EstimateForm;
+use App\Livewire\Estimates\Index  as EstimateIndex;
+use App\Livewire\Estimates\Show   as EstimateShow;
+
 use App\Livewire\Auth\Login;
 
 
@@ -63,8 +67,21 @@ Route::middleware('auth')->group(function () {
      * ------------------------------------------------------------ */
 
     // COMERCIAL
-    Route::get('/comercial/clientes',      Placeholder::class)->name('comercial.clientes.index');
-    Route::get('/comercial/presupuestos',  Placeholder::class)->name('comercial.presupuestos.index');
+     Route::get('/comercial/clientes',      Placeholder::class)->name('comercial.clientes.index');
+    
+       Route::get('/comercial/presupuestos', EstimateIndex::class)
+       ->name('comercial.presupuestos.index');
+
+      Route::get('/comercial/presupuestos/nuevo', EstimateForm::class)
+          ->name('comercial.presupuestos.create');
+
+     Route::get('/comercial/presupuestos/{estimate}/editar', EstimateForm::class)
+          ->name('comercial.presupuestos.edit');
+
+      Route::get('/comercial/presupuestos/{estimate}', EstimateShow::class)
+          ->name('comercial.presupuestos.show');
+
+
     Route::get('/comercial/ventas',        Placeholder::class)->name('comercial.ventas.index');
 
     // OPERACIONES

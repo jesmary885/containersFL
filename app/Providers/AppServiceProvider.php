@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models;
 use App\Observers;
 use App\Support\CompanyContext;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -20,6 +21,8 @@ class AppServiceProvider extends ServiceProvider
         Models\ExportCertificate::class       => Observers\ExportCertificateObserver::class,
         Models\Container::class               => Observers\ContainerObserver::class,
         Models\DriverSettlementItem::class    => Observers\DriverSettlementItemObserver::class,
+        Models\Estimate::class                => Observers\EstimateObserver::class,
+        Models\EstimateItem::class            => Observers\EstimateItemObserver::class,
     ];
 
     public function register(): void
@@ -39,6 +42,20 @@ class AppServiceProvider extends ServiceProvider
         foreach ($this->observers as $model => $observer) {
             $model::observe($observer);
         }
+
+             /* -----------------------------------------------------------------
+         | LA PAGINACIÓN, CON ESTILO DE BOOTSTRAP
+         |
+         | Laravel trae la paginación pintada con Tailwind de fábrica. El
+         | login del sistema sí usa Tailwind, pero las pantallas de adentro
+         | están armadas con AdminLTE, que es Bootstrap.
+         |
+         | Sin esta línea, los botones "anterior / siguiente" del listado
+         | de presupuestos salen sin estilo: unos enlaces azules sueltos
+         | encima de una tabla bien maquetada. Se nota mucho.
+         |
+         * -------------------------------------------------------------- */
+        Paginator::useBootstrapFive();
 
         $this->compartirEmpresaConLasVistas();
     }

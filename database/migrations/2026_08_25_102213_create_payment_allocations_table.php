@@ -18,6 +18,7 @@ return new class extends Migration
          * -------------------------------------------------------------- */
 
             Schema::create('payment_allocations', function (Blueprint $table) {
+            $table->id();
             // cascade: si se borra el pago, sus asignaciones se van.
             $table->foreignId('payment_id')->constrained()->cascadeOnDelete();
 

@@ -32,7 +32,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('expense_payments', function (Blueprint $table) {
-            /* -------------------------------------------------------------
+           
+            $table->id();
+        /* -------------------------------------------------------------
              | DE QUÉ GASTO ES
              |
              | cascadeOnDelete: si se borra el gasto, se van sus abonos.

@@ -7,12 +7,17 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 
-// Un cliente puede tener varias: la de facturación, la de entrega, y los
-// distintos sitios de obra donde le dejan contenedores.
-
-// > **Importante:** la factura NO apunta a esta tabla. Guarda una **copia**
-// > de la dirección en su columna JSON `bill_to`. Así, si el cliente se muda
-// > el año que viene, la factura de hoy sigue mostrando dónde estaba hoy.
+/**
+ * Las direcciones del cliente.
+ *
+ * Un cliente puede tener varias: la de facturación, la de entrega, y
+ * los distintos sitios de obra donde le dejan contenedores.
+ *
+ * IMPORTANTE: la factura NO apunta a esta tabla. Guarda una COPIA de
+ * la dirección en su columna JSON bill_to. Así, si el cliente se muda
+ * el año que viene, la factura de hoy sigue mostrando dónde estaba hoy.
+ * Esa copia la produce el método toSnapshot() del final.
+ */
 
 class CustomerAddress extends Model
 {
@@ -62,7 +67,7 @@ class CustomerAddress extends Model
             $this->line1,
             $this->line2,
             $this->city,
-            $this->state.' '.$this->postal_code,
+            trim($this->state . ' ' . $this->zip),
         ])->map(fn ($p) => trim((string) $p))->filter()->implode(', ');
     }
 
@@ -74,7 +79,7 @@ class CustomerAddress extends Model
     public function toSnapshot(): array
     {
         return $this->only([
-            'label', 'line1', 'line2', 'city', 'state', 'postal_code', 'country',
+            'label', 'line1', 'line2', 'city', 'state', 'zip', 'country',
         ]);
     }
 }

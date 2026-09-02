@@ -1,3 +1,4 @@
+<?php
 namespace App\Models;
 
 use Carbon\Carbon;
@@ -31,13 +32,9 @@ class SupplierPrice extends Model
             'pickup_fee'  => 'decimal:2',
 
             /*
-             | CAMBIO — el modelo decía 'valid_from' y 'valid_to'.
-             | La tabla tiene 'quoted_at', 'valid_until' e 'is_current'.
-             |
-             | No es solo el nombre: es otra idea. La tabla no guarda un
-             | rango cerrado, guarda "desde cuándo lo cotizaron y hasta
-             | cuándo lo respetan", más una bandera para poder descartar
-             | un precio a mano sin tocar las fechas.
+             | La tabla no guarda un rango cerrado, guarda "desde cuándo lo
+             | cotizaron y hasta cuándo lo respetan", más una bandera para
+             | poder descartar un precio a mano sin tocar las fechas.
              */
             'quoted_at'   => 'date',
             'valid_until' => 'date',
