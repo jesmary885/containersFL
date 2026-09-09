@@ -32,6 +32,16 @@
         </div>
     @endif
 
+    @if ($estimate->status->isPendingReview())
+        <div class="alert alert-primary d-flex align-items-start gap-2 no-imprimir">
+            <i class="bi bi-eye fs-5"></i>
+            <div>
+                <strong>{{ __('estimates.review_title') }}</strong>
+                <div class="small">{{ __('estimates.review_text') }}</div>
+            </div>
+        </div>
+    @endif
+
     {{-- ─────────────────────────────────────────────────────────────
          BARRA DE ACCIONES
 
@@ -41,10 +51,44 @@
     ───────────────────────────────────────────────────────────── --}}
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 no-imprimir">
 
+        {{--
+            LOS DOS BOTONES DE VOLVER
+
+            Se acaba de guardar: lo que se quiere casi siempre es seguir
+            tocando ESTE presupuesto, no irse a la lista. La flecha vuelve
+            a la edición.
+
+            Ir al listado es la otra intención y tiene su propio botón,
+            con su propio icono. Antes las dos cosas colgaban de la misma
+            flecha y ganaba la menos frecuente.
+
+            Cuando el presupuesto ya no es editable —aceptado, convertido,
+            vencido— no hay a dónde volver a editar: ahí la flecha sí va
+            al listado, que es la única salida que queda.
+        --}}
         <div class="d-flex align-items-center gap-3">
-            <a href="{{ route('comercial.presupuestos.index') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left"></i>
-            </a>
+
+            <div class="btn-group">
+                @if ($estimate->isEditable())
+                    <a href="{{ route('comercial.presupuestos.edit', $estimate) }}"
+                       class="btn btn-outline-secondary"
+                       title="Seguir editando este presupuesto">
+                        <i class="bi bi-arrow-left"></i>
+                    </a>
+                @else
+                    <a href="{{ route('comercial.presupuestos.index') }}"
+                       class="btn btn-outline-secondary"
+                       title="Volver al listado">
+                        <i class="bi bi-arrow-left"></i>
+                    </a>
+                @endif
+
+                <a href="{{ route('comercial.presupuestos.index') }}"
+                   class="btn btn-outline-secondary"
+                   title="Todos los presupuestos">
+                    <i class="bi bi-list-ul"></i>
+                </a>
+            </div>
 
             <div>
                 <h4 class="mb-0">
@@ -62,42 +106,87 @@
             </div>
         </div>
 
+        {{--
+            ═══════════════════════════════════════════════════════════════
+            LA BARRA DE ACCIONES, POR ETAPA
+            ═══════════════════════════════════════════════════════════════
+
+            Antes estaban todas siempre. Se podía imprimir, duplicar y
+            convertir en factura un borrador a medio armar, y "El cliente
+            aceptó" convivía con un documento que el cliente no había
+            recibido nunca.
+
+            Ahora hay dos momentos y cada uno enseña lo suyo:
+
+              POR REVISAR   solo mirar, volver a editar, y enviar. Nada
+                            más. Es el momento de comprobar, no de
+                            operar.
+
+              ENVIADO       ya salió: imprimir, duplicar, registrar la
+                            respuesta del cliente, convertir en factura.
+
+            Un botón que no está no genera la pregunta de por qué está
+            deshabilitado.
+        --}}
         <div class="btn-group">
 
-            <button class="btn btn-outline-secondary" onclick="window.print()">
-                <i class="bi bi-printer me-1"></i> Imprimir
-            </button>
+            @if ($estimate->status->isPendingReview())
 
-            @if ($estimate->isEditable())
+                {{-- ── ETAPA 1 · REVISAR ── --}}
+
                 <a href="{{ route('comercial.presupuestos.edit', $estimate) }}"
                    class="btn btn-outline-secondary">
-                    <i class="bi bi-pencil me-1"></i> Editar
+                    <i class="bi bi-pencil me-1"></i> {{ __('estimates.back_to_edit') }}
                 </a>
-            @endif
 
-            <button class="btn btn-outline-secondary" wire:click="duplicar">
-                <i class="bi bi-files me-1"></i> Duplicar
-            </button>
+                <button class="btn btn-success" wire:click="marcarEnviado">
+                    <i class="bi bi-envelope-arrow-up me-1"></i> {{ __('estimates.send_now') }}
+                </button>
 
-            @if ($estimate->status === \App\Enums\EstimateStatus::Draft)
-                <button class="btn btn-primary" wire:click="marcarEnviado">
-                    <i class="bi bi-send me-1"></i> Marcar como enviado
-                </button>
-            @endif
+            @else
 
-            @if ($estimate->status === \App\Enums\EstimateStatus::Sent)
-                <button class="btn btn-success" wire:click="marcarAceptado">
-                    <i class="bi bi-check-lg me-1"></i> El cliente aceptó
-                </button>
-                <button class="btn btn-outline-danger" wire:click="confirmar('rechazar')">
-                    <i class="bi bi-x-lg me-1"></i> Rechazó
-                </button>
-            @endif
+                {{-- ── ETAPA 2 · YA SALIÓ ── --}}
 
-            @if ($estimate->status->canConvert())
-                <button class="btn btn-warning" wire:click="confirmar('convertir')">
-                    <i class="bi bi-receipt me-1"></i> Convertir en factura
-                </button>
+                @if ($estimate->status->isOut())
+                    <button class="btn btn-outline-secondary" onclick="window.print()">
+                        <i class="bi bi-printer me-1"></i> Imprimir
+                    </button>
+                @endif
+
+                @if ($estimate->isEditable())
+                    <a href="{{ route('comercial.presupuestos.edit', $estimate) }}"
+                       class="btn btn-outline-secondary">
+                        <i class="bi bi-pencil me-1"></i> Editar
+                    </a>
+                @endif
+
+                @if ($estimate->status->isOut())
+                    <button class="btn btn-outline-secondary" wire:click="duplicar">
+                        <i class="bi bi-files me-1"></i> Duplicar
+                    </button>
+                @endif
+
+                @if ($estimate->status === \App\Enums\EstimateStatus::Draft)
+                    <button class="btn btn-primary" wire:click="marcarEnviado">
+                        <i class="bi bi-send me-1"></i> Marcar como enviado
+                    </button>
+                @endif
+
+                @if ($estimate->status === \App\Enums\EstimateStatus::Sent)
+                    <button class="btn btn-success" wire:click="marcarAceptado">
+                        <i class="bi bi-check-lg me-1"></i> El cliente aceptó
+                    </button>
+                    <button class="btn btn-outline-danger" wire:click="confirmar('rechazar')">
+                        <i class="bi bi-x-lg me-1"></i> Rechazó
+                    </button>
+                @endif
+
+                @if ($estimate->status->canConvert())
+                    <button class="btn btn-warning" wire:click="confirmar('convertir')">
+                        <i class="bi bi-receipt me-1"></i> Convertir en factura
+                    </button>
+                @endif
+
             @endif
 
             @if ($estimate->status->is(\App\Enums\EstimateStatus::Rejected, \App\Enums\EstimateStatus::Expired))
@@ -177,39 +266,36 @@
                     <div class="small text-uppercase text-secondary fw-semibold mb-1">Facturar a</div>
                     <div class="fw-semibold">{{ $estimate->customer?->name }}</div>
                     <div class="small">
-                        {{--
-                            Se arma la dirección saltando las partes vacías.
-
-                            Sin el filter(), un cliente sin "línea 2" saldría
-                            con dos comas seguidas, que es de esas cosas que
-                            nadie reporta pero todos notan en un documento
-                            que se le manda a un cliente.
-
-                            El 'label' se salta a propósito: es el nombre
-                            interno de la dirección ("Oficina", "Yarda"),
-                            no parte de la dirección misma.
-                        --}}
-                        {{ collect($estimate->bill_to ?? [])
-                            ->except('label')
-                            ->filter()
-                            ->implode(', ') }}
+                        {{-- El armado de la línea vive en el modelo: ver
+                             HasDocumentAddresses::addressToLine(). --}}
+                        {{ \App\Models\Estimate::addressToLine($estimate->bill_to) }}
                     </div>
                     @if ($estimate->customer?->primary_email)
                         <div class="small text-secondary">{{ $estimate->customer->primary_email }}</div>
                     @endif
                 </div>
 
-                @if ($estimate->ship_to)
-                    <div class="col-6">
-                        <div class="small text-uppercase text-secondary fw-semibold mb-1">Entregar en</div>
-                        <div class="small">
-                            {{ collect($estimate->ship_to)
-                                ->except('label')
-                                ->filter()
-                                ->implode(', ') }}
-                        </div>
+                {{--
+                    ENTREGAR EN — se imprime SIEMPRE, aunque sea la misma.
+
+                    Es como vienen las facturas del cliente y es lo correcto
+                    en un documento que se manda afuera: nadie debería tener
+                    que deducir a dónde iba la mercancía por el hecho de que
+                    falte el bloque.
+
+                    Cuando no se pidió otro destino, printableShipTo()
+                    devuelve la de facturación. En la BASE ship_to sigue
+                    siendo null: el porqué está explicado en el trait.
+                --}}
+                <div class="col-6">
+                    <div class="small text-uppercase text-secondary fw-semibold mb-1">Entregar en</div>
+                    <div class="small">
+                        {{ \App\Models\Estimate::addressToLine($estimate->printableShipTo()) }}
                     </div>
-                @endif
+                    @unless ($estimate->shipsElsewhere())
+                        <div class="small text-secondary fst-italic">Misma dirección de facturación</div>
+                    @endunless
+                </div>
 
             </div>
 
@@ -236,6 +322,46 @@
                                 @if ($renglon->container)
                                     <div class="small text-secondary">
                                         Unidad: {{ $renglon->container->full_identifier }}
+                                    </div>
+                                @endif
+
+                                {{--
+                                    EL PLAZO DE LA RENTA — sí se imprime.
+
+                                    Sin él, el cliente lee "$850.00" y no
+                                    tiene forma de saber si es el total o la
+                                    mensualidad. Es la pregunta que llega por
+                                    teléfono al día siguiente.
+
+                                    El importe de la línea es la MENSUALIDAD.
+                                    El compromiso total va aparte y en gris:
+                                    es informativo, no es lo que se cobra hoy.
+                                --}}
+                                {{--
+                                    EL DETALLE DE LA MODIFICACIÓN — sí se
+                                    imprime, y va aquí y no en la
+                                    descripción por una razón de formato:
+                                    "dos puertas laterales, ventana con
+                                    reja, pintura, piso de madera" dentro
+                                    del renglón haría que la fila de
+                                    importes ocupara cuatro líneas y la
+                                    tabla dejara de leerse.
+                                --}}
+                                @if ($renglon->work_details)
+                                    <div class="small text-secondary mt-1"
+                                         style="white-space: pre-line; padding-left: .75rem; border-left: 2px solid #e2e8f0;">{{ $renglon->work_details }}</div>
+                                @endif
+
+                                @if ($renglon->rental_months)
+                                    <div class="small">
+                                        <i class="bi bi-calendar-range me-1"></i>
+                                        Plazo: {{ trans_choice('estimates.months_short', $renglon->rental_months, ['count' => $renglon->rental_months]) }}
+                                        · ${{ number_format($renglon->monthly_rate, 2) }}/mes
+                                    </div>
+                                    <div class="small text-secondary">
+                                        Compromiso total del plazo:
+                                        ${{ number_format($renglon->monthly_rate * $renglon->rental_months, 2) }}
+                                        · se factura mes a mes
                                     </div>
                                 @endif
 

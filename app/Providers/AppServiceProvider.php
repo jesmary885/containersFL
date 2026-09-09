@@ -23,6 +23,7 @@ class AppServiceProvider extends ServiceProvider
         Models\DriverSettlementItem::class    => Observers\DriverSettlementItemObserver::class,
         Models\Estimate::class                => Observers\EstimateObserver::class,
         Models\EstimateItem::class            => Observers\EstimateItemObserver::class,
+        Models\Payment::class                 => Observers\PaymentObserver::class,
     ];
 
     public function register(): void

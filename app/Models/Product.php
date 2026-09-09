@@ -3,14 +3,23 @@
 namespace App\Models;
 
 use App\Enums\ProductType;
+use App\Models\Container;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
  * Catálogo de conceptos facturables: contenedores, delivery, pickup,
  * modificaciones, recargos. Es lo que llena el desplegable de las
- * líneas del invoice.
+ * líneas del presupuesto y de la factura.
+ *
+ *
+ *   1. usable_in: en qué documento puede aparecer cada concepto.
+ *   2. scopeUsableIn(): el filtro que usa el desplegable.
+ *   3. isRental() / isDelivery() / isPickup(): para que el formulario
+ *      sepa de dónde sacar el precio sin escribir el código a mano en
+ *      cinco sitios distintos.
  */
 class Product extends Model
 {
@@ -44,6 +53,35 @@ class Product extends Model
      | LECTURA
      * ================================================================== */
 
+    /**
+     * El nombre que se muestra en el desplegable de conceptos.
+     *
+     * ══════════════════════════════════════════════════════════════════
+     * POR QUE EXISTE ESTE ACCESSOR
+     * ══════════════════════════════════════════════════════════════════
+     *
+     * form.blade.php pintaba {{ $producto->display_name }}. Esa columna
+     * existe en CUSTOMERS, no en products: aca las columnas son 'name' y
+     * 'name_en'. Eloquent no encontraba ni columna ni accessor, devolvia
+     * null, y CADA <option> del desplegable salia vacio.
+     *
+     * El desplegable funcionaba: tenia sus once opciones y se podian
+     * elegir. Solo que estaban todas en blanco, asi que elegir era
+     * adivinar. Y como la fila de ZIP y millas solo aparece cuando la
+     * linea es DELIVERY, tampoco habia forma de hacerla salir: para eso
+     * habia que acertar a ciegas con la opcion correcta.
+     *
+     * De paso resuelve 'name_en', que estaba en la tabla y en el seeder
+     * y no lo leia nadie: el catalogo ya era bilingue, faltaba usarlo.
+     * ══════════════════════════════════════════════════════════════════
+     */
+    protected function displayName(): Attribute
+    {
+        return Attribute::get(fn (): string => app()->getLocale() === 'en'
+            ? ($this->name_en ?: $this->name)
+            : $this->name);
+    }
+
     public function scopeActive(Builder $q): Builder
     {
         return $q->where('is_active', true)->orderBy('name');
@@ -66,36 +104,105 @@ class Product extends Model
     }
 
     /**
-     * Valores con los que se precarga la línea del invoice.
+     * Los conceptos que se pueden poner en este tipo de documento.
+     *
+     *     Product::usableIn('estimate')   // presupuesto
+     *     Product::usableIn('invoice')    // factura
+     *
+     * Los marcados 'both' salen siempre. Es lo que deja fuera del
+     * presupuesto la mora, el almacenaje y el recargo de tarjeta, sin
+     * borrarlos del catálogo (la factura los necesita).
+     */
+    public function scopeUsableIn(Builder $q, string $documento): Builder
+    {
+        return $q->whereIn('usable_in', [$documento, 'both']);
+    }
+
+    /* =====================================================================
+     | LECTURA — qué es este concepto
+     |
+     | Se pregunta por el CÓDIGO y no por el nombre, porque el nombre lo
+     | puede editar el usuario desde el catálogo y el código no.
+     * ================================================================== */
+
+    /** Renta de contenedor: el precio sale de monthly_rate de la unidad. */
+    public function isRental(): bool
+    {
+        return $this->code === 'CONT-RENT';
+    }
+
+    /** Venta de contenedor: el precio sale de list_price de la unidad. */
+    public function isSale(): bool
+    {
+        return $this->code === 'CONT-SALE';
+    }
+
+    /** Entrega: el importe se calcula millas × tarifa (RB-031). */
+    public function isDelivery(): bool
+    {
+        return $this->code === 'DELIVERY';
+    }
+
+    /** Recogida: fee fijo del depósito (RB-031). */
+    public function isPickup(): bool
+    {
+        return $this->code === 'PICKUP';
+    }
+
+    /**
+     * Valores con los que se precarga la línea del documento.
      * Todos editables ahí mismo.
      *
      * ══════════════════════════════════════════════════════════════════
      * AQUÍ ESTABA EL ERROR MÁS CARO DE TODO EL PROYECTO
      * ══════════════════════════════════════════════════════════════════
      *
-     * La línea de abajo decía:
+     * La línea de 'taxable' decía $this->is_taxable, pero la columna se
+     * llama 'taxable'. PHP devolvía null, (bool) null da false, y TODA
+     * línea nacía como no gravable: el 7% (RB-006) no se cobraba en
+     * ninguna venta, sin que saliera ningún error.
      *
-     *     'taxable' => (bool) $this->is_taxable,
-     *
-     * pero la columna de la tabla se llama 'taxable', no 'is_taxable'.
-     *
-     * Qué pasaba, paso a paso:
-     *
-     *   1. $this->is_taxable buscaba una columna que no existe.
-     *   2. Como no existe, PHP devolvía null (sin avisar de nada).
-     *   3. (bool) null da false.
-     *   4. Toda línea de factura nacía marcada como NO GRAVABLE.
-     *
-     * Traducido al negocio: el 7% de sales tax (RB-006) no se cobraba
-     * en NINGUNA venta. Y no hay forma de darse cuenta mirando la
-     * pantalla, porque no sale ningún error: simplemente el total es
-     * más bajo, el cliente paga contento, y el problema aparece cuando
-     * llega el reporte trimestral al estado de Florida y hay que pagar
-     * de la propia bolsa un impuesto que nunca se le cobró a nadie.
-     *
-     * El cast de arriba ya estaba corregido; faltaba esta línea.
+     * Ya está corregido. Se deja escrito para que no se repita.
      * ══════════════════════════════════════════════════════════════════
      */
+    /**
+     * El texto que se escribe solo en la descripcion del renglon.
+     *
+     * ══════════════════════════════════════════════════════════════════
+     * POR QUE ESTA ACA Y NO EN EL FORMULARIO
+     * ══════════════════════════════════════════════════════════════════
+     *
+     * El prefijo estaba escrito a mano dentro del Livewire y SOLO para
+     * renta: 'Renta mensual · '.$texto. La venta se quedaba sin
+     * ninguno, y por eso el EST-0004 salio impreso con un renglon que
+     * dice "Contenedor 40 ft High Cube · Usado · Cargo Worthy" sin decir
+     * en ningun lado que es una VENTA. El renglon de arriba si decia
+     * "Renta mensual", asi que el documento parecia contradecirse solo.
+     *
+     * Ademas estaba en castellano dentro del codigo, con lo cual un
+     * presupuesto en ingles habria salido con la mitad del renglon en
+     * espanol.
+     *
+     * Ahora cada concepto sabe como se lee, y se lee en el idioma de la
+     * sesion.
+     * ══════════════════════════════════════════════════════════════════
+     */
+    public function autoDescription(?Container $contenedor = null): string
+    {
+        $unidad = $contenedor?->lineDescription();
+
+        if (! $unidad) {
+            return $this->display_name;
+        }
+
+        return match (true) {
+            $this->isRental()        => __('estimates.auto_rental', ['unit' => $unidad]),
+            $this->isSale()          => __('estimates.auto_sale',   ['unit' => $unidad]),
+            $this->code === 'REPAIR' => __('estimates.auto_repair', ['unit' => $unidad]),
+            default                  => $this->display_name.' · '.$unidad,
+        };
+    }
+
     public function lineDefaults(): array
     {
         return [

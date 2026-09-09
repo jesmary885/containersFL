@@ -19,7 +19,7 @@ class ExpenseCategorySeeder extends Seeder
         // gastos históricos va a necesitar mapeo manual.
 
         $categories = [
-            ['YARD',        'Yarda',                     'Yard',                  false, 10],
+              ['YARD',        'Yarda',                     'Yard',                  false, 10],
             ['VEHICLES',    'Vehículos',                 'Vehicles',              false, 20],
             ['FUEL',        'Combustible',               'Fuel',                  false, 30],
             ['MATERIALS',   'Materiales',                'Materials',             false, 40],
@@ -32,10 +32,25 @@ class ExpenseCategorySeeder extends Seeder
             ['TOLLS',       'Peajes',                    'Tolls',                 false, 110],
 
             // Esta es la que resuelve la hoja "TAXES" del Excel:
-            // pagos a técnicos y contratistas para el reporte 1099 de fin de año.
+            // pagos a técnicos y contratistas para el reporte 1099.
             ['CONTRACTORS', 'Técnicos y contratistas',   'Contractors (1099)',    true,  120],
 
             ['REPAIRS',     'Reparación de contenedores','Container repairs',     true,  130],
+
+            /* ---------------------------------------------------------------
+             | NUEVA · RB-016
+             |
+             | El CSC Safety Survey de exportación lo emite un inspector
+             | externo (en el ejemplo del cliente, Florida Shipping
+             | Containers LLC, firmado por Cowinton Scotland, IICL). Hay
+             | que pagárselo, así que es un GASTO y no un ingreso.
+             |
+             | Marcada para 1099 por defecto porque es pago a un
+             | prestador de servicios. El contador decide caso por caso;
+             | la marca es editable en cada gasto.
+             * ------------------------------------------------------------ */
+            ['CERTS',       'Certificaciones e inspecciones', 'Certifications & inspections', true, 135],
+
             ['OTHER',       'Otros',                     'Other',                 false, 999],
         ];
 

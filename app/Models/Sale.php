@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Sale extends Model
 {
-    use HasFactory, BelongsToCompany;
+    use HasFactory, \App\Models\Concerns\HasDocumentAddresses, BelongsToCompany;
 
     /* =====================================================================
      | CONFIGURACIÓN
@@ -32,7 +32,12 @@ class Sale extends Model
 
         'sale_date'                  => 'date',
         'free_storage_until'         => 'date',
-        'delivery_address'           => 'array',
+
+        // Direcciones congeladas del dia de la venta (RB-035). Mismos
+        // nombres que estimate e invoice: convertir un documento en otro
+        // es copiar valores, no traducir campos.
+        'bill_to'                    => 'array',
+        'ship_to'                    => 'array',
 
         // Los montos van desglosados: el precio consolidado que ve el
         // cliente se arma en el invoice, no acá (RB-007).
@@ -40,12 +45,17 @@ class Sale extends Model
         'delivery_amount'            => 'decimal:2',
         'discount_amount'            => 'decimal:2',
         'deposit_amount'             => 'decimal:2',
-        'pickup_fee'                 => 'decimal:2',
         'tax_rate'                   => 'decimal:2',
         'commission_percent'         => 'decimal:2',
         'commission_amount'          => 'decimal:2',
-        'miles'                      => 'decimal:2',
-        'rate_per_mile'              => 'decimal:2',
+
+        // Nota: 'miles' y 'rate_per_mile' NO van aca. Bajaron al renglon
+        // (trips.miles / trips.rate_per_mile) porque una venta puede
+        // tener tres destinos y cada viaje necesita los suyos.
+        //
+        // 'pickup_fee' tampoco: la columna esta comentada en la migracion
+        // de sales junto con depot_id. Si se decide activarla, hay que
+        // descomentar las dos alla y volver a agregar el cast aca.
 
         'tax_exempt'                 => 'boolean',
         'requires_export_certificate' => 'boolean',
@@ -58,7 +68,10 @@ class Sale extends Model
 
     public function customer()    { return $this->belongsTo(Customer::class); }
     public function estimate()    { return $this->belongsTo(Estimate::class); }
-    public function depot()       { return $this->belongsTo(Depot::class); }
+
+    // sales.depot_id esta comentada en la migracion. Mientras siga asi,
+    // llamar a $sale->depot revienta con "Unknown column 'depot_id'".
+    // public function depot()    { return $this->belongsTo(Depot::class); }
     public function invoices()    { return $this->hasMany(Invoice::class); }
     public function trips()       { return $this->hasMany(Trip::class); }
     public function commissions() { return $this->hasMany(Commission::class); }

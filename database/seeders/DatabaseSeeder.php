@@ -31,7 +31,9 @@ class DatabaseSeeder extends Seeder
             DriverSeeder::class,
             VehicleSeeder::class,
             CustomerSeeder::class,
+            CustomerAddressSeeder::class,
             ContainerSeeder::class,
+            ContainerPriceSeeder::class,
             NotificationRuleSeeder::class,
         ]);
     }

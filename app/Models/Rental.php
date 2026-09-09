@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Rental extends Model
 {
-    use HasFactory, BelongsToCompany;
+    use HasFactory, \App\Models\Concerns\HasDocumentAddresses, BelongsToCompany;
 
     /* =====================================================================
      | CONFIGURACIÓN
@@ -25,7 +25,15 @@ class Rental extends Model
             'status'              => RentalStatus::class,
             'start_date'          => 'date',
             'end_date'            => 'date',
-            'delivery_address'    => 'array',
+
+            /*
+             | Direcciones congeladas del dia del contrato (RB-035).
+             | Mismos nombres que estimate, sale e invoice: convertir un
+             | documento en otro es copiar, no traducir.
+             */
+            'bill_to'             => 'array',
+            'ship_to'             => 'array',
+
             'monthly_rate'        => 'decimal:2',
             'tax_rate'            => 'decimal:2',
             'pickup_fee'          => 'decimal:2',

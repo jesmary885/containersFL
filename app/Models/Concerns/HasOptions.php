@@ -62,4 +62,22 @@ trait HasOptions
     {
         return 'gray';
     }
+
+    /**
+     * El nombre en el idioma de quien está mirando.
+     *
+     * Cae al español si falta la traducción, en vez de mostrar vacío.
+     * Un catálogo a medio traducir se ve raro; uno con huecos en blanco
+     * parece roto.
+     */
+    public function getDisplayNameAttribute(): string
+    {
+        if (app()->getLocale() === 'en' && ! empty($this->name_en)) {
+            return $this->name_en;
+        }
+
+        return $this->name;
+    }
+
+    
 }

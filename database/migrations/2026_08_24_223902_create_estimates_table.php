@@ -56,13 +56,16 @@ return new class extends Migration
              * ---------------------------------------------------------- */
             $table->string('use_type', 20)->nullable();      // storage | export
             $table->string('delivery_zip', 10)->nullable();
-            $table->decimal('miles', 8, 2)->nullable();
-            $table->decimal('rate_per_mile', 12, 2)->nullable();
-            $table->decimal('delivery_amount', 12, 2)->default(0);
+
+
+            // Método de pago
+
+            $table->string('expected_payment_method', 20)->nullable();
+           
 
             // El fee se precarga del depósito y queda editable acá.
-            $table->foreignId('depot_id')->nullable()->constrained()->nullOnDelete();
-            $table->decimal('pickup_fee', 12, 2)->default(0);
+            // $table->foreignId('depot_id')->nullable()->constrained()->nullOnDelete();
+            // $table->decimal('pickup_fee', 12, 2)->default(0);
 
             /* -------------------------------------------------------------
              | MONTOS
@@ -74,6 +77,22 @@ return new class extends Migration
              | taxable_base = solo lo que paga impuesto, después de
              | repartir el descuento proporcionalmente.
              * ---------------------------------------------------------- */
+            /* -------------------------------------------------------------
+             | delivery_amount
+             |
+             | Ya no se captura a mano: se suma de las lineas de entrega
+             | (Form::totalDeEntrega()).
+             |
+             | Existe como columna porque la venta lo necesita (RB-030,
+             | "cuanto cobro de delivery") y porque es la base del calculo
+             | de ganancia del viaje.
+             |
+             | Faltaba: el formulario la escribia en cada guardado y la
+             | tabla no la tenia. Cada intento de guardar un presupuesto
+             | moria con "Unknown column 'delivery_amount'".
+             * ---------------------------------------------------------- */
+            $table->decimal('delivery_amount', 12, 2)->default(0);
+
             $table->decimal('subtotal', 12, 2)->default(0);
             $table->decimal('discount_amount', 12, 2)->default(0);
             $table->decimal('taxable_base', 12, 2)->default(0);
@@ -102,6 +121,7 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->text('footer_terms')->nullable();
             $table->timestamp('sent_at')->nullable();
+            $table->string('locale', 5)->default('en');
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
@@ -136,6 +156,39 @@ return new class extends Migration
             $table->decimal('quantity', 10, 2)->default(1);
             $table->decimal('unit_price', 12, 2)->default(0);
             $table->decimal('amount', 12, 2)->default(0);
+            $table->string('delivery_zip', 10)->nullable();
+            $table->decimal('miles', 8, 2)->nullable();
+            $table->decimal('rate_per_mile', 12, 2)->nullable();
+
+            /* -------------------------------------------------------------
+             | PLAZO DE LA RENTA
+             |
+             | Solo se llena en lineas de renta. Va en el RENGLON y no en
+             | la cabecera por lo mismo que las millas: un presupuesto
+             | puede llevar un contenedor a 6 meses y otro a 12.
+             |
+             | Es el plazo COTIZADO. Cuando el presupuesto se convierta en
+             | contrato, de aca sale rentals.end_date. No multiplica el
+             | importe: la renta se factura mes a mes (rental_periods), y
+             | si el presupuesto sumara los 6 meses de golpe, el total no
+             | cuadraria con ninguna de las facturas que llegan despues.
+             * ---------------------------------------------------------- */
+            $table->unsignedSmallInteger('rental_months')->nullable();
+
+            /* -------------------------------------------------------------
+             | EL TRABAJO HECHO — solo en lineas de reparacion/modificacion
+             |
+             | 'description' es el renglon corto que ve el cliente
+             | ("Modificacion de contenedor"). Esto es el detalle: dos
+             | puertas laterales, ventana, pintura, lo que sea.
+             |
+             | Va aparte y no metido dentro de description porque son dos
+             | cosas con dos destinos: el renglon entra en la tabla de
+             | importes y el detalle se imprime debajo, en gris. Todo
+             | junto en un solo campo, el renglon de una modificacion
+             | grande ocuparia cuatro lineas de la tabla.
+             * ---------------------------------------------------------- */
+            $table->text('work_details')->nullable();
 
             /* -------------------------------------------------------------
              | IMPUESTO POR LÍNEA

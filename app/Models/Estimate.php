@@ -50,7 +50,7 @@ use Illuminate\Support\Facades\DB;
  */
 class Estimate extends Model
 {
-    use HasFactory, BelongsToCompany;
+    use HasFactory, \App\Models\Concerns\HasDocumentAddresses, BelongsToCompany;
 
     /* =====================================================================
      | CONFIGURACIÓN
@@ -88,10 +88,9 @@ class Estimate extends Model
              | que los importes llegaban como texto y las comparaciones
              | daban resultados raros de vez en cuando.
              */
-            'miles'                   => 'decimal:2',
-            'rate_per_mile'           => 'decimal:2',
+            
+        
             'delivery_amount'         => 'decimal:2',
-            'pickup_fee'              => 'decimal:2',
             'subtotal'                => 'decimal:2',
             'discount_amount'         => 'decimal:2',
             'taxable_base'            => 'decimal:2',
@@ -110,7 +109,10 @@ class Estimate extends Model
      * ================================================================== */
 
     public function customer() { return $this->belongsTo(Customer::class); }
-    public function depot()    { return $this->belongsTo(Depot::class); }
+    // estimates.depot_id esta comentada en la migracion. Mientras siga
+    // asi, llamar a $estimate->depot revienta con "Unknown column
+    // 'depot_id'". Descomentar las dos cosas a la vez o ninguna.
+    // public function depot() { return $this->belongsTo(Depot::class); }
     public function sale()     { return $this->hasOne(Sale::class); }
 
     /** Las líneas, siempre en el orden en que el usuario las acomodó. */
@@ -172,6 +174,7 @@ class Estimate extends Model
     {
         return $q->whereIn('status', [
             EstimateStatus::Draft->value,
+            EstimateStatus::Processed->value,
             EstimateStatus::Sent->value,
             EstimateStatus::Accepted->value,
         ]);
@@ -188,6 +191,7 @@ class Estimate extends Model
     {
         return $q->whereIn('status', [
                 EstimateStatus::Draft->value,
+                EstimateStatus::Processed->value,
                 EstimateStatus::Sent->value,
             ])
             ->whereNotNull('valid_until')
@@ -266,6 +270,17 @@ class Estimate extends Model
                 $primera  = $grupo->first();
                 $esGrupo  = $grupo->count() > 1;
 
+                /*
+                 | EL PLAZO DE LA RENTA, DENTRO DE UN GRUPO
+                 |
+                 | Se busca la linea que lo tenga y se saca de ahi tambien
+                 | la mensualidad. No sirve el unit_price del renglon
+                 | impreso: en un grupo ese numero es la SUMA de todo
+                 | (renta + entrega), y multiplicarlo por los meses daria
+                 | un compromiso con seis entregas dentro.
+                 */
+                $renta = $grupo->first(fn (EstimateItem $i) => $i->rental_months !== null);
+
                 return (object) [
                     'description' => $esGrupo
                         ? ($primera->bundle_description ?: $primera->description)
@@ -275,6 +290,17 @@ class Estimate extends Model
                     'amount'     => $grupo->sum('amount'),
                     'container'  => $primera->container,
                     'detalle'    => $esGrupo ? $grupo : null,   // el desglose interno
+
+                    'rental_months' => $renta?->rental_months,
+                    'monthly_rate'  => $renta ? (float) $renta->unit_price : null,
+
+                    /*
+                     | El detalle de la modificacion. Se junta el de todas
+                     | las lineas del grupo: un grupo puede llevar el
+                     | contenedor y su modificacion en un solo renglon
+                     | impreso, y el detalle no puede perderse por eso.
+                     */
+                    'work_details' => $grupo->pluck('work_details')->filter()->implode("\n") ?: null,
                 ];
             })
             ->values();
@@ -311,6 +337,22 @@ class Estimate extends Model
      * No manda el correo: solo deja constancia. El envío real lo hará el
      * módulo de notificaciones, y cuando exista, llamará a este método.
      */
+    /**
+     * Marca el presupuesto como armado y listo para revisar.
+     *
+     * No manda nada. Solo dice "esto ya no es un borrador a medias", que
+     * es lo que habilita la pantalla de revision.
+     */
+    public function markAsProcessed(): static
+    {
+        if ($this->status === EstimateStatus::Draft) {
+            $this->status = EstimateStatus::Processed;
+            $this->save();
+        }
+
+        return $this;
+    }
+
     public function markAsSent(): static
     {
         $this->status  = EstimateStatus::Sent;
@@ -505,12 +547,11 @@ class Estimate extends Model
                 'terms'           => $this->terms,
                 'bill_to'         => $this->bill_to,
                 'ship_to'         => $this->ship_to,
-                'delivery_zip'    => $this->delivery_zip,
-                'miles'           => $this->miles,
-                'rate_per_mile'   => $this->rate_per_mile,
+                
                 'delivery_amount' => $this->delivery_amount,
-                'depot_id'        => $this->depot_id,
-                'pickup_fee'      => $this->pickup_fee,
+
+                'expected_payment_method' => $this->expected_payment_method,
+                
                 'discount_amount' => $this->discount_amount,
                 'tax_rate'        => $this->tax_rate,
                 'tax_exempt'      => $this->tax_exempt,

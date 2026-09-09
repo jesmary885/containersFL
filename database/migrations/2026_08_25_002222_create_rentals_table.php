@@ -54,9 +54,29 @@ return new class extends Migration
             $table->decimal('tax_rate', 5, 2)->default(0);
 
             /* -------------------------------------------------------------
+             | LAS DOS DIRECCIONES (RB-035)
+             |
+             | Se llaman igual que en estimates, sales e invoices a
+             | proposito. Antes aca decia 'delivery_address', que es la
+             | misma cosa con otro nombre: cada factura mensual del
+             | contrato obligaba a traducir el campo, y ahi es donde se
+             | cuelan los errores.
+             |
+             | bill_to hace falta aca, no solo ship_to: la renta genera
+             | facturas sola (auto_invoice) e invoices.bill_to NO es
+             | nullable. Si el contrato no lo congela, la factura de
+             | septiembre tendria que ir a buscar la direccion del cliente
+             | HOY, y si el cliente se mudo en junio quedaria mal emitida.
+             |
+             | Son una COPIA del dia que se firmo el contrato, no un
+             | vinculo a la ficha del cliente (RB-058).
+             * ---------------------------------------------------------- */
+            $table->json('bill_to')->nullable();
+            $table->json('ship_to')->nullable();
+
+            /* -------------------------------------------------------------
              | ENTREGA
              * ---------------------------------------------------------- */
-            $table->json('delivery_address')->nullable();
             $table->decimal('miles', 8, 2)->nullable();
             $table->decimal('delivery_amount', 12, 2)->default(0);
             $table->foreignId('depot_id')->nullable()->constrained()->nullOnDelete();

@@ -46,6 +46,10 @@ return new class extends Migration
             $table->decimal('unit_price', 12, 2)->default(0);
             $table->decimal('amount', 12, 2)->default(0);
 
+            $table->string('delivery_zip', 10)->nullable();
+            $table->decimal('miles', 8, 2)->nullable();
+            $table->decimal('rate_per_mile', 12, 2)->nullable();
+
             /* -------------------------------------------------------------
              | EL IMPUESTO VA POR LÍNEA, NO POR FACTURA
              |

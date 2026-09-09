@@ -1,15 +1,25 @@
 <?php
 
 use App\Http\Controllers\CompanySwitchController;
+use App\Http\Controllers\LocaleSwitchController;
 use App\Http\Controllers\LoginController;
 use App\Livewire\Dashboard;
 use App\Livewire\Placeholder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
+
 use App\Livewire\Estimates\Form   as EstimateForm;
 use App\Livewire\Estimates\Index  as EstimateIndex;
 use App\Livewire\Estimates\Show   as EstimateShow;
+
+use App\Livewire\Invoices\Form  as InvoiceForm;
+use App\Livewire\Invoices\Index as InvoiceIndex;
+use App\Livewire\Invoices\Show  as InvoiceShow;
+
+use App\Livewire\Payments\Form  as PaymentForm;
+use App\Livewire\Payments\Index as PaymentIndex;
+use App\Livewire\Payments\Show  as PaymentShow;
 
 use App\Livewire\Auth\Login;
 
@@ -41,6 +51,14 @@ Route::middleware('auth')->group(function () {
 
         return redirect()->route('login');
     })->name('logout');
+
+
+     /*
+    | El selector de idioma de la barra de arriba.
+    | Guarda en sesión y en la ficha del usuario. Ver el controlador.
+    */
+    Route::get('/locale/{locale}', LocaleSwitchController::class)->name('locale.switch');
+
 
     /* ---------------------------------------------------------------
      | CAMBIO DE EMPRESA
@@ -95,10 +113,30 @@ Route::middleware('auth')->group(function () {
     Route::get('/inventario/insumos',  Placeholder::class)->name('inventario.insumos.index');
     Route::get('/inventario/camiones', Placeholder::class)->name('inventario.camiones.index');
 
-    // FINANZAS
-    Route::get('/finanzas/facturacion', Placeholder::class)->name('finanzas.facturacion.index');
-    Route::get('/finanzas/pagos',       Placeholder::class)->name('finanzas.pagos.index');
-    Route::get('/finanzas/gastos',      Placeholder::class)->name('finanzas.gastos.index');
+    // FACTURACION
+    
+    Route::get('/finanzas/facturacion', InvoiceIndex::class)
+        ->name('finanzas.facturacion.index');
+
+    Route::get('/finanzas/facturacion/nueva', InvoiceForm::class)
+        ->name('finanzas.facturacion.create');
+
+    Route::get('/finanzas/facturacion/{invoice}/editar', InvoiceForm::class)
+        ->name('finanzas.facturacion.edit');
+
+    Route::get('/finanzas/facturacion/{invoice}', InvoiceShow::class)
+        ->name('finanzas.facturacion.show');
+
+        //PAGOS
+
+     Route::get('/finanzas/pagos', PaymentIndex::class)
+        ->name('finanzas.pagos.index');
+
+     Route::get('/finanzas/pagos/nuevo', PaymentForm::class)
+         ->name('finanzas.pagos.create');
+
+     Route::get('/finanzas/pagos/{payment}', PaymentShow::class)
+         ->name('finanzas.pagos.show');
 
     // ADMINISTRACIÓN
     Route::get('/administracion/usuarios', Placeholder::class)->name('administracion.usuarios.index');

@@ -194,6 +194,7 @@ return new class extends Migration
             $table->timestamp('paid_at')->nullable();
             $table->timestamp('voided_at')->nullable();
             $table->string('void_reason', 255)->nullable();
+            $table->string('locale', 5)->default('en');
 
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
 

@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('tax_exemption_certificates', function (Blueprint $table) {
              $table->id();
             $table->foreignId('customer_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('company_id')->nullable()->constrained()->restrictOnDelete();
 
             // annual_resale  = revende, no consume
             // consumer_exempt = organización exenta (iglesia, gobierno)

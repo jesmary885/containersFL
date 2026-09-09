@@ -232,7 +232,10 @@ class Index extends Component
              | una para los presupuestos y una por cada cliente. Con 200
              | filas y varios usuarios a la vez, eso se nota.
              */
-            ->with(['customer:id,display_name,company_name,customer_number'])
+             ->with([
+                'customer:id,display_name,company_name,customer_number',
+                'invoice:id,invoice_number',
+            ])
             ->search($this->buscar)
             ->when($this->estado, fn ($q) => $q->where('status', $this->estado))
             ->orderBy($columna, $sentido)

@@ -17,7 +17,14 @@ class User extends Authenticatable
      | CONFIGURACIÓN
      * ================================================================== */
 
-    protected $fillable = ['name', 'email', 'password', 'phone', 'is_active'];
+    /*
+     | 'locale' tiene que estar acá: LocaleSwitchController hace
+     | $usuario->update(['locale' => $locale]) y sin el campo en la lista
+     | Eloquent lo descarta EN SILENCIO. El idioma duraba lo que la
+     | sesión y al día siguiente el usuario volvía a empezar en español,
+     | que es justo lo que el controlador dice querer evitar.
+     */
+    protected $fillable = ['name', 'email', 'password', 'phone', 'is_active', 'locale'];
 
     protected $hidden = ['password', 'remember_token'];
 

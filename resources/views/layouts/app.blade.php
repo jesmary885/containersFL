@@ -54,6 +54,10 @@
                         es lo primero que se mira al entrar. --}}
                     @include('layouts.partials.company-switcher')
 
+                    {{-- Selector de idioma. Entre la empresa y el menú de
+                         usuario: los tres son "quién soy y dónde estoy". --}}
+                    @include('layouts.partials.language-switcher')
+
                     <li class="nav-item dropdown user-menu">
                         <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
                             <span class="d-none d-md-inline">{{ auth()->user()->name }}</span>

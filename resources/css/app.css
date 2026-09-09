@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import 'admin-lte/dist/css/adminlte.css';
+@import './sistema.css';
 @import 'bootstrap-icons/font/bootstrap-icons.css';
+
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';

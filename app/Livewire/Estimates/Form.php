@@ -3,18 +3,21 @@
 namespace App\Livewire\Estimates;
 
 use App\Enums\EstimateStatus;
-use App\Enums\ProductType;
 use App\Enums\UseType;
 use App\Models\Container;
 use App\Models\Customer;
+use App\Models\CustomerAddress;
 use App\Models\Depot;
 use App\Models\Estimate;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\InvoiceCalculator;
+use App\Services\PricingResolver;
 use App\Support\CompanyContext;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -23,20 +26,24 @@ use Livewire\Component;
  * FORMULARIO DE PRESUPUESTO — crear y editar
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * El mismo archivo sirve para las dos cosas. La diferencia es una sola:
- * si la ruta trajo un presupuesto, se editan sus datos; si no, se crea
- * uno nuevo.
+ * ── LO QUE SE CORRIGIÓ EN ESTA VERSIÓN ──
  *
- * ── POR QUÉ NO SE TRABAJA DIRECTO SOBRE EL MODELO ──
- *
- * Livewire manda el estado del componente al navegador y lo trae de
- * vuelta en cada tecla. Un modelo de Eloquent con sus relaciones cargadas
- * es un objeto pesado y con partes que no viajan bien.
- *
- * Por eso el formulario usa propiedades sueltas (textos, números,
- * arreglos) y solo al guardar se vuelca todo al modelo. Es más código,
- * pero es la diferencia entre un formulario que responde al instante y
- * uno que se siente lento.
+ *   1. "Válido hasta" se recalcula al cambiar la fecha de emisión.
+ *   2. El precio se llena solo al elegir un contenedor.
+ *   3. El contenedor se elige con un buscador, no con un desplegable.
+ *   4. Entrega y recogida traen su importe calculado desde la base.
+ *   5. Las direcciones traen FL de verdad y ahora se validan.
+ *   6. Los errores dicen QUÉ falta y la pantalla salta al primero.
+ *   7. ERROR SILENCIOSO: al editar una línea existente se usaba
+ *      $items->whereKey(...)->update(), que no dispara los eventos del
+ *      modelo. El 'amount' de esa línea no se recalculaba y la cabecera
+ *      quedaba descuadrada. Ahora pasa por el modelo.
+ *   8. El desplegable de conceptos ya no muestra mora, almacenaje ni
+ *      recargo de tarjeta: esos son de factura.
+ *   9. El buscador solo muestra los contenedores de la empresa activa.
+ *  10. Términos de pago: lista cerrada + opción "Otro" con campo libre.
+ *  11. Los grupos de impresión se arman marcando casillas y dándole a un
+ *      botón. Ya no hay que escribir la letra a mano.
  *
  * ── LA PIEZA MÁS IMPORTANTE: LOS GRUPOS DE IMPRESIÓN ──
  *
@@ -46,8 +53,7 @@ use Livewire\Component;
  *   RB-006: el 7% se cobra solo sobre el contenedor, nunca sobre el
  *           delivery.
  *
- * Se resuelven así: por dentro hay dos líneas, y en el papel se imprimen
- * como una.
+ * Se resuelven así: por dentro hay dos líneas, en el papel se imprime una.
  *
  *     Por dentro   Contenedor 40HC ....... 2,400.00   gravable
  *                  Delivery Homestead ....   350.00   no gravable
@@ -55,13 +61,42 @@ use Livewire\Component;
  *     El cliente   Contenedor 40HC entregado  2,750.00
  *
  *     El impuesto  7% sobre 2,400 = 168.00, no sobre 2,750
- *
- * En la pantalla eso es la columna "Grupo": las líneas que llevan la
- * misma etiqueta se imprimen juntas.
+ * ═══════════════════════════════════════════════════════════════════════════
  */
 #[Layout('layouts.app')]
 class Form extends Component
 {
+    /* =====================================================================
+     | LOS TÉRMINOS DE PAGO
+     |
+     | Lista cerrada para que se pueda reportar por término, y una salida
+     | de emergencia para el caso raro.
+     |
+     | La clave es lo que se GUARDA; el valor es lo que se LEE en pantalla.
+     | Se guarda el texto corto en inglés porque es lo que se imprime en el
+     | documento.
+     * ================================================================== */
+
+    public const TERMINOS_FIJOS = [
+        'Due on receipt' => 'Due on receipt — pagadero al recibir',
+        'Net 15'         => 'Net 15 — 15 días',
+        'Net 30'         => 'Net 30 — 30 días',
+        '50% deposit'    => '50% de anticipo, saldo contra entrega',
+    ];
+
+        /**
+     * Las formas de pago que se le pueden ofrecer al cliente.
+     *
+     * Salen de las que están impresas al pie de la factura real de
+     * FLCHR más las del documento de Square.
+     *
+     * Solo 'credit_card' dispara el recargo de 3.5% (RB-009).
+     */
+    public array $formasDePago = [];
+
+    /** El valor del <option> que abre el campo libre. */
+    public const TERMINO_OTRO = '__otro__';
+
     /* =====================================================================
      | QUÉ SE ESTÁ EDITANDO
      * ================================================================== */
@@ -78,10 +113,8 @@ class Form extends Component
 
     public ?int $customer_id = null;
 
-    /** Lo que el usuario escribe en el buscador de clientes. */
     public string $buscarCliente = '';
 
-    /** El nombre del cliente ya elegido, para mostrarlo sin volver a consultar. */
     public string $clienteNombre = '';
 
     /* =====================================================================
@@ -90,9 +123,29 @@ class Form extends Component
 
     public string $issue_date   = '';
     public ?string $valid_until = null;
-    public string $terms        = '';
     public string $use_type     = 'storage';
     public ?int $salesperson_id = null;
+
+    /**
+     * Los términos de pago viajan en TRES propiedades y se guarda UNA.
+     *
+     *   $terms           lo que va a la base y se imprime. La única real.
+     *   $termsSeleccion  qué se eligió en el desplegable.
+     *   $termsOtro       el texto libre, si se eligió "Otro".
+     *
+     * ── POR QUÉ NO SE ATA EL SELECT DIRECTO A $terms ──
+     *
+     * Porque el select tiene un valor —"__otro__"— que NO es un término
+     * de pago: es una instrucción para la pantalla. Si el select
+     * escribiera directo en $terms, ese "__otro__" acabaría guardado en
+     * la base e impreso en un documento que ve el cliente.
+     *
+     * Con tres propiedades, $terms solo recibe texto imprimible. Es más
+     * código, pero la basura no llega nunca a la base.
+     */
+    public string $terms          = '';
+    public string $termsSeleccion = '';
+    public string $termsOtro      = '';
 
     /**
      * Las direcciones, como copia congelada.
@@ -100,22 +153,51 @@ class Form extends Component
      * No son una relación a customer_addresses: son una FOTO del día en
      * que se cotizó. Si el cliente se muda antes de aceptar, el documento
      * sigue mostrando la dirección con la que se le cotizó.
+     *
+     * El 'FL' nace escrito de verdad, no como texto gris del placeholder.
      */
-    public array $bill_to = ['label' => '', 'line1' => '', 'line2' => '', 'city' => '', 'state' => '', 'zip' => ''];
-    public array $ship_to = ['label' => '', 'line1' => '', 'line2' => '', 'city' => '', 'state' => '', 'zip' => ''];
+    public array $bill_to = ['label' => '', 'line1' => '', 'line2' => '', 'city' => '', 'state' => 'FL', 'zip' => ''];
+    public array $ship_to = ['label' => '', 'line1' => '', 'line2' => '', 'city' => '', 'state' => 'FL', 'zip' => ''];
 
     /** Si el SHIP TO es distinto del BILL TO (RB-035). */
     public bool $envioDistinto = false;
+
+    /**
+     * Si hay que guardar la dirección escrita en la ficha del cliente.
+     *
+     * ── PARA QUÉ ──
+     *
+     * Hoy la pantalla de clientes no existe todavía, así que no hay dónde
+     * cargarle la dirección a nadie. Y sin dirección guardada, cada
+     * presupuesto de ese cliente arranca con los campos en blanco.
+     *
+     * Con esta casilla, la primera vez que alguien escribe la dirección de
+     * un cliente queda guardada en su ficha, y a partir del segundo
+     * documento se llena sola.
+     *
+     * Se enciende sola cuando el cliente NO tiene ninguna dirección
+     * guardada, que es justo cuando hace falta. Si ya tiene, arranca
+     * apagada: nadie quiere pisarle la dirección buena a un cliente por
+     * haber puesto una entrega puntual distinta.
+     */
+    public bool $guardarDireccionEnCliente = false;
+
+    /** Cuántas direcciones tiene guardadas el cliente elegido. */
+    public int $direccionesDelCliente = 0;
 
     /* =====================================================================
      | LA ENTREGA
      * ================================================================== */
 
-    public ?string $delivery_zip = null;
-    public ?float $miles         = null;
-    public ?float $rate_per_mile = null;
-    public ?int $depot_id        = null;
-    public float $pickup_fee     = 0;
+   
+    /**
+     * Con qué dijo el cliente que va a pagar.
+     *
+     * Precarga el 3.5% (RB-009) y se copia tal cual a la factura al
+     * convertir. Sin esto el presupuesto muestra un recargo que no
+     * puede explicar.
+     */
+    public ?string $expected_payment_method = null;
 
     /* =====================================================================
      | EL DINERO
@@ -139,46 +221,65 @@ class Form extends Component
 
     /* =====================================================================
      | LAS LÍNEAS
-     |
-     | Cada una es un arreglo con estas claves:
-     |
-     |   id           el número de la fila en la base, o null si es nueva
-     |   product_id   el concepto del catálogo (opcional)
-     |   container_id la unidad concreta (opcional)
-     |   description  lo que se imprime
-     |   quantity     cantidad
-     |   unit_price   precio unitario
-     |   taxable      si paga el 7%
-     |   grupo        la etiqueta de impresión ("A", "1", o vacío)
      * ================================================================== */
 
     public array $lineas = [];
 
-    /**
-     * El texto que se imprime por cada grupo.
-     *
-     *     ['A' => 'Contenedor 40HC entregado en Homestead']
-     *
-     * Solo aparece en pantalla cuando un grupo tiene 2 líneas o más:
-     * agrupar una sola línea no tiene sentido.
-     */
+    /** El texto que se imprime por cada grupo. */
     public array $gruposDescripcion = [];
+
+    /**
+     * Las líneas marcadas con la casilla, por su posición.
+     *
+     * Solo existe mientras el usuario está eligiendo qué agrupar. No se
+     * guarda en ningún lado.
+     */
+    public array $seleccionadas = [];
+
+    /** Aviso corto del agrupador ("marque al menos dos líneas"). */
+    public ?string $avisoAgrupar = null;
+
+    /* =====================================================================
+     | EL BUSCADOR DE UNIDADES
+     * ================================================================== */
+
+    public ?int $lineaBuscandoContenedor = null;
+
+    /* =====================================================================
+     | EL EDITOR DE RENGLONES
+     |
+     | ── POR QUÉ UN MODAL Y NO LA TABLA ──
+     |
+     | La tabla editable obligaba a enseñarle las mismas ocho columnas a
+     | todos los conceptos. Una renta de contenedor no tiene "Cant." —un
+     | renglón es un contenedor, si hay dos se agrega otro renglón— y sin
+     | embargo ahí estaba el campo, pidiendo un número que no significaba
+     | nada. Al mismo tiempo, una reparación necesita contar qué se le
+     | hizo al contenedor y no tenía dónde.
+     |
+     | Cada concepto pide lo suyo. El modal enseña solo eso.
+     |
+     | ── EL BORRADOR ──
+     |
+     | Lo que se edita en el modal es una COPIA. Solo al darle a guardar
+     | se escribe sobre $lineas. Así "Cancelar" cancela de verdad: sin la
+     | copia, cada tecla ya habría modificado el renglón y volver atrás
+     | exigiría recordar el estado anterior.
+     * ================================================================== */
+
+    public ?int $lineaEditando = null;
+
+    public array $borrador = [];
+
+    /** Si el renglón se acaba de crear: cancelar lo borra en vez de dejarlo vacío. */
+    public bool $borradorEsNuevo = false;
+
+    public string $buscarContenedor = '';
 
     /* =====================================================================
      | ARRANQUE
      * ================================================================== */
 
-    /**
-     * mount() corre UNA vez, al abrir la pantalla.
-     *
-     * El ?Estimate con signo de interrogación es lo que permite que el
-     * mismo componente sirva para las dos rutas: la de crear no manda
-     * nada y llega null; la de editar manda el presupuesto.
-     *
-     * Y como el modelo tiene el filtro por compañía puesto, si alguien
-     * escribe a mano el id de un presupuesto de la otra empresa, Laravel
-     * no lo encuentra y responde 404. No hay que comprobarlo aquí.
-     */
     public function mount(?Estimate $estimate = null)
     {
         $empresa = app(CompanyContext::class)->get();
@@ -205,24 +306,35 @@ class Form extends Component
 
         /* -----------------------------------------------------------------
          | CASO B · UNO NUEVO
-         |
-         | Se precargan los valores por defecto. Todos editables: son
-         | sugerencias, no reglas.
          * -------------------------------------------------------------- */
         $this->issue_date     = now()->toDateString();
         $this->salesperson_id = auth()->id();
 
         if ($empresa) {
-            $this->terms       = $calc->defaultTerms($empresa);
-            $this->tax_rate    = $calc->defaultTaxRate($empresa);
-            $this->valid_until = now()
-                ->addDays($calc->defaultEstimateValidDays($empresa))
-                ->toDateString();
+            $this->terms    = $calc->defaultTerms($empresa);
+            $this->tax_rate = $calc->defaultTaxRate($empresa);
+
+            // La tarifa por milla, para que la entrega se pueda calcular
+            // desde el primer momento (RB-031). Editable.
+            $this->rate_per_mile = app(PricingResolver::class)->ratePerMile($empresa);
+
+            $this->recalcularValidez();
         }
 
-        // Se arranca con una línea vacía para que el usuario tenga dónde
-        // escribir sin tener que darle antes a "agregar".
-        $this->agregarLinea();
+        $this->formasDePago = [
+            'cash'        => __('payments.cash'),
+            'check'       => __('payments.check'),
+            'zelle'       => __('payments.zelle'),
+            'ach'         => __('payments.ach'),
+            'wire'        => __('payments.wire'),
+            'credit_card' => __('payments.credit_card'),
+        ];
+
+        $this->repartirTerminos();
+
+        // Un renglón en blanco esperando, pero SIN abrir el modal encima:
+        // lo primero que hay que elegir es el cliente, no el concepto.
+        $this->lineas = [$this->lineaVacia()];
 
         return null;
     }
@@ -240,22 +352,24 @@ class Form extends Component
 
         $this->issue_date     = $estimate->issue_date?->toDateString() ?? now()->toDateString();
         $this->valid_until    = $estimate->valid_until?->toDateString();
-        $this->terms          = (string) $estimate->terms;
         $this->use_type       = $estimate->use_type?->value ?? 'storage';
         $this->salesperson_id = $estimate->salesperson_id;
 
-        // El ?: deja el arreglo con las claves esperadas aunque en la base
-        // esté guardado como null.
+        $this->terms = (string) $estimate->terms;
+        $this->repartirTerminos();
+
         $this->bill_to = array_merge($this->bill_to, $estimate->bill_to ?: []);
         $this->ship_to = array_merge($this->ship_to, $estimate->ship_to ?: []);
 
         $this->envioDistinto = ! empty($estimate->ship_to);
 
-        $this->delivery_zip  = $estimate->delivery_zip;
-        $this->miles         = $estimate->miles !== null ? (float) $estimate->miles : null;
-        $this->rate_per_mile = $estimate->rate_per_mile !== null ? (float) $estimate->rate_per_mile : null;
-        $this->depot_id      = $estimate->depot_id;
-        $this->pickup_fee    = (float) $estimate->pickup_fee;
+        // Al reabrir un presupuesto no se ofrece guardar la dirección:
+        // la que está en el documento es una copia congelada de entonces,
+        // y no tiene por qué ser la buena de hoy.
+        $this->direccionesDelCliente     = $estimate->customer?->addresses()->count() ?? 0;
+        $this->guardarDireccionEnCliente = false;
+
+        $this->expected_payment_method = $estimate->expected_payment_method;
 
         $this->discount_amount = (float) $estimate->discount_amount;
         $this->tax_rate        = (float) $estimate->tax_rate;
@@ -267,15 +381,7 @@ class Form extends Component
         $this->notes        = $estimate->notes;
         $this->footer_terms = $estimate->footer_terms;
 
-        /* -----------------------------------------------------------------
-         | LAS LÍNEAS
-         |
-         | El bundle_key guardado en la base vuelve a la columna "Grupo"
-         | tal cual: es una etiqueta corta que escribió el usuario, no un
-         | código interno. Eso lo hace fácil de entender al reabrir el
-         | presupuesto seis meses después.
-         * -------------------------------------------------------------- */
-        $this->lineas = $estimate->items->map(fn ($linea) => [
+         $this->lineas = $estimate->items->map(fn ($linea) => [
             'id'           => $linea->id,
             'product_id'   => $linea->product_id,
             'container_id' => $linea->container_id,
@@ -284,6 +390,17 @@ class Form extends Component
             'unit_price'   => (float) $linea->unit_price,
             'taxable'      => (bool) $linea->taxable,
             'grupo'        => (string) ($linea->bundle_key ?? ''),
+
+            'delivery_zip'  => $linea->delivery_zip,
+            'miles'         => $linea->miles !== null ? (float) $linea->miles : null,
+            'rate_per_mile' => $linea->rate_per_mile !== null ? (float) $linea->rate_per_mile : null,
+
+            'rental_months' => $linea->rental_months,
+            'work_details'  => $linea->work_details,
+
+            // Lo guardado se respeta siempre: si el texto llegó hasta la
+            // base, alguien lo dio por bueno.
+            'desc_manual'   => true,
         ])->all();
 
         foreach ($estimate->items as $linea) {
@@ -293,7 +410,81 @@ class Form extends Component
         }
 
         if (empty($this->lineas)) {
-            $this->agregarLinea();
+            $this->lineas = [$this->lineaVacia()];
+        }
+    }
+
+    /* =====================================================================
+     | LOS TÉRMINOS DE PAGO
+     * ================================================================== */
+
+    /**
+     * De $terms a las dos propiedades de la pantalla.
+     *
+     * Si lo guardado coincide con una de las opciones fijas, el select se
+     * pone en esa. Si no, es porque alguien escribió algo suyo: el select
+     * se pone en "Otro" y el texto vuelve al campo libre.
+     *
+     * Esto es lo que hace que al reabrir un presupuesto viejo con un
+     * término raro, la pantalla lo muestre bien en vez de perderlo.
+     */
+    protected function repartirTerminos(): void
+    {
+        $guardado = trim($this->terms);
+
+        if ($guardado !== '' && ! array_key_exists($guardado, self::TERMINOS_FIJOS)) {
+            $this->termsSeleccion = self::TERMINO_OTRO;
+            $this->termsOtro      = $guardado;
+
+            return;
+        }
+
+        $this->termsSeleccion = $guardado;
+        $this->termsOtro      = '';
+    }
+
+    /** De la pantalla a $terms, que es lo único que se guarda. */
+    protected function armarTerminos(): void
+    {
+        $this->terms = $this->termsSeleccion === self::TERMINO_OTRO
+            ? trim($this->termsOtro)
+            : $this->termsSeleccion;
+    }
+
+    /* =====================================================================
+     | LA VIGENCIA
+     * ================================================================== */
+
+    /**
+     * Recalcula "válido hasta" a partir de la fecha de emisión.
+     *
+     * Antes esto se calculaba UNA sola vez, en mount(). Si el usuario
+     * cambiaba la fecha de emisión —cosa normal: se cotizó el viernes y
+     * se carga el lunes— la vigencia se quedaba anclada al día en que se
+     * abrió la pantalla, y el documento salía venciendo antes de
+     * emitirse.
+     *
+     * Los días salen de Configuración (documents.estimate_valid_days).
+     */
+    public function recalcularValidez(): void
+    {
+        $empresa = app(CompanyContext::class)->get();
+
+        if (! $empresa || blank($this->issue_date)) {
+            return;
+        }
+
+        try {
+            $dias = app(InvoiceCalculator::class)->defaultEstimateValidDays($empresa);
+
+            $this->valid_until = Carbon::parse($this->issue_date)
+                ->addDays($dias)
+                ->toDateString();
+
+            $this->resetValidation('valid_until');
+        } catch (\Throwable $e) {
+            // Fecha a medio escribir. Se ignora: cuando termine de
+            // teclearla, este método vuelve a correr.
         }
     }
 
@@ -301,17 +492,6 @@ class Form extends Component
      | EL CLIENTE
      * ================================================================== */
 
-    /**
-     * Los clientes que coinciden con lo que se está escribiendo.
-     *
-     * Se limita a 8 a propósito: una lista más larga no ayuda, estorba.
-     * Si el cliente no aparece entre los primeros 8, es que hay que
-     * escribir un poco más.
-     *
-     * El scopeSearch del modelo Customer también busca dentro de los
-     * contactos, porque es común que llamen dando el nombre del empleado
-     * y no el de la empresa.
-     */
     public function getResultadosClienteProperty()
     {
         if (strlen(trim($this->buscarCliente)) < 2) {
@@ -326,12 +506,6 @@ class Form extends Component
             ->get();
     }
 
-    /**
-     * El usuario eligió un cliente de la lista.
-     *
-     * Aquí se hacen cuatro cosas de golpe, y las cuatro se pueden
-     * cambiar después a mano:
-     */
     public function seleccionarCliente(int $id): void
     {
         $cliente = Customer::with('addresses')->find($id);
@@ -347,9 +521,27 @@ class Form extends Component
         /* -----------------------------------------------------------------
          | 1 · LAS DIRECCIONES
          |
-         | toSnapshot() devuelve la copia congelada. Si el cliente no tiene
-         | dirección de facturación marcada, se toma la primera que tenga.
+         | ── QUÉ SE COPIA ──
+         |
+         | TODO: etiqueta, línea 1, línea 2, ciudad, estado y ZIP. No es
+         | un resumen, es la ficha entera.
+         |
+         | ── CUÁL SE ELIGE ──
+         |
+         | La marcada como fiscal. Si el cliente no tiene ninguna marcada
+         | —porque se cargó de apuro— se toma la primera que tenga, que es
+         | mejor que dejar el formulario vacío.
+         |
+         | ── EL INTERRUPTOR DE ENTREGA ──
+         |
+         | Si además tiene una dirección de envío distinta, se copia al
+         | SHIP TO y el interruptor "la entrega va a otra dirección" se
+         | enciende solo. Es el caso de la constructora: factura a su
+         | oficina de Doral y recibe el contenedor en la obra de
+         | Homestead.
          * -------------------------------------------------------------- */
+        $this->direccionesDelCliente = $cliente->addresses->count();
+
         $facturacion = $cliente->addresses->firstWhere('is_default_billing', true)
             ?? $cliente->addresses->first();
 
@@ -364,50 +556,229 @@ class Form extends Component
             $this->envioDistinto = true;
         }
 
+        // Si la dirección del cliente venía sin estado, se pone FL.
+        $this->bill_to['state'] = $this->bill_to['state'] ?: 'FL';
+        $this->ship_to['state'] = $this->ship_to['state'] ?: 'FL';
+
+        /*
+         | La casilla de guardar se enciende sola solo si el cliente no
+         | tiene ninguna dirección. Es cuando de verdad hace falta.
+         |
+         | Si ya tiene, arranca apagada: nadie quiere pisarle la dirección
+         | buena a un cliente por haber puesto una entrega puntual
+         | distinta.
+         */
+        $this->guardarDireccionEnCliente = $this->direccionesDelCliente === 0;
+
         /* -----------------------------------------------------------------
          | 2 · LA EXENCIÓN DE IMPUESTO (RB-014)
-         |
-         | La bandera tax_exempt del cliente es solo la respuesta rápida:
-         | la mantiene al día el TaxExemptionCertificateObserver mirando
-         | los certificados de verdad.
-         |
-         | Aquí se usa para precargar el formulario. La PRUEBA —el id del
-         | certificado— se guarda al convertir el presupuesto en factura,
-         | que es cuando importa fiscalmente.
          * -------------------------------------------------------------- */
         $this->tax_exempt = (bool) $cliente->tax_exempt;
 
         /* -----------------------------------------------------------------
          | 3 · ¿PUEDE PAGAR CON TARJETA? (RB-012, RB-013)
-         |
-         | Si el cliente no está autorizado, se apaga el interruptor del
-         | recargo. No se puede cobrar un 3.5% de un método de pago que no
-         | se le va a aceptar.
          * -------------------------------------------------------------- */
         if (! $cliente->allow_credit_card) {
             $this->pagaConTarjeta          = false;
             $this->credit_card_fee_percent = 0;
         }
 
-        $this->resetValidation('customer_id');
+        $this->resetValidation();
     }
 
     public function quitarCliente(): void
     {
         $this->customer_id   = null;
         $this->clienteNombre = '';
-        $this->bill_to = ['label' => '', 'line1' => '', 'line2' => '', 'city' => '', 'state' => '', 'zip' => ''];
-        $this->ship_to = ['label' => '', 'line1' => '', 'line2' => '', 'city' => '', 'state' => '', 'zip' => ''];
+        $this->bill_to = ['label' => '', 'line1' => '', 'line2' => '', 'city' => '', 'state' => 'FL', 'zip' => ''];
+        $this->ship_to = ['label' => '', 'line1' => '', 'line2' => '', 'city' => '', 'state' => 'FL', 'zip' => ''];
         $this->envioDistinto = false;
+
+        $this->direccionesDelCliente     = 0;
+        $this->guardarDireccionEnCliente = false;
     }
 
     /* =====================================================================
      | LAS LÍNEAS
      * ================================================================== */
 
+
+    /* =====================================================================
+     | EL EDITOR DE RENGLONES
+     * ================================================================== */
+
+    /**
+     * Abre el modal sobre un renglón nuevo.
+     *
+     * El renglón se crea YA y el modal trabaja sobre él. Si se cancela,
+     * se borra. Es más simple que sostener un renglón "en el aire" que
+     * todavía no existe en $lineas: el buscador de unidades necesita un
+     * índice real al que escribirle.
+     */
     public function agregarLinea(): void
     {
-        $this->lineas[] = [
+        $this->lineas[] = $this->lineaVacia();
+
+        $this->abrirLinea(array_key_last($this->lineas), esNuevo: true);
+    }
+
+    /** Abre el modal sobre un renglón existente. */
+    public function abrirLinea(int $indice, bool $esNuevo = false): void
+    {
+        if (! isset($this->lineas[$indice])) {
+            return;
+        }
+
+        $this->lineaEditando   = $indice;
+        $this->borrador        = $this->lineas[$indice];
+        $this->borradorEsNuevo = $esNuevo;
+
+        $this->resetValidation();
+    }
+
+    /**
+     * Cierra sin guardar.
+     *
+     * Un renglón recién creado se va con el modal. Dejarlo vacío en la
+     * lista sería dejar basura que después hay que borrar a mano.
+     */
+    public function cancelarLinea(): void
+    {
+        if ($this->borradorEsNuevo && $this->lineaEditando !== null) {
+            unset($this->lineas[$this->lineaEditando]);
+            $this->lineas = array_values($this->lineas);
+        }
+
+        $this->cerrarEditor();
+    }
+
+    protected function cerrarEditor(): void
+    {
+        $this->lineaEditando   = null;
+        $this->borrador        = [];
+        $this->borradorEsNuevo = false;
+
+        $this->cerrarBuscadorContenedor();
+        $this->resetValidation();
+    }
+
+    /**
+     * Vuelca el borrador sobre el renglón.
+     *
+     * Se valida SOLO este renglón. Validar todo el presupuesto acá
+     * sacaría errores de la dirección o del cliente mientras el usuario
+     * está en un modal que no habla de eso.
+     */
+    public function guardarLinea(): void
+    {
+        if ($this->lineaEditando === null) {
+            return;
+        }
+
+        $producto = $this->productoDelBorrador();
+
+        $reglas = [
+            'borrador.description' => ['required', 'string', 'max:500'],
+            'borrador.unit_price'  => ['required', 'numeric', 'min:0'],
+            'borrador.quantity'    => ['required', 'numeric', 'min:0.01'],
+        ];
+
+        if ($producto?->type->requiresContainer()) {
+            $reglas['borrador.container_id'] = ['required', 'exists:containers,id'];
+        }
+
+        if ($producto?->isRental()) {
+            $reglas['borrador.rental_months'] = ['required', 'integer', 'min:1', 'max:120'];
+        }
+
+        if ($producto?->isDelivery()) {
+            $reglas['borrador.delivery_zip']  = ['required', 'string', 'max:10'];
+            $reglas['borrador.miles']         = ['required', 'numeric', 'min:0'];
+            $reglas['borrador.rate_per_mile'] = ['required', 'numeric', 'min:0'];
+        }
+
+        if ($producto && $producto->code === 'REPAIR') {
+            $reglas['borrador.work_details'] = ['required', 'string', 'max:2000'];
+        }
+
+        $this->validate($reglas, [], [
+            'borrador.description'    => 'descripción',
+            'borrador.unit_price'     => 'precio',
+            'borrador.quantity'       => 'cantidad',
+            'borrador.container_id'   => 'unidad',
+            'borrador.rental_months'  => 'plazo',
+            'borrador.delivery_zip'   => 'ZIP de destino',
+            'borrador.miles'          => 'millas',
+            'borrador.rate_per_mile'  => 'tarifa por milla',
+            'borrador.work_details'   => 'trabajo a realizar',
+        ]);
+
+        /*
+         | Un contenedor no viene en cantidades. Un renglón es una
+         | unidad; si hay dos contenedores, hay dos renglones. Se fuerza
+         | acá y no solo en la pantalla porque el dato puede venir de una
+         | duplicación o de una conversión.
+         */
+        if ($producto?->type->requiresContainer()) {
+            $this->borrador['quantity'] = 1;
+        }
+
+        $this->lineas[$this->lineaEditando] = $this->borrador;
+
+        $this->cerrarEditor();
+    }
+
+    /**
+     * El catálogo cotizable, una sola consulta por petición.
+     *
+     * Antes se armaba dentro de render(). Los métodos del editor también
+     * lo necesitan y no pueden esperar a que se pinte la pantalla.
+     */
+    public function getProductosDisponiblesProperty()
+    {
+        static $cache = null;
+
+        return $cache ??= Product::query()
+            ->active()
+            ->forCompany(app(CompanyContext::class)->get()?->id)
+            ->usableIn('estimate')
+            ->get();
+    }
+
+    /** El producto del renglón que se está editando. */
+    public function productoDelBorrador(): ?Product
+    {
+        $id = $this->borrador['product_id'] ?? null;
+
+        return $id ? $this->productosDisponibles->firstWhere('id', $id) : null;
+    }
+
+    /** El importe del borrador, para enseñarlo en vivo dentro del modal. */
+    public function getImporteBorradorProperty(): float
+    {
+        return round(
+            (float) ($this->borrador['quantity'] ?? 1) * (float) ($this->borrador['unit_price'] ?? 0),
+            2,
+        );
+    }
+
+
+    /**
+     * La forma de una línea, en un solo lugar.
+     *
+     * Existe como método aparte porque la estructura se arma en tres
+     * sitios (agregarLinea, quitarLinea cuando queda vacío, y mount).
+     * Con el arreglo escrito tres veces, agregar un campo significaba
+     * acordarse de los tres. Ya pasó una vez.
+     *
+     * ── LOS TRES CAMPOS DE ENTREGA ──
+     *
+     * Solo se llenan en líneas cuyo producto es DELIVERY. En el resto
+     * quedan en null y no se guardan.
+     */
+    protected function lineaVacia(): array
+    {
+        return [
             'id'           => null,
             'product_id'   => null,
             'container_id' => null,
@@ -416,16 +787,46 @@ class Form extends Component
             'unit_price'   => 0,
             'taxable'      => false,
             'grupo'        => '',
+
+            // RB-049 · el cálculo del transporte vive acá, no en la cabecera
+            'delivery_zip'  => null,
+            'miles'         => null,
+            'rate_per_mile' => null,
+
+            // Plazo cotizado. Solo en líneas de renta.
+            'rental_months' => null,
+
+            // Qué se le hizo al contenedor. Solo en reparación.
+            'work_details'  => null,
+
+            /*
+             | ¿La descripción la escribió una persona?
+             |
+             | Mientras sea false, cambiar el concepto reescribe el texto.
+             | En cuanto alguien lo edita a mano pasa a true y no se toca
+             | nunca más.
+             |
+             | Sin esta bandera pasaba lo del EST-0003: se elegía "Renta
+             | de contenedor", el sistema escribía ese nombre, se cambiaba
+             | el concepto a "Entrega / Delivery" y la descripción se
+             | quedaba diciendo "Renta de contenedor". El presupuesto salió
+             | impreso al cliente con un delivery de $154 llamado renta.
+             |
+             | El código anterior solo pisaba la descripción si estaba
+             | VACÍA, y no podía distinguir "lo escribió el sistema" de
+             | "lo escribió una persona". Ahora sí.
+             */
+            'desc_manual'   => false,
         ];
     }
 
     /**
      * Quita una línea.
      *
-     * array_values() vuelve a numerar el arreglo desde cero. Sin eso
-     * quedarían huecos (0, 2, 3) y Livewire pierde el hilo de qué campo
-     * es cuál: se ve como campos que se mezclan solos al borrar uno del
-     * medio.
+     * array_values() vuelve a numerar el arreglo desde cero. Y por eso
+     * hay que vaciar $seleccionadas: guarda POSICIONES, y después de
+     * renumerar la posición 3 ya no es la misma línea. Sin esto, borrar
+     * una fila del medio agrupa las que no eran.
      */
     public function quitarLinea(int $indice): void
     {
@@ -433,11 +834,15 @@ class Form extends Component
 
         $this->lineas = array_values($this->lineas);
 
-        if (empty($this->lineas)) {
-            $this->agregarLinea();
-        }
+        $this->seleccionadas = [];
+        $this->avisoAgrupar  = null;
 
         $this->limpiarGruposHuerfanos();
+
+        // Se puede llamar desde el modal ("Eliminar"). Si queda abierto
+        // apuntando a un índice que ya se renumeró, edita el renglón
+        // equivocado.
+        $this->cerrarEditor();
     }
 
     /**
@@ -449,29 +854,69 @@ class Form extends Component
     public function updated(string $campo): void
     {
         /* -----------------------------------------------------------------
-         | CAMBIÓ EL PRODUCTO DE UNA LÍNEA
-         |
-         | Se precargan descripción, precio y si paga impuesto, desde el
-         | catálogo. Los tres quedan editables: el precio de venta no es
-         | fijo, varía por temporada y por volumen (RB-029).
+         | CAMBIÓ LA FECHA DE EMISIÓN
          * -------------------------------------------------------------- */
-        if (preg_match('/^lineas\.(\d+)\.product_id$/', $campo, $partes)) {
-            $this->aplicarProducto((int) $partes[1]);
+        if ($campo === 'issue_date') {
+            $this->recalcularValidez();
         }
 
         /* -----------------------------------------------------------------
-         | CAMBIÓ EL GRUPO DE UNA LÍNEA
+         | CAMBIARON LOS TÉRMINOS DE PAGO
          * -------------------------------------------------------------- */
-        if (preg_match('/^lineas\.\d+\.grupo$/', $campo)) {
-            $this->limpiarGruposHuerfanos();
+        if ($campo === 'termsSeleccion' || $campo === 'termsOtro') {
+            $this->armarTerminos();
+
+            if ($campo === 'termsSeleccion') {
+                $this->resetValidation('termsOtro');
+            }
+        }
+
+        /* -----------------------------------------------------------------
+         | CAMBIÓ EL PRODUCTO DE UNA LÍNEA
+         * -------------------------------------------------------------- */
+        if ($campo === 'borrador.product_id') {
+            $this->aplicarProducto();
+        }
+
+        /* -----------------------------------------------------------------
+         | ALGUIEN ESCRIBIÓ LA DESCRIPCIÓN A MANO
+         |
+         | A partir de acá el texto es suyo y cambiar el concepto ya no lo
+         | pisa. Si la deja vacía, vuelve a ser automática.
+         * -------------------------------------------------------------- */
+        if ($campo === 'borrador.description') {
+            $this->borrador['desc_manual'] = filled($this->borrador['description'] ?? null);
+        }
+
+        /* -----------------------------------------------------------------
+         |  Es el cambio que hace posible cotizar tres contenedores a
+         | tres destinos (RB-049).
+         * -------------------------------------------------------------- */
+        if ($campo === 'borrador.miles' || $campo === 'borrador.rate_per_mile') {
+            $this->recalcularLineaDeTransporte();
+        }
+
+         /* -----------------------------------------------------------------
+         | CAMBIÓ LA FORMA DE PAGO PREVISTA
+         |
+         | Elegir "tarjeta de crédito" enciende el interruptor del
+         | recargo. Elegir otra cosa lo apaga.
+         |
+         | Es el mismo dato dicho de dos maneras, y antes había que
+         | acordarse de marcar las dos. Alguien iba a olvidarse.
+         * -------------------------------------------------------------- */
+        if ($campo === 'expected_payment_method') {
+            $this->pagaConTarjeta = $this->expected_payment_method === 'credit_card';
+
+            $empresa = app(CompanyContext::class)->get();
+
+            $this->credit_card_fee_percent = $this->pagaConTarjeta && $empresa
+                ? app(InvoiceCalculator::class)->defaultCreditCardFeePercent($empresa)
+                : 0;
         }
 
         /* -----------------------------------------------------------------
          | CAMBIÓ EL INTERRUPTOR DE LA TARJETA
-         |
-         | El porcentaje sale de la configuración, no está escrito aquí.
-         | Si mañana Square cambia su comisión, se ajusta en la pantalla
-         | de Configuración.
          * -------------------------------------------------------------- */
         if ($campo === 'pagaConTarjeta') {
             $empresa = app(CompanyContext::class)->get();
@@ -483,16 +928,6 @@ class Form extends Component
 
         /* -----------------------------------------------------------------
          | CAMBIÓ EL TIPO DE USO (RB-006, RB-016, RB-017)
-         |
-         | Exportación cambia tres cosas del negocio:
-         |
-         |   - No lleva sales tax de Florida.
-         |   - Exige certificado CSC (se avisa en pantalla).
-         |   - Normalmente no lleva delivery: el cliente contrata su
-         |     propia línea naviera.
-         |
-         | Aquí se desmarca el impuesto de las líneas. Se desmarca, no se
-         | prohíbe: el usuario puede volver a marcarlo si el caso lo pide.
          * -------------------------------------------------------------- */
         if ($campo === 'use_type' && $this->use_type === UseType::Export->value) {
             foreach ($this->lineas as $i => $linea) {
@@ -501,10 +936,10 @@ class Form extends Component
         }
     }
 
-    /** Precarga una línea con los datos del producto elegido. */
-    protected function aplicarProducto(int $indice): void
+    /** Precarga una línea con los datos del concepto elegido. */
+    protected function aplicarProducto(): void
     {
-        $productoId = $this->lineas[$indice]['product_id'] ?? null;
+        $productoId = $this->borrador['product_id'] ?? null;
 
         if (! $productoId) {
             return;
@@ -516,50 +951,466 @@ class Form extends Component
             return;
         }
 
-        // lineDefaults() vive en el modelo Product y es el mismo método
-        // que va a usar la factura. Un solo sitio para los valores por
-        // defecto de una línea.
         $defaults = $producto->lineDefaults();
 
-        // La descripción solo se pisa si estaba vacía: si el usuario ya
-        // había escrito algo suyo, se respeta.
-        if (blank($this->lineas[$indice]['description'])) {
-            $this->lineas[$indice]['description'] = $defaults['description'];
+        /* -----------------------------------------------------------------
+         | LA DESCRIPCIÓN
+         |
+         | Se reescribe salvo que la haya tecleado una persona. Ver la
+         | explicación de 'desc_manual' en lineaVacia().
+         * -------------------------------------------------------------- */
+        if (empty($this->borrador['desc_manual'])) {
+            /*
+             | Si ya hay una unidad elegida, el texto se arma con ella:
+             | "Venta de contenedor · 40 ft High Cube · Usado (MSCU...)".
+             | Cambiar de Renta a Venta con el contenedor ya puesto tiene
+             | que reescribir el prefijo, no dejar el de antes.
+             */
+            $unidad = ! empty($this->borrador['container_id'])
+                ? Container::with(['size:id,name', 'condition:id,name', 'grade:id,name'])
+                    ->find($this->borrador['container_id'])
+                : null;
+
+            $this->borrador['description'] = $producto->autoDescription($unidad);
         }
 
-        if (empty($this->lineas[$indice]['unit_price'])) {
-            $this->lineas[$indice]['unit_price'] = $defaults['unit_price'];
+        if (empty($this->borrador['unit_price'])) {
+            $this->borrador['unit_price'] = $defaults['unit_price'];
         }
 
-        // En exportación nada paga impuesto, sin importar el producto.
-        $this->lineas[$indice]['taxable'] = $this->use_type === UseType::Export->value
+        // En exportación nada paga impuesto, sin importar el concepto.
+        $this->borrador['taxable'] = $this->use_type === UseType::Export->value
             ? false
             : $defaults['taxable'];
 
-        // Si el producto no es un contenedor, se limpia la unidad que
+        // Si el concepto no es un contenedor, se limpia la unidad que
         // pudiera haber quedado seleccionada de antes.
         if (! $producto->type->requiresContainer()) {
-            $this->lineas[$indice]['container_id'] = null;
+            $this->borrador['container_id'] = null;
+        }
+
+        /* -----------------------------------------------------------------
+         | EL PLAZO DE LA RENTA
+         |
+         | Se precarga con el plazo habitual de la empresa y queda
+         | editable. En cualquier concepto que no sea renta se limpia: un
+         | delivery no dura meses.
+         * -------------------------------------------------------------- */
+        if ($producto->isRental()) {
+            if (empty($this->borrador['rental_months'])) {
+                $empresa = app(CompanyContext::class)->get();
+
+                $this->borrador['rental_months'] =
+                    (int) ($empresa?->setting('rentals', 'default_months', 1) ?? 1);
+            }
+        } else {
+            $this->borrador['rental_months'] = null;
+        }
+
+        // Los campos de transporte tampoco tienen sentido fuera de una
+        // entrega. Quedaban con el ZIP y las millas del concepto anterior.
+        if (! $producto->isDelivery()) {
+            $this->borrador['delivery_zip']  = null;
+            $this->borrador['miles']         = null;
+            $this->borrador['rate_per_mile'] = null;
+        }
+
+        /* -----------------------------------------------------------------
+         | TRANSPORTE: el importe se calcula, no se teclea
+         * -------------------------------------------------------------- */
+        if ($producto->isDelivery() || $producto->isPickup()) {
+            $this->aplicarPrecioDeTransporte($producto);
+        }
+
+        /* -----------------------------------------------------------------
+         | CONTENEDOR: si ya había uno elegido, se refresca el precio
+         |
+         | Pasa al cambiar de "Venta" a "Renta" con la misma unidad: son
+         | dos números distintos de la misma ficha.
+         * -------------------------------------------------------------- */
+        if ($producto->type->requiresContainer() && $this->borrador['container_id']) {
+            $this->aplicarPrecioDeContenedor(
+                (int) $this->borrador['container_id'],
+                $producto,
+                forzar: true,
+            );
         }
     }
 
+    /* =====================================================================
+     | EL BUSCADOR DE UNIDADES
+     * ================================================================== */
+
+    public function abrirBuscadorContenedor(int $indice): void
+    {
+        $this->lineaBuscandoContenedor = $indice;
+        $this->buscarContenedor        = '';
+    }
+
+    public function cerrarBuscadorContenedor(): void
+    {
+        $this->lineaBuscandoContenedor = null;
+        $this->buscarContenedor        = '';
+    }
+
     /**
-     * Borra las descripciones de grupos que ya no tienen líneas, o que se
-     * quedaron con una sola.
+     * Las unidades que coinciden con lo que se está escribiendo.
      *
-     * Sin esto, el usuario agrupa dos líneas, escribe el texto, borra una
-     * de las dos, y el texto sigue guardado esperando a nadie.
+     * Solo las de la empresa activa, y solo las que de verdad se pueden
+     * vender: en yarda, sin venta ni renta encima (RB-019). Las compradas
+     * pero todavía en el depósito del proveedor NO salen. No se puede
+     * vender lo que no se ha retirado.
+     */
+    public function getResultadosContenedorProperty()
+    {
+        $empresa = app(CompanyContext::class)->get();
+
+        return Container::query()
+            ->available()
+            ->forBillingCompany($empresa?->id)
+            ->search($this->buscarContenedor)
+            ->with(['size:id,name', 'condition:id,name', 'grade:id,name'])
+            ->orderBy('internal_code')
+            ->limit(15)
+            ->get();
+    }
+
+    /**
+     * Las unidades ya elegidas en OTRAS líneas.
+     *
+     * La pantalla las muestra deshabilitadas. Cotizar dos veces el mismo
+     * contenedor en el mismo presupuesto es un error de dedo que después
+     * se convierte en un contenedor vendido a dos clientes.
+     */
+    public function getContenedoresYaUsadosProperty(): array
+    {
+        $usados = [];
+
+        foreach ($this->lineas as $i => $linea) {
+            // El renglón que se está editando se salta: su propia unidad
+            // no puede salir deshabilitada en su propio buscador.
+            if ($i === $this->lineaEditando) {
+                continue;
+            }
+
+            if (! empty($linea['container_id'])) {
+                $usados[(int) $linea['container_id']] = $i + 1;   // número de línea
+            }
+        }
+
+        return $usados;
+    }
+
+    public function seleccionarContenedor(int $contenedorId): void
+    {
+        if ($this->lineaEditando === null) {
+            return;
+        }
+
+        $this->borrador['container_id'] = $contenedorId;
+
+        $this->aplicarPrecioDeContenedor($contenedorId, $this->productoDelBorrador());
+
+        $this->cerrarBuscadorContenedor();
+    }
+
+    public function quitarContenedor(): void
+    {
+        $this->borrador['container_id'] = null;
+    }
+
+    /**
+     * Copia a la línea el precio que tiene cargado esa unidad en el
+     * inventario.
+     *
+     *   Venta  ->  containers.list_price
+     *   Renta  ->  containers.monthly_rate   (RB-022: ciclos mensuales)
+     *
+     * ── POR QUÉ NO PISA UN PRECIO YA ESCRITO ──
+     *
+     * Si el vendedor ya negoció y tecleó 2,250 y después corrige la
+     * unidad elegida, sería muy molesto que el sistema le devolviera los
+     * 2,400 de lista. Solo escribe si el campo estaba en cero o vacío.
+     *
+     * La excepción es $forzar, que se usa al cambiar de venta a renta:
+     * ahí el número anterior corresponde a otra cosa y sí hay que
+     * cambiarlo.
+     *
+     * ── SIGUE SIENDO EDITABLE (RB-029) ──
+     *
+     * El precio varía por temporada y por volumen. Esto solo ahorra
+     * teclear el caso normal.
+     */
+    protected function aplicarPrecioDeContenedor(
+        int $contenedorId,
+        ?Product $producto = null,
+        bool $forzar = false,
+    ): void {
+        $contenedor = Container::with(['size:id,name', 'condition:id,name', 'grade:id,name'])
+            ->find($contenedorId);
+
+        if (! $contenedor) {
+            return;
+        }
+
+        $esRenta = $producto?->isRental() ?? false;
+
+        $precio = $contenedor->suggestedPrice($esRenta);
+
+        // null = esa unidad no tiene precio cargado para eso. Se deja el
+        // campo como está para que el vendedor escriba, en vez de meter
+        // un cero que se puede guardar por distracción.
+        if ($precio !== null && ($forzar || empty($this->borrador['unit_price']))) {
+            $this->borrador['unit_price'] = $precio;
+        }
+
+        /*
+         | LA DESCRIPCIÓN
+         |
+         | El texto lo arma el concepto, no este archivo: ver
+         | Product::autoDescription(). Acá antes el prefijo estaba
+         | escrito a mano y solo para renta, y por eso las ventas salían
+         | impresas sin decir que eran ventas.
+         |
+         | Se respeta lo que haya tecleado una persona (desc_manual).
+         */
+        if (empty($this->borrador['desc_manual'])) {
+            $this->borrador['description'] = $producto
+                ? $producto->autoDescription($contenedor)
+                : $contenedor->lineDescription();
+        }
+
+        // El contenedor sí paga el 7% (RB-006), salvo en exportación.
+        $this->borrador['taxable'] = $this->use_type !== UseType::Export->value;
+
+        $this->resetValidation('borrador.description');
+        $this->resetValidation('borrador.unit_price');
+    }
+
+    /* =====================================================================
+     | LOS PRECIOS DEL TRANSPORTE
+     * ================================================================== */
+
+     /**
+     * Calcula el importe de una línea de ENTREGA.
+     *
+     * ── QUÉ SE FUE DE ACÁ ──
+     *
+     * Antes este método tenía dos ramas: una para delivery y otra para
+     * pickup. La del pickup se eliminó porque el pickup no se le cotiza
+     * al cliente: es el viaje depósito -> yarda y lo paga FLCHR
+     * (RB-031). Nunca debió estar en un presupuesto.
+     *
+     * PricingResolver::pickupFee() sigue existiendo y sigue haciendo
+     * falta, pero para los viajes y para el invoice semanal de RS a
+     * FLCHR, no para acá.
+     *
+     * ── DE DÓNDE SALE LA TARIFA ──
+     *
+     * De la ficha del transportista si la tiene, y si no del ajuste
+     * operations.default_rate_per_mile. Ni un número escrito en este
+     * archivo.
+     *
+     * Todo lo que escribe este método queda editable en la línea: es
+     * una sugerencia para no teclear el caso normal, no un candado.
+     */
+    protected function aplicarPrecioDeTransporte(Product $producto): void
+    {
+        if (! $producto->isDelivery()) {
+            return;
+        }
+
+        $empresa  = app(CompanyContext::class)->get();
+        $resolver = app(PricingResolver::class);
+
+        // La tarifa se precarga una sola vez por línea. Si el usuario la
+        // pisó a mano, se respeta.
+        if (($this->borrador['rate_per_mile'] ?? null) === null) {
+            $this->borrador['rate_per_mile'] = $resolver->ratePerMile($empresa);
+        }
+
+        $millas = (float) ($this->borrador['miles'] ?? 0);
+
+        // Sin millas no hay nada que calcular todavía. En cuanto las
+        // escriba, updated() vuelve a pasar por acá.
+        if ($millas <= 0) {
+            return;
+        }
+
+        $this->borrador['unit_price'] = round(
+            $millas * (float) $this->borrador['rate_per_mile'],
+            2,
+        );
+
+        $this->borrador['quantity'] = 1;
+
+        // RB-005: el transporte NUNCA lleva sales tax.
+        $this->borrador['taxable'] = false;
+
+        $this->resetValidation('borrador.unit_price');
+    }
+
+    /**
+     * Recalcula UNA línea de transporte.
+     *
+     * Corre cuando el usuario cambia las millas o la tarifa de esa
+     * línea. Antes existía recalcularLineasDeTransporte(), que las
+     * recorría todas porque los datos eran del documento entero. Ahora
+     * cada línea es independiente y tocar una no puede alterar otra.
+     */
+    protected function recalcularLineaDeTransporte(): void
+    {
+        $productoId = $this->borrador['product_id'] ?? null;
+
+        if (! $productoId) {
+            return;
+        }
+
+        $producto = Product::find($productoId);
+
+        if ($producto && $producto->isDelivery()) {
+            $this->aplicarPrecioDeTransporte($producto);
+        }
+    }
+
+
+
+    /* =====================================================================
+     | LOS GRUPOS DE IMPRESIÓN — ahora con casillas
+     * ================================================================== */
+
+    /**
+     * Junta en un solo renglón impreso las líneas marcadas.
+     *
+     * ── POR QUÉ SE CAMBIÓ LA FORMA DE HACERLO ──
+     *
+     * Antes había una columna donde el usuario escribía una letra a mano.
+     * Funcionaba, pero dependía de que escribiera EXACTAMENTE la misma
+     * letra en las dos líneas: una "a" minúscula en una y una "A" en la
+     * otra, y el agrupamiento no ocurría. Sin ningún aviso.
+     *
+     * Ahora se marcan las casillas y el sistema pone la etiqueta. La
+     * letra sigue existiendo por dentro —es la columna bundle_key de la
+     * base, y ahí no cambió nada— pero el usuario ya no la escribe.
+     *
+     * ── EL TEXTO SE PROPONE SOLO ──
+     *
+     * Se toma la descripción de la línea más cara del grupo, que casi
+     * siempre es el contenedor. Es lo que el vendedor iba a escribir de
+     * todos modos, y queda editable.
+     */
+    public function agruparSeleccionadas(): void
+    {
+        $this->avisoAgrupar = null;
+
+        $indices = collect($this->seleccionadas)
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($i) => isset($this->lineas[$i]))
+            ->unique()
+            ->values();
+
+        if ($indices->count() < 2) {
+            $this->avisoAgrupar = 'Marque al menos dos líneas. Agrupar una sola no cambia nada al imprimir.';
+
+            return;
+        }
+
+        $letra = $this->siguienteLetraDeGrupo();
+
+        foreach ($indices as $i) {
+            $this->lineas[$i]['grupo'] = $letra;
+        }
+
+        $masCara = $indices
+            ->sortByDesc(fn ($i) => $this->importeLinea($i))
+            ->first();
+
+        $this->gruposDescripcion[$letra] = trim((string) ($this->lineas[$masCara]['description'] ?? ''));
+
+        $this->seleccionadas = [];
+
+        $this->limpiarGruposHuerfanos();
+    }
+
+    /** Deshace un grupo: las líneas vuelven a imprimirse por separado. */
+    public function desagrupar(string $letra): void
+    {
+        foreach ($this->lineas as $i => $linea) {
+            if (trim((string) ($linea['grupo'] ?? '')) === $letra) {
+                $this->lineas[$i]['grupo'] = '';
+            }
+        }
+
+        unset($this->gruposDescripcion[$letra]);
+
+        $this->avisoAgrupar = null;
+
+        $this->limpiarGruposHuerfanos();
+    }
+
+    /** Saca una sola línea de su grupo, sin deshacer el resto. */
+    public function sacarDelGrupo(int $indice): void
+    {
+        if (isset($this->lineas[$indice])) {
+            $this->lineas[$indice]['grupo'] = '';
+        }
+
+        $this->limpiarGruposHuerfanos();
+    }
+
+    /**
+     * La primera letra libre: A, B, C…
+     *
+     * Se reutilizan las letras que quedaron libres al deshacer un grupo,
+     * para que no salgan documentos con "Grupo A" y "Grupo F" y nada en
+     * medio.
+     */
+    protected function siguienteLetraDeGrupo(): string
+    {
+        $usadas = collect($this->lineas)
+            ->pluck('grupo')
+            ->map(fn ($g) => trim((string) $g))
+            ->filter()
+            ->unique()
+            ->all();
+
+        foreach (range('A', 'Z') as $letra) {
+            if (! in_array($letra, $usadas, true)) {
+                return $letra;
+            }
+        }
+
+        // Veintiséis grupos en un presupuesto no va a pasar, pero si
+        // pasara es mejor un nombre feo que un choque de etiquetas.
+        return 'G'.(count($usadas) + 1);
+    }
+
+    /**
+     * Limpia los grupos que se quedaron con una sola línea o con ninguna.
+     *
+     * Pasa al borrar una línea de un grupo de dos: la que queda tendría
+     * una etiqueta que no agrupa nada, y un texto de grupo esperando a
+     * nadie.
      */
     protected function limpiarGruposHuerfanos(): void
     {
-        $usados = $this->gruposConVariasLineas();
+        $conVarias = $this->gruposConVariasLineas();
+
+        // Una etiqueta que quedó sola no agrupa: se le quita a la línea.
+        foreach ($this->lineas as $i => $linea) {
+            $grupo = trim((string) ($linea['grupo'] ?? ''));
+
+            if ($grupo !== '' && ! in_array($grupo, $conVarias, true)) {
+                $this->lineas[$i]['grupo'] = '';
+            }
+        }
 
         $this->gruposDescripcion = array_intersect_key(
             $this->gruposDescripcion,
-            array_flip($usados),
+            array_flip($conVarias),
         );
 
-        foreach ($usados as $grupo) {
+        foreach ($conVarias as $grupo) {
             $this->gruposDescripcion[$grupo] ??= '';
         }
     }
@@ -567,8 +1418,7 @@ class Form extends Component
     /**
      * Las etiquetas de grupo que tienen DOS O MÁS líneas.
      *
-     * Solo esas se imprimen agrupadas. Una línea sola con etiqueta se
-     * imprime normal, como si no tuviera.
+     * Solo esas se imprimen agrupadas.
      */
     public function gruposConVariasLineas(): array
     {
@@ -582,24 +1432,49 @@ class Form extends Component
             }
         }
 
-        return array_keys(array_filter($conteo, fn ($n) => $n > 1));
+        $letras = array_keys(array_filter($conteo, fn ($n) => $n > 1));
+
+        sort($letras);
+
+        return $letras;
+    }
+
+    /**
+     * Cuánto suma cada grupo y qué líneas lo forman.
+     *
+     * Es el número que va a ver el cliente en ese renglón. Mostrarlo en
+     * pantalla evita la pregunta de siempre: "¿y esto cuánto le sale al
+     * cliente?".
+     */
+    public function getResumenGruposProperty(): array
+    {
+        $resumen = [];
+
+        foreach ($this->gruposConVariasLineas() as $letra) {
+
+            $total  = 0.0;
+            $lineas = [];
+
+            foreach ($this->lineas as $i => $linea) {
+                if (trim((string) ($linea['grupo'] ?? '')) === $letra) {
+                    $total   += $this->importeLinea($i);
+                    $lineas[] = $i + 1;
+                }
+            }
+
+            $resumen[$letra] = [
+                'total'  => round($total, 2),
+                'lineas' => $lineas,
+            ];
+        }
+
+        return $resumen;
     }
 
     /* =====================================================================
      | LOS TOTALES EN VIVO
      * ================================================================== */
 
-    /**
-     * Los totales que se ven en el recuadro de la derecha.
-     *
-     * Se recalculan en cada tecla, sin guardar nada, y usan EXACTAMENTE
-     * la misma calculadora que va a correr al guardar. Ese es el punto:
-     * si la pantalla sumara por su cuenta, un día mostraría un número y
-     * guardaría otro.
-     *
-     * Un método que empieza por "get" y termina en "Property" se usa
-     * desde la vista sin paréntesis: {{ $this->totales['total'] }}.
-     */
     public function getTotalesProperty(): array
     {
         $lineas = [];
@@ -623,7 +1498,6 @@ class Form extends Component
         ]);
     }
 
-    /** El importe de una línea suelta, para la columna de la derecha. */
     public function importeLinea(int $indice): float
     {
         $linea = $this->lineas[$indice] ?? null;
@@ -646,16 +1520,54 @@ class Form extends Component
             'issue_date'  => ['required', 'date'],
             'valid_until' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'use_type'    => ['required', Rule::in(UseType::values())],
-            'terms'       => ['nullable', 'string', 'max:50'],
+
+            /* -------------------------------------------------------------
+             | LOS TÉRMINOS DE PAGO
+             |
+             | 'terms' es lo que se guarda, y la columna es varchar(50).
+             | 'termsOtro' solo se exige si el select está en "Otro".
+             * ---------------------------------------------------------- */
+            'terms'          => ['nullable', 'string', 'max:50'],
+            'termsSeleccion' => ['nullable', 'string', 'max:20'],
+            'termsOtro'      => [
+                Rule::requiredIf(fn () => $this->termsSeleccion === self::TERMINO_OTRO),
+                'nullable', 'string', 'max:50',
+            ],
+
+            /* -------------------------------------------------------------
+             | LAS DIRECCIONES  (RB-035)
+             |
+             | Antes no había NINGUNA regla: se podía guardar un
+             | presupuesto sin dirección de facturación. Y un documento
+             | fiscal sin BILL TO no sirve para nada.
+             |
+             | La línea 2 queda opcional: es el "Suite 300" que casi nunca
+             | hace falta.
+             * ---------------------------------------------------------- */
+            'bill_to.line1' => ['required', 'string', 'max:150'],
+            'bill_to.line2' => ['nullable', 'string', 'max:150'],
+            'bill_to.city'  => ['required', 'string', 'max:100'],
+            'bill_to.state' => ['required', 'string', 'size:2'],
+            'bill_to.zip'   => ['required', 'string', 'max:10'],
+
+            /*
+             | El SHIP TO solo se exige si el interruptor está encendido.
+             |
+             | Rule::requiredIf con una función y no 'required_if:campo,1'
+             | porque el booleano de Livewire llega como true/false real, y
+             | required_if compara contra el texto "1". Es de esas reglas
+             | que parecen funcionar y fallan en silencio.
+             */
+            'ship_to.line1' => [Rule::requiredIf(fn () => $this->envioDistinto), 'nullable', 'string', 'max:150'],
+            'ship_to.line2' => ['nullable', 'string', 'max:150'],
+            'ship_to.city'  => [Rule::requiredIf(fn () => $this->envioDistinto), 'nullable', 'string', 'max:100'],
+            'ship_to.state' => [Rule::requiredIf(fn () => $this->envioDistinto), 'nullable', 'string', 'size:2'],
+            'ship_to.zip'   => [Rule::requiredIf(fn () => $this->envioDistinto), 'nullable', 'string', 'max:10'],
 
             'tax_rate'        => ['required', 'numeric', 'min:0', 'max:100'],
             'discount_amount' => ['required', 'numeric', 'min:0'],
 
-            'delivery_zip'  => ['nullable', 'string', 'max:10'],
-            'miles'         => ['nullable', 'numeric', 'min:0'],
-            'rate_per_mile' => ['nullable', 'numeric', 'min:0'],
-            'depot_id'      => ['nullable', 'exists:depots,id'],
-            'pickup_fee'    => ['nullable', 'numeric', 'min:0'],
+            'expected_payment_method' => ['nullable', 'string', 'max:20'],
 
             'salesperson_id' => ['nullable', 'exists:users,id'],
 
@@ -667,23 +1579,90 @@ class Form extends Component
             'lineas.*.product_id'   => ['nullable', 'exists:products,id'],
             'lineas.*.container_id' => ['nullable', 'exists:containers,id'],
             'lineas.*.grupo'        => ['nullable', 'string', 'max:20'],
+            'lineas.*.delivery_zip'  => ['nullable', 'string', 'max:10'],
+            'lineas.*.rental_months' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'lineas.*.work_details'  => ['nullable', 'string', 'max:2000'],
+            'lineas.*.miles'         => ['nullable', 'numeric', 'min:0'],
+            'lineas.*.rate_per_mile' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 
+    /**
+     * Los nombres con los que el usuario conoce cada campo.
+     *
+     * Sin esto, Laravel escribe el nombre técnico: "El campo bill_to.line1
+     * es obligatorio". El usuario no tiene por qué saber cómo se llaman
+     * nuestras columnas.
+     */
+    protected function validationAttributes(): array
+    {
+        return [
+            'customer_id'     => 'cliente',
+            'issue_date'      => 'fecha de emisión',
+            'valid_until'     => 'válido hasta',
+            'use_type'        => 'tipo de uso',
+            'terms'           => 'términos de pago',
+            'termsOtro'       => 'términos de pago',
+            'bill_to.line1'   => 'dirección de facturación',
+            'bill_to.city'    => 'ciudad de facturación',
+            'bill_to.state'   => 'estado de facturación',
+            'bill_to.zip'     => 'ZIP de facturación',
+            'ship_to.line1'   => 'dirección de entrega',
+            'ship_to.city'    => 'ciudad de entrega',
+            'ship_to.state'   => 'estado de entrega',
+            'ship_to.zip'     => 'ZIP de entrega',
+            'tax_rate'        => 'porcentaje de impuesto',
+            'discount_amount' => 'descuento',
+            'lineas.*.miles'         => 'millas',
+            'lineas.*.rate_per_mile' => 'tarifa por milla',
+            'lineas.*.delivery_zip'  => 'ZIP de entrega',
+            'lineas.*.rental_months' => 'plazo de la renta',
+            'expected_payment_method' => 'forma de pago prevista',
+        ];
+    }
+
+    /**
+     * Los mensajes, escritos como se los diría una persona a otra.
+     *
+     * El número de línea va en el mensaje (:position) porque con ocho
+     * conceptos "falta la descripción" no dice en cuál.
+     */
     protected function messages(): array
     {
         return [
             'customer_id.required' => 'Elija un cliente.',
-            'issue_date.required'  => 'La fecha de emisión es obligatoria.',
+            'customer_id.exists'   => 'Ese cliente ya no existe. Vuelva a elegirlo.',
+
+            'issue_date.required'        => 'La fecha de emisión es obligatoria.',
             'valid_until.after_or_equal' => 'La fecha de vencimiento no puede ser anterior a la de emisión.',
 
-            'lineas.required'   => 'El presupuesto necesita al menos una línea.',
-            'lineas.min'        => 'El presupuesto necesita al menos una línea.',
+            'termsOtro.required' => 'Eligió "Otro" en los términos de pago: escriba cuál.',
+            'termsOtro.max'      => 'Los términos de pago no pueden pasar de 50 caracteres.',
 
-            'lineas.*.description.required' => 'Escriba qué se está cotizando en esta línea.',
-            'lineas.*.quantity.required'    => 'Falta la cantidad.',
-            'lineas.*.quantity.min'         => 'La cantidad tiene que ser mayor que cero.',
-            'lineas.*.unit_price.required'  => 'Falta el precio.',
+            'bill_to.line1.required' => 'Falta la dirección de facturación (BILL TO).',
+            'bill_to.city.required'  => 'Falta la ciudad de facturación.',
+            'bill_to.state.required' => 'Falta el estado de facturación (por ejemplo FL).',
+            'bill_to.state.size'     => 'El estado se escribe con dos letras: FL, GA, NY.',
+            'bill_to.zip.required'   => 'Falta el ZIP de facturación.',
+
+            'ship_to.line1.required' => 'Marcó que la entrega va a otra dirección: falta la dirección de entrega.',
+            'ship_to.city.required'  => 'Falta la ciudad de entrega.',
+            'ship_to.state.required' => 'Falta el estado de entrega.',
+            'ship_to.state.size'     => 'El estado se escribe con dos letras: FL, GA, NY.',
+            'ship_to.zip.required'   => 'Falta el ZIP de entrega.',
+
+            'tax_rate.required'        => 'Escriba el porcentaje de impuesto, o cero si no aplica.',
+            'discount_amount.required' => 'Escriba el descuento, o cero si no hay.',
+
+            'lineas.required' => 'El presupuesto necesita al menos una línea.',
+            'lineas.min'      => 'El presupuesto necesita al menos una línea.',
+
+            'lineas.*.description.required' => 'Línea :position: escriba qué se está cotizando.',
+            'lineas.*.quantity.required'    => 'Línea :position: falta la cantidad.',
+            'lineas.*.quantity.min'         => 'Línea :position: la cantidad tiene que ser mayor que cero.',
+            'lineas.*.quantity.numeric'     => 'Línea :position: la cantidad tiene que ser un número.',
+            'lineas.*.unit_price.required'  => 'Línea :position: falta el precio.',
+            'lineas.*.unit_price.numeric'   => 'Línea :position: el precio tiene que ser un número.',
         ];
     }
 
@@ -693,10 +1672,35 @@ class Form extends Component
 
     /**
      * @param  bool  $yEnviar  si además hay que marcarlo como enviado
+     * @param  bool  $procesar si hay que dejarlo listo para revisar
      */
-    public function guardar(bool $yEnviar = false)
+    public function guardar(bool $yEnviar = false, bool $procesar = false)
     {
-        $this->validate();
+        // Por si el usuario cambió el select y le dio a guardar sin que
+        // llegara a salir el evento: se rearman los términos antes de
+        // validar.
+        $this->armarTerminos();
+
+        /* -----------------------------------------------------------------
+         | LA VALIDACIÓN, CON AVISO A LA PANTALLA
+         |
+         | Si algo falla, se le dispara un evento al navegador para que
+         | haga scroll hasta el primer campo en rojo.
+         |
+         | Sin esto pasaba lo que describiste: el usuario está abajo, da a
+         | Guardar, no ve nada, y concluye que el botón está roto. El
+         | aviso estaba arriba del todo, fuera de la pantalla.
+         |
+         | El throw al final es obligatorio: sin él, Livewire creería que
+         | la validación pasó y seguiría guardando.
+         * -------------------------------------------------------------- */
+        try {
+            $this->validate();
+        } catch (ValidationException $e) {
+            $this->dispatch('errores-de-validacion');
+
+            throw $e;
+        }
 
         $empresa = app(CompanyContext::class)->get();
 
@@ -710,11 +1714,9 @@ class Form extends Component
          | TODO DENTRO DE UNA TRANSACCIÓN
          |
          | O se guarda la cabecera Y las líneas Y se recalcula, o no se
-         | guarda nada.
-         |
-         | Sin esto, un fallo en la línea 3 de 5 dejaría un presupuesto
-         | con dos líneas y un total que no corresponde a ninguna venta
-         | real. Y nadie se enteraría hasta imprimirlo.
+         | guarda nada. Sin esto, un fallo en la línea 3 de 5 dejaría un
+         | presupuesto con dos líneas y un total que no corresponde a
+         | ninguna venta real. Y nadie se enteraría hasta imprimirlo.
          * -------------------------------------------------------------- */
         $presupuesto = DB::transaction(function () use ($empresa, $yEnviar) {
 
@@ -729,11 +1731,21 @@ class Form extends Component
                 'bill_to' => $this->limpiarDireccion($this->bill_to),
                 'ship_to' => $this->envioDistinto ? $this->limpiarDireccion($this->ship_to) : null,
 
-                'delivery_zip'  => $this->delivery_zip ?: null,
-                'miles'         => $this->miles,
-                'rate_per_mile' => $this->rate_per_mile,
-                'depot_id'      => $this->depot_id,
-                'pickup_fee'    => $this->pickup_fee ?: 0,
+                'expected_payment_method' => $this->expected_payment_method ?: null,
+
+                /* -------------------------------------------------------------
+                 | EL TOTAL DE ENTREGA
+                 |
+                 | Ya no se captura: se suma de las líneas de entrega.
+                 |
+                 | Sigue existiendo como columna porque la venta lo
+                 | necesita (RB-030: "cuánto cobró de delivery") y porque
+                 | es la base del cálculo de ganancia del viaje.
+                 |
+                 | Antes esta columna estaba declarada pero nadie la
+                 | llenaba nunca: siempre valía 0.
+                 * ---------------------------------------------------------- */
+                'delivery_amount' => $this->totalDeEntrega(),
 
                 'discount_amount'         => $this->discount_amount ?: 0,
                 'tax_rate'                => $this->tax_rate ?: 0,
@@ -761,9 +1773,6 @@ class Form extends Component
 
             /* -------------------------------------------------------------
              | LAS LÍNEAS
-             |
-             | Tres pasos: borrar las que el usuario quitó, guardar las
-             | que quedan, y volver a sumar.
              * ---------------------------------------------------------- */
             $gruposReales = $this->gruposConVariasLineas();
 
@@ -782,11 +1791,7 @@ class Form extends Component
 
                 $grupo = trim((string) ($linea['grupo'] ?? ''));
 
-                /*
-                 | Solo se guarda el grupo si de verdad agrupa algo. Una
-                 | etiqueta en una línea sola no cambia nada al imprimir y
-                 | además confunde al reabrir el documento.
-                 */
+                // Solo se guarda el grupo si de verdad agrupa algo.
                 $grupoValido = in_array($grupo, $gruposReales, true) ? $grupo : null;
 
                 $atributos = [
@@ -799,39 +1804,206 @@ class Form extends Component
                     'unit_price'   => $linea['unit_price'],
                     'taxable'      => (bool) ($linea['taxable'] ?? false),
 
+                    // RB-049 · solo tienen valor en líneas de entrega
+                    'delivery_zip'  => $linea['delivery_zip'] ?: null,
+                    'miles'         => $linea['miles'] ?: null,
+                    'rate_per_mile' => $linea['rate_per_mile'] ?: null,
+                    'rental_months' => $linea['rental_months'] ?: null,
+                    'work_details'  => $linea['work_details'] ?: null,
+
                     'bundle_key'         => $grupoValido,
                     'bundle_description' => $grupoValido
                         ? ($this->gruposDescripcion[$grupoValido] ?? null)
                         : null,
                 ];
 
+                /* ---------------------------------------------------------
+                 | ⚠️ AQUÍ ESTABA EL ERROR SILENCIOSO
+                 |
+                 | Antes esta rama decía:
+                 |
+                 |     $presupuesto->items()
+                 |         ->whereKey($linea['id'])
+                 |         ->update($atributos);
+                 |
+                 | Ese update() es del QUERY BUILDER, no del modelo: manda
+                 | un UPDATE directo a la base y NO dispara los eventos de
+                 | Eloquent.
+                 |
+                 | Y EstimateItem calcula su columna 'amount'
+                 | (cantidad × precio) precisamente en un evento 'saving'.
+                 |
+                 | Efecto: al editar la cantidad o el precio de una línea
+                 | YA GUARDADA, el importe de esa línea no se recalculaba.
+                 | La cabecera decía un total y las líneas sumaban otro.
+                 |
+                 | Y no avisaba de nada. El documento simplemente estaba
+                 | mal, y solo se descubría comparando a mano.
+                 |
+                 | Con find() + fill() + save() pasa por el modelo, se
+                 | recalcula el amount y además despierta al
+                 | EstimateItemObserver, que vuelve a sumar la cabecera.
+                 * ------------------------------------------------------ */
                 if (! empty($linea['id'])) {
-                    $presupuesto->items()->whereKey($linea['id'])->update($atributos);
+
+                    $item = $presupuesto->items()->whereKey($linea['id'])->first();
+
+                    if ($item) {
+                        $item->fill($atributos)->save();
+                    } else {
+                        // La línea traía un id que ya no existe (alguien la
+                        // borró desde otra pestaña). Se crea de nuevo en
+                        // vez de perderla.
+                        $presupuesto->items()->create($atributos);
+                    }
+
                 } else {
                     $presupuesto->items()->create($atributos);
                 }
             }
 
-            // 3 · Los totales.
-            //
-            // El observer de las líneas ya recalculó en cada guardado,
-            // pero se hace una vez más al final por si la última acción
-            // fue un borrado: así el número guardado siempre corresponde
-            // al estado final, no a uno intermedio.
+            // 3 · Los totales, una vez más al final.
             $presupuesto->load('items')->recalculate();
 
-            if ($yEnviar && $presupuesto->status === EstimateStatus::Draft) {
+            /* -------------------------------------------------------------
+             | EL ESTADO
+             |
+             | Procesar NO envía. Deja el documento armado y listo para
+             | que alguien lo mire. Enviar es un segundo acto, ya con el
+             | documento delante, desde la pantalla de revisión.
+             |
+             | Antes el único botón decía "Guardar y enviar correo" y se
+             | pulsaba sin haber visto nunca cómo quedaba el documento.
+             * ---------------------------------------------------------- */
+            if ($yEnviar) {
                 $presupuesto->markAsSent();
+            } elseif ($procesar) {
+                $presupuesto->markAsProcessed();
             }
 
             return $presupuesto;
         });
 
+        /* -----------------------------------------------------------------
+         | GUARDAR LA DIRECCIÓN EN LA FICHA DEL CLIENTE
+         |
+         | Va FUERA de la transacción a propósito.
+         |
+         | Si esto fallara —por un dato raro, por un límite de columna—
+         | no tiene por qué tumbar un presupuesto que ya está bien
+         | guardado. Es una comodidad, no parte del documento.
+         * -------------------------------------------------------------- */
+        $avisoDireccion = $this->guardarDireccionEnCliente
+            ? $this->guardarDireccionDelCliente()
+            : null;
+
+        $queHizo = match (true) {
+            $yEnviar  => ' guardado y marcado como enviado.',
+            $procesar => ' procesado. Revisa que todo esté bien y envíalo.',
+            default   => ' guardado.',
+        };
+
         session()->flash('exito',
-            'Presupuesto '.$presupuesto->estimate_number.' guardado'
-            .($yEnviar ? ' y marcado como enviado.' : '.'));
+            'Presupuesto '.$presupuesto->estimate_number.$queHizo
+            .($avisoDireccion ? ' '.$avisoDireccion : ''));
 
         return redirect()->route('comercial.presupuestos.show', $presupuesto);
+    }
+
+    /**
+     * Copia la dirección escrita a la ficha del cliente, para que el
+     * próximo documento se llene solo.
+     *
+     * ── POR QUÉ EXISTE ──
+     *
+     * Porque la pantalla de clientes todavía no está hecha, y sin ella no
+     * hay ningún sitio donde cargarle la dirección a nadie. Sin esto, el
+     * cliente número 40 sigue obligando a teclear la dirección completa en
+     * su documento número 15.
+     *
+     * ── QUÉ HACE EXACTAMENTE ──
+     *
+     *   · Si el cliente no tenía ninguna dirección, la guarda y la marca
+     *     como la fiscal por defecto.
+     *   · Si ya tenía una igual, no hace nada.
+     *   · Si tenía otras distintas, agrega esta SIN marcarla por defecto:
+     *     una entrega puntual no debería cambiarle la dirección fiscal a
+     *     nadie.
+     *   · Si además se marcó "la entrega va a otra dirección", esa se
+     *     guarda también.
+     *
+     * Devuelve un texto para el aviso verde, o null si no guardó nada.
+     */
+    protected function guardarDireccionDelCliente(): ?string
+    {
+        $cliente = Customer::find($this->customer_id);
+
+        if (! $cliente) {
+            return null;
+        }
+
+        $guardadas = 0;
+
+        $tenia = $cliente->addresses()->count();
+
+        // ── La fiscal ──
+        $fiscal = $this->limpiarDireccion($this->bill_to);
+
+        if ($fiscal && ! empty($fiscal['line1'])) {
+
+            // ¿Ya está esta misma? Se compara por línea 1 y ZIP, que es
+            // lo que de verdad identifica un domicilio.
+            $yaExiste = $cliente->addresses()
+                ->where('line1', $fiscal['line1'])
+                ->where('zip', $fiscal['zip'] ?? null)
+                ->exists();
+
+            if (! $yaExiste) {
+                CustomerAddress::create($fiscal + [
+                    'customer_id'        => $cliente->id,
+                    'label'              => $fiscal['label'] ?? 'Facturación',
+                    'type'               => 'billing',
+                    'country'            => 'US',
+                    'is_default_billing' => $tenia === 0,
+                ]);
+
+                $guardadas++;
+            }
+        }
+
+        // ── La de entrega, si es distinta ──
+        if ($this->envioDistinto) {
+
+            $entrega = $this->limpiarDireccion($this->ship_to);
+
+            if ($entrega && ! empty($entrega['line1'])) {
+
+                $yaExiste = $cliente->addresses()
+                    ->where('line1', $entrega['line1'])
+                    ->where('zip', $entrega['zip'] ?? null)
+                    ->exists();
+
+                if (! $yaExiste) {
+                    CustomerAddress::create($entrega + [
+                        'customer_id'         => $cliente->id,
+                        'label'               => $entrega['label'] ?? 'Entrega',
+                        'type'                => 'shipping',
+                        'country'             => 'US',
+                        'is_default_shipping' => $tenia === 0,
+                    ]);
+
+                    $guardadas++;
+                }
+            }
+        }
+
+        if ($guardadas === 0) {
+            return null;
+        }
+
+        return $guardadas === 1
+            ? 'La dirección quedó guardada en la ficha del cliente.'
+            : 'Las 2 direcciones quedaron guardadas en la ficha del cliente.';
     }
 
     /**
@@ -850,6 +2022,32 @@ class Form extends Component
         return empty($limpia) ? null : $limpia;
     }
 
+        /**
+     * Suma de todas las líneas de entrega del documento.
+     *
+     * Se recorre por producto y no por si la línea tiene millas,
+     * porque una entrega con precio negociado a mano no lleva millas
+     * y aun así es delivery.
+     */
+    protected function totalDeEntrega(): float
+    {
+        $ids = collect($this->lineas)->pluck('product_id')->filter()->unique();
+
+        if ($ids->isEmpty()) {
+            return 0.0;
+        }
+
+        $productos = Product::whereIn('id', $ids)->get()->keyBy('id');
+
+        return (float) collect($this->lineas)
+            ->filter(function ($linea) use ($productos) {
+                $producto = $productos->get($linea['product_id'] ?? null);
+
+                return $producto && $producto->isDelivery();
+            })
+            ->sum(fn ($linea) => (float) $linea['quantity'] * (float) $linea['unit_price']);
+    }
+    
     /* =====================================================================
      | LO QUE SE PINTA
      * ================================================================== */
@@ -858,43 +2056,49 @@ class Form extends Component
     {
         $empresa = app(CompanyContext::class)->get();
 
+        /* -----------------------------------------------------------------
+         | LOS CONTENEDORES YA ELEGIDOS
+         |
+         | Solo los que están puestos en alguna línea, para poder mostrar
+         | su nombre. Ya no se trae el inventario entero: para elegir uno
+         | está el buscador.
+         * -------------------------------------------------------------- */
+        $idsElegidos = collect($this->lineas)
+            ->pluck('container_id')
+            ->filter()
+            ->unique()
+            ->all();
+
+        $contenedoresElegidos = $idsElegidos
+            ? Container::whereIn('id', $idsElegidos)
+                ->with(['size:id,name', 'condition:id,name', 'grade:id,name'])
+                ->get()
+                ->keyBy('id')
+            : collect();
+
         return view('livewire.estimates.form', [
 
             /*
-             | Los productos disponibles: los compartidos y los propios de
-             | esta empresa. Un producto de FLCHR no aparece en un
-             | presupuesto de RS Transport.
+             | Los conceptos disponibles EN UN PRESUPUESTO: los
+             | compartidos y los propios de esta empresa, y solo los
+             | marcados como cotizables.
+             |
+             | Es lo que deja fuera "Cargo por mora", "Almacenaje" y
+             | "Recargo por tarjeta": esos tres nacen de hechos
+             | posteriores a la venta, no se cotizan.
              */
-            'productos' => Product::query()
-                ->active()
-                ->forCompany($empresa?->id)
-                ->get(),
+            'productos' => $this->productosDisponibles,
 
-            /*
-             | Las unidades que se pueden vender de verdad (RB-019).
-             |
-             | El scope available() del modelo Container filtra tres cosas
-             | a la vez: que esté en yarda, que no tenga una venta activa y
-             | que no esté rentada. Los que están comprados pero todavía en
-             | el depósito del proveedor NO aparecen: no se puede vender lo
-             | que no se ha retirado.
-             |
-             | El límite de 300 es una red de seguridad. Cuando el
-             | inventario crezca, esto se cambia por un buscador igual al
-             | de clientes.
-             */
-            'contenedores' => Container::query()
-                ->available()
-                ->with(['size:id,name', 'condition:id,name'])
-                ->orderBy('internal_code')
-                ->limit(300)
-                ->get(),
+            'contenedoresElegidos' => $contenedoresElegidos,
 
             'depositos'  => Depot::query()->active()->orderBy('name')->get(),
             'vendedores' => User::query()->active()->orderBy('name')->get(['id', 'name']),
 
             'tiposDeUso' => UseType::options(),
             'grupos'     => $this->gruposConVariasLineas(),
+
+            'terminosDePago' => self::TERMINOS_FIJOS,
+            'terminoOtro'    => self::TERMINO_OTRO,
         ]);
     }
 }

@@ -1,0 +1,1809 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SISTEMA VISUAL
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Un solo archivo con el color y la forma de todas las pantallas de
+   adentro. Se importa desde app.css.
+
+   ── POR QUÉ UN ARCHIVO APARTE ──
+
+   Porque app.css es de la instalación: ahí viven los imports de AdminLTE,
+   Tailwind y los iconos, más los ajustes del logo del sidebar. Mezclar el
+   diseño del sistema con la instalación hace que el día que actualices
+   AdminLTE tengas que ir separando a mano qué era tuyo y qué era de
+   ellos.
+
+   ── POR QUÉ SE VEÍA PÁLIDO ──
+
+   AdminLTE 4 viene en gris sobre gris a propósito: es una base neutra
+   para que cada quien le ponga su color. Nosotros no le habíamos puesto
+   ninguno, así que se quedó en la base.
+
+   Lo que sigue no es maquillaje. Cada color dice algo:
+
+     verde     dinero que entró, documento cerrado bien
+     ámbar     algo que vence, algo que espera
+     rojo      vencido, rechazado, saldo en la calle
+     azul      en curso, enviado
+     gris      borrador, todavía no es nada
+
+   Un vendedor tiene que poder mirar la pantalla de lejos y saber si el
+   día va bien o mal, sin leer una sola palabra.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1 · LA PALETA
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Se declara una vez acá y se usa por nombre en todo el resto. Cambiar el
+   azul del sistema es cambiar una línea.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+    /* Los cinco significados */
+    --sys-ok:        #059669;   /* verde  · cobrado, aceptado */
+    --sys-ok-soft:   #ecfdf5;
+    --sys-warn:      #d97706;   /* ámbar  · por vencer, parcial */
+    --sys-warn-soft: #fffbeb;
+    --sys-bad:       #dc2626;   /* rojo   · vencido, rechazado */
+    --sys-bad-soft:  #fef2f2;
+    --sys-info:      #2563eb;   /* azul   · enviado, en curso */
+    --sys-info-soft: #eff6ff;
+    --sys-mute:      #64748b;   /* gris   · borrador */
+    --sys-mute-soft: #f8fafc;
+
+    /* Estructura */
+    --sys-ink:       #0f172a;   /* texto principal */
+    --sys-line:      #e2e8f0;   /* bordes */
+    --sys-radius:    .625rem;
+    --sys-shadow:    0 1px 2px rgba(15, 23, 42, .06),
+                     0 1px 3px rgba(15, 23, 42, .04);
+    --sys-shadow-up: 0 4px 12px rgba(15, 23, 42, .08);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2 · LAS TARJETAS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.app-content .card {
+    border: 1px solid var(--sys-line);
+    border-radius: var(--sys-radius);
+    box-shadow: var(--sys-shadow);
+}
+
+.app-content .card-header {
+    background: #fff;
+    border-bottom: 1px solid var(--sys-line);
+    padding-top: .75rem;
+    padding-bottom: .75rem;
+}
+
+.app-content .card-header .card-title {
+    font-weight: 600;
+    color: var(--sys-ink);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3 · LOS CONTADORES DE ARRIBA
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Antes eran cuatro rectángulos blancos con un número gris. Ahora cada
+   uno lleva una barra de color a la izquierda y un icono, y el número va
+   grande.
+
+   La barra de color es lo que permite leerlos sin leerlos: rojo a la
+   izquierda significa "mira esto" aunque no llegues a enfocar el texto.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/*
+   ── POR QUÉ CAMBIÓ EL DISEÑO ──
+
+   La versión anterior era una tarjeta blanca con una barra fina de color
+   a la izquierda. Dependía de un pseudo-elemento sobre un <button>, y
+   entre los resets de Tailwind y los de AdminLTE eso se pierde con
+   demasiada facilidad.
+
+   Esta versión pinta el color en el FONDO de la tarjeta y en un chip con
+   el icono. Son propiedades normales sobre elementos normales: no hay
+   nada que se pueda perder por un reset.
+*/
+
+.kpi {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    width: 100%;
+    height: 100%;
+    text-align: left;
+    text-decoration: none;
+    padding: .9rem 1rem;
+    border-radius: var(--sys-radius);
+    border: 1px solid var(--sys-line);
+    background-color: #fff;
+    box-shadow: var(--sys-shadow);
+    transition: box-shadow .15s ease, transform .15s ease;
+}
+
+button.kpi { appearance: none; -webkit-appearance: none; }
+
+a.kpi:hover, button.kpi:hover {
+    box-shadow: var(--sys-shadow-up);
+    transform: translateY(-1px);
+}
+
+/* El chip del icono: es lo que de verdad lleva el color */
+.kpi-icono {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: .6rem;
+    font-size: 1.15rem;
+    background-color: var(--sys-mute-soft);
+    color: var(--sys-mute);
+}
+
+.kpi-cuerpo { min-width: 0; }
+
+.kpi-label {
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--sys-mute);
+}
+
+.kpi-valor {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--sys-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.kpi-pie {
+    font-size: .72rem;
+    color: var(--sys-mute);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Las cuatro variantes ── */
+
+.kpi-ok     { background-color: var(--sys-ok-soft);   border-color: rgba(5,150,105,.3); }
+.kpi-ok     .kpi-icono { background-color: var(--sys-ok);   color: #fff; }
+.kpi-ok     .kpi-valor { color: #065f46; }
+
+.kpi-warn   { background-color: var(--sys-warn-soft); border-color: rgba(217,119,6,.3); }
+.kpi-warn   .kpi-icono { background-color: var(--sys-warn); color: #fff; }
+.kpi-warn   .kpi-valor { color: #92400e; }
+
+.kpi-bad    { background-color: var(--sys-bad-soft);  border-color: rgba(220,38,38,.3); }
+.kpi-bad    .kpi-icono { background-color: var(--sys-bad);  color: #fff; }
+.kpi-bad    .kpi-valor { color: #991b1b; }
+
+.kpi-info   { background-color: var(--sys-info-soft); border-color: rgba(37,99,235,.3); }
+.kpi-info   .kpi-icono { background-color: var(--sys-info); color: #fff; }
+.kpi-info   .kpi-valor { color: #1e40af; }
+
+/*
+   Cuando el contador está en cero no hace falta gritar. Queda en blanco
+   y gris, y así los que sí tienen algo resaltan por contraste.
+*/
+.kpi-apagado { background-color: #fff; border-color: var(--sys-line); }
+.kpi-apagado .kpi-icono { background-color: var(--sys-mute-soft); color: var(--sys-mute); }
+.kpi-apagado .kpi-valor { color: var(--sys-mute); }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4 · LOS BOTONES DE ACCIÓN DE LAS TABLAS
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Esto es lo que estaba peor. Eran tres o cuatro `btn-outline-secondary`
+   pegados: tres cuadritos grises idénticos donde el de borrar pesaba
+   visualmente lo mismo que el de ver.
+
+   Lo que cambia:
+
+     · Los iconos van sin borde ni fondo hasta que pasas el mouse.
+     · Cada uno toma su color al pasar por encima: azul ver, ámbar
+       editar, rojo borrar. Antes de eso son todos gris.
+     · El de borrar va separado del grupo por una línea fina, para que
+       nadie lo pulse por inercia viniendo de la izquierda.
+     · Área de clic de 32px: con 28 se falla en pantalla táctil.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.acciones {
+    display: inline-flex;
+    align-items: center;
+    gap: .125rem;
+}
+
+.acciones .acc {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: .5rem;
+    background: transparent;
+    color: var(--sys-mute);
+    font-size: .95rem;
+    line-height: 1;
+    transition: background-color .12s ease, color .12s ease;
+}
+
+.acciones .acc:hover,
+.acciones .acc:focus-visible {
+    background: var(--sys-mute-soft);
+    color: var(--sys-ink);
+    outline: none;
+}
+
+.acciones .acc-ver:hover     { background: var(--sys-info-soft); color: var(--sys-info); }
+.acciones .acc-editar:hover  { background: var(--sys-warn-soft); color: var(--sys-warn); }
+.acciones .acc-copiar:hover  { background: var(--sys-mute-soft); color: var(--sys-ink); }
+.acciones .acc-borrar:hover  { background: var(--sys-bad-soft);  color: var(--sys-bad); }
+
+/* La separación del destructivo */
+.acciones .acc-separado {
+    margin-left: .375rem;
+    padding-left: .5rem;
+    border-left: 1px solid var(--sys-line);
+    border-radius: 0 .5rem .5rem 0;
+    width: 38px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5 · LAS TABLAS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.app-content .table > :not(caption) > * > * { padding: .7rem .75rem; }
+
+.app-content .table thead th {
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--sys-mute);
+    background: var(--sys-mute-soft);
+    border-bottom: 1px solid var(--sys-line);
+    white-space: nowrap;
+}
+
+/* Los encabezados que ordenan avisan que se pueden pulsar */
+.app-content .table thead th[role="button"]:hover { color: var(--sys-info); }
+
+.app-content .table tbody tr { border-color: var(--sys-line); }
+.app-content .table-hover tbody tr:hover { background: var(--sys-info-soft); }
+
+/* La franja de color al inicio de la fila, según el estado */
+.fila-estado { border-left: 3px solid transparent; }
+.fila-ok   { border-left-color: var(--sys-ok); }
+.fila-warn { border-left-color: var(--sys-warn); }
+.fila-bad  { border-left-color: var(--sys-bad); }
+.fila-info { border-left-color: var(--sys-info); }
+.fila-mute { border-left-color: var(--sys-line); }
+
+/* El número de documento: que se vea que es un enlace */
+.doc-numero {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--sys-info);
+    text-decoration: none;
+}
+.doc-numero:hover { text-decoration: underline; }
+
+/* Los importes, alineados por la coma */
+.monto { font-variant-numeric: tabular-nums; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6 · LAS ETIQUETAS DE ESTADO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Bootstrap las pinta con el color de fondo lleno. Eso funciona para una
+   etiqueta suelta, pero en una tabla de quince filas quince rectángulos
+   saturados cansan la vista y compiten con los importes.
+
+   Fondo suave y texto del color: se lee igual y no grita.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.app-content .badge {
+    font-weight: 600;
+    font-size: .72rem;
+    padding: .3rem .6rem;
+    border: 1px solid transparent;
+}
+
+.app-content .badge.text-bg-success   { background: var(--sys-ok-soft)   !important; color: var(--sys-ok)   !important; border-color: rgba(5,150,105,.25); }
+.app-content .badge.text-bg-warning   { background: var(--sys-warn-soft) !important; color: var(--sys-warn) !important; border-color: rgba(217,119,6,.25); }
+.app-content .badge.text-bg-danger    { background: var(--sys-bad-soft)  !important; color: var(--sys-bad)  !important; border-color: rgba(220,38,38,.25); }
+.app-content .badge.text-bg-primary   { background: var(--sys-info-soft) !important; color: var(--sys-info) !important; border-color: rgba(37,99,235,.25); }
+.app-content .badge.text-bg-info      { background: #f5f3ff !important; color: #7c3aed !important; border-color: rgba(124,58,237,.25); }
+.app-content .badge.text-bg-secondary { background: var(--sys-mute-soft) !important; color: var(--sys-mute) !important; border-color: var(--sys-line); }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   7 · EL PANEL DE TOTALES QUE TE SIGUE
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ── POR QUÉ NO FUNCIONABA ──
+
+   La clase position-sticky de Bootstrap ya estaba puesta en el
+   formulario. No hacía nada porque `position: sticky` se rompe en
+   silencio si CUALQUIER elemento por encima tiene overflow distinto de
+   visible — y el layout de AdminLTE trae overflow-x en varios sitios
+   para que el sidebar no desborde.
+
+   No da error. Simplemente el elemento se comporta como si la propiedad
+   no existiera. Es de los detalles de CSS que más tiempo hacen perder.
+
+   La primera regla apaga ese overflow en la cadena de contenedores. La
+   segunda hace el trabajo.
+
+   ── Y POR QUÉ EL max-height ──
+
+   Con quince líneas cargadas, el panel de totales puede llegar a ser más
+   alto que la pantalla. Cuando eso pasa, "pegajoso" deja de servir:
+   nunca termina de entrar. Con max-height y scroll propio, el panel se
+   queda quieto y por dentro se desplaza lo que sobre.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/*
+   ── INTENTO 1 · QUE EL PANEL SE PEGUE ──
+
+   Va con !important y nombrando el body, porque las reglas de AdminLTE
+   son más específicas que las nuestras. Sin eso, la regla se escribe
+   pero pierde y no pasa nada — que es lo que ocurrió la vez pasada.
+
+   `contain` y `will-change` también rompen el pegado, y algunos temas
+   los traen. Por eso se apagan aquí.
+*/
+body .app-wrapper,
+body .app-main,
+body.layout-fixed .app-main,
+body .app-content,
+body .app-content > .container-fluid,
+body .app-content-header {
+    overflow: visible !important;
+    contain: none !important;
+    will-change: auto !important;
+}
+
+.panel-pegajoso {
+    position: sticky !important;
+    top: 1rem;
+    z-index: 3;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* En pantallas chicas la columna va debajo: pegarla estorbaría */
+@media (max-width: 1199.98px) {
+    .panel-pegajoso {
+        position: static !important;
+        max-height: none;
+        overflow-y: visible;
+    }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   7 bis · LA BARRA DE TOTALES DE ABAJO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ── POR QUÉ EXISTE, SI YA ESTÁ EL PANEL PEGAJOSO ──
+
+   Porque el pegado depende de que ninguna regla de AdminLTE lo rompa, y
+   eso no lo puedo garantizar sin ver tu pantalla. Ya falló una vez.
+
+   Esta barra usa `position: fixed`, que se calcula contra la ventana del
+   navegador y no contra los contenedores de la página. Es mucho más
+   difícil de romper.
+
+   Y no se pisan: la barra aparece SOLO cuando la tarjeta de totales no se
+   ve en pantalla. Si el pegado funciona, la barra casi nunca sale. Si no
+   funciona, la barra cubre la necesidad igual.
+
+   El que decide es un observador de JavaScript que mira si la tarjeta
+   está a la vista. No hay que configurar nada.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.barra-totales {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1030;
+    background: #fff;
+    border-top: 1px solid var(--sys-line);
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, .1);
+    padding: .6rem 1rem;
+}
+
+.barra-totales .bt-linea {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.barra-totales .bt-dato { line-height: 1.15; }
+
+.barra-totales .bt-etiqueta {
+    display: block;
+    font-size: .65rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--sys-mute);
+}
+
+.barra-totales .bt-valor {
+    font-size: .95rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--sys-ink);
+}
+
+.barra-totales .bt-total .bt-valor {
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+/* En móvil solo caben el total y los botones */
+@media (max-width: 767.98px) {
+    .barra-totales .bt-oculto-movil { display: none; }
+}
+
+/*
+   Sin esto, la barra tapa el último centímetro del formulario y no se
+   puede pulsar lo que quede debajo.
+*/
+.con-barra-totales { padding-bottom: 5.5rem; }
+
+/* Evita el parpadeo de Alpine antes de que arranque */
+[x-cloak] { display: none !important; }
+
+/* El total, que es lo que se viene a mirar */
+.total-grande {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--sys-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   8 · FORMULARIOS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* El asterisco de obligatorio, siempre igual en todo el sistema */
+.req::after {
+    content: ' *';
+    color: var(--sys-bad);
+    font-weight: 700;
+}
+
+/* La leyenda que explica el asterisco */
+.leyenda-obligatorio {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .8rem;
+    color: var(--sys-mute);
+    background: var(--sys-mute-soft);
+    border: 1px solid var(--sys-line);
+    border-radius: 999px;
+    padding: .25rem .75rem;
+}
+
+.leyenda-obligatorio strong { color: var(--sys-bad); }
+
+/* Numeración de las secciones del formulario */
+.paso-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--sys-info-soft);
+    color: var(--sys-info);
+    font-size: .75rem;
+    font-weight: 700;
+    margin-right: .5rem;
+}
+
+.app-content .form-control:focus,
+.app-content .form-select:focus {
+    border-color: var(--sys-info);
+    box-shadow: 0 0 0 .2rem rgba(37, 99, 235, .12);
+}
+
+.app-content .form-control.is-invalid,
+.app-content .form-select.is-invalid { border-color: var(--sys-bad); }
+
+.app-content .invalid-feedback { font-size: .78rem; color: var(--sys-bad); }
+
+/* La fila de una línea agrupada */
+.linea-agrupada { background: var(--sys-info-soft) !important; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   9 · AVISOS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.app-content .alert {
+    border-radius: var(--sys-radius);
+    border-width: 1px;
+    border-left-width: 4px;
+}
+
+.app-content .alert-success { background: var(--sys-ok-soft);   border-color: var(--sys-ok);   color: #065f46; }
+.app-content .alert-warning { background: var(--sys-warn-soft); border-color: var(--sys-warn); color: #92400e; }
+.app-content .alert-danger  { background: var(--sys-bad-soft);  border-color: var(--sys-bad);  color: #991b1b; }
+.app-content .alert-info    { background: var(--sys-info-soft); border-color: var(--sys-info); color: #1e40af; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   10 · EL ESTADO VACÍO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Una tabla sin filas no debería ser un hueco blanco. Debería decir qué
+   pasó y qué hacer.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.vacio {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--sys-mute);
+}
+
+.vacio i {
+    display: block;
+    font-size: 2.25rem;
+    color: var(--sys-line);
+    margin-bottom: .75rem;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   11 · DOS FORMAS DE VER LA TABLA
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Las tres muestran exactamente los mismos datos. Cambia cómo se leen.
+
+     A · COMPACTA     filas densas, franja de color al inicio.
+                      La que más filas mete en pantalla. Para quien vive
+                      en esta pantalla todo el día.
+
+     B · TARJETAS     cada fila es una tarjeta separada, con aire.
+                      Se leen menos filas de golpe pero cada una entra
+                      sola por los ojos. Buena en tablet y para quien
+                      entra de vez en cuando.
+
+   Las dos se quedan: el usuario elige con el botón de arriba y su
+   elección se recuerda en ese navegador. No es indecisión nuestra, es
+   que sirven para cosas distintas y la misma persona quiere una u otra
+   según lo que esté haciendo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ─────────────────────────────────────────────────────────────
+   El selector de vista (solo mientras comparas)
+───────────────────────────────────────────────────────────── */
+
+.selector-vista {
+    display: inline-flex;
+    background: var(--sys-mute-soft);
+    border: 1px solid var(--sys-line);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
+}
+
+.selector-vista button {
+    border: 0;
+    background: transparent;
+    border-radius: 999px;
+    padding: .3rem .85rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--sys-mute);
+    transition: background-color .12s ease, color .12s ease;
+}
+
+.selector-vista button:hover { color: var(--sys-ink); }
+
+.selector-vista button.activo {
+    background: #fff;
+    color: var(--sys-info);
+    box-shadow: var(--sys-shadow);
+}
+
+
+/* ═════════════════════════════════════════════
+   A · COMPACTA
+═════════════════════════════════════════════ */
+
+.tabla-compacta thead th {
+    font-size: .7rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--sys-mute);
+    background: var(--sys-mute-soft);
+    border-bottom: 2px solid var(--sys-line);
+    white-space: nowrap;
+    padding: .55rem .75rem;
+}
+
+.tabla-compacta tbody td { padding: .5rem .75rem; font-size: .875rem; }
+.tabla-compacta tbody tr { border-left: 3px solid transparent; }
+.tabla-compacta tbody tr:hover { background: var(--sys-info-soft); }
+
+
+/* ═════════════════════════════════════════════
+   B · TARJETAS
+═════════════════════════════════════════════ */
+
+.lista-tarjetas { display: grid; gap: .75rem; padding: 1rem; }
+
+.tarjeta-fila {
+    display: grid;
+    grid-template-columns: 4px 1fr auto;
+    gap: 0 1rem;
+    align-items: center;
+    background: #fff;
+    border: 1px solid var(--sys-line);
+    border-radius: var(--sys-radius);
+    box-shadow: var(--sys-shadow);
+    overflow: hidden;
+    transition: box-shadow .15s ease, transform .15s ease;
+}
+
+.tarjeta-fila:hover { box-shadow: var(--sys-shadow-up); transform: translateY(-1px); }
+
+/* La barra vertical de color, primera columna del grid */
+.tarjeta-fila .tf-barra { align-self: stretch; background: var(--sys-line); }
+
+.tf-ok   .tf-barra { background: var(--sys-ok); }
+.tf-warn .tf-barra { background: var(--sys-warn); }
+.tf-bad  .tf-barra { background: var(--sys-bad); }
+.tf-info .tf-barra { background: var(--sys-info); }
+
+.tarjeta-fila .tf-cuerpo { padding: .85rem 0; min-width: 0; }
+.tarjeta-fila .tf-lado   { padding: .85rem 1rem .85rem 0; text-align: right; }
+
+.tf-titulo {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-bottom: .2rem;
+}
+
+.tf-cliente { font-weight: 600; color: var(--sys-ink); }
+
+.tf-meta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: .78rem;
+    color: var(--sys-mute);
+}
+
+.tf-meta span { white-space: nowrap; }
+
+.tf-total {
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--sys-ink);
+    line-height: 1.1;
+}
+
+@media (max-width: 767.98px) {
+    .tarjeta-fila { grid-template-columns: 4px 1fr; }
+    .tarjeta-fila .tf-lado { grid-column: 2; padding: 0 1rem .85rem 0; text-align: left; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   12 · EL FORMULARIO, MENOS BLANCO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Dijiste que cansaba tanto blanco, y tenías razón: era una columna de
+   seis tarjetas blancas sobre fondo blanco, sin nada que separara una
+   sección de otra.
+
+   Lo que cambia:
+
+     · Cada sección lleva un número en un círculo de color y un icono.
+     · Los encabezados dejan de ser blancos: van en gris muy claro con
+       una línea de color arriba.
+     · La tabla de conceptos tiene su encabezado tintado.
+     · El panel de totales lleva encabezado oscuro, para que se lea como
+       "esto es el resultado" y no como una sección más.
+     · El fondo de la página es gris claro, así las tarjetas blancas
+       tienen contra qué recortarse.
+
+   Nada de esto es decoración: es jerarquía. Con seis secciones iguales,
+   los ojos no saben dónde están.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.app-content { background-color: #f1f5f9; }
+
+/* ── Las secciones numeradas ── */
+
+.seccion { position: relative; overflow: hidden; }
+
+.seccion > .card-header {
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+    border-bottom: 1px solid var(--sys-line);
+    position: relative;
+}
+
+/* La línea de color de arriba, distinta por sección */
+.seccion > .card-header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--sys-info);
+}
+
+.seccion-cliente  > .card-header::before { background: #2563eb; }
+.seccion-datos    > .card-header::before { background: #7c3aed; }
+.seccion-direccion> .card-header::before { background: #0891b2; }
+.seccion-entrega  > .card-header::before { background: #d97706; }
+.seccion-lineas   > .card-header::before { background: #059669; }
+.seccion-notas    > .card-header::before { background: #64748b; }
+
+.seccion-titulo {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin: 0;
+    font-weight: 600;
+    color: var(--sys-ink);
+}
+
+.paso-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    font-size: .8rem;
+    font-weight: 700;
+    color: #fff;
+    background: var(--sys-info);
+    flex: 0 0 auto;
+}
+
+.seccion-cliente   .paso-num { background: #2563eb; }
+.seccion-datos     .paso-num { background: #7c3aed; }
+.seccion-direccion .paso-num { background: #0891b2; }
+.seccion-entrega   .paso-num { background: #d97706; }
+.seccion-lineas    .paso-num { background: #059669; }
+.seccion-notas     .paso-num { background: #64748b; }
+
+/* ── La tabla de conceptos ── */
+
+.tabla-lineas thead th {
+    background: #f1f5f9;
+    color: #475569;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    border-bottom: 2px solid var(--sys-line);
+}
+
+.tabla-lineas tbody tr:hover { background: #f8fafc; }
+
+/* ── La leyenda de obligatorios, con más presencia ── */
+
+.leyenda-obligatorio {
+    background: #fff;
+    border-color: rgba(220, 38, 38, .3);
+    color: #7f1d1d;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   13 · EL PANEL DE TOTALES
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ── POR QUÉ NO REUTILIZA .card ──
+
+   Porque la palabra "Totales" salía en blanco sobre blanco.
+
+   El encabezado tenía que ser oscuro, pero AdminLTE define .card-header
+   con exactamente el mismo peso que nuestra regla, y cuando dos reglas
+   pesan igual gana la que el navegador lee de último. Según qué archivo
+   cargue primero, ganaba una u otra: el texto quedaba blanco y el fondo
+   también.
+
+   Este panel no comparte ni un nombre de clase con Bootstrap. No hay
+   nada con qué pelearse, y no depende del orden de carga.
+
+   ── LA IDEA DEL DISEÑO ──
+
+   Es lo único de la pantalla que el usuario mira cada dos minutos
+   mientras carga líneas. Tiene que poder leerse de reojo, sin enfocar.
+
+   Por eso: cabecera oscura que lo separa del resto, desglose en gris
+   discreto, y el total en una banda verde ancha que se ve desde el otro
+   lado del escritorio.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.panel-totales {
+    background: #fff;
+    border: 1px solid var(--sys-line);
+    border-radius: var(--sys-radius);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, .1);
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+/* ── La cabecera oscura ── */
+
+.panel-totales .pt-cabecera {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+    padding: .7rem 1rem;
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.panel-totales .pt-cabecera i { font-size: 1rem; opacity: .85; }
+
+/* ── Los ajustes que se tocan ── */
+
+.panel-totales .pt-ajustes {
+    padding: .85rem 1rem;
+    background: #f8fafc;
+    border-bottom: 1px solid var(--sys-line);
+}
+
+.panel-totales .pt-ajustes .form-label { color: #475569; font-weight: 600; }
+
+/* ── El desglose ── */
+
+.panel-totales .pt-desglose { padding: .85rem 1rem .5rem; }
+
+.panel-totales .pt-fila {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding: .3rem 0;
+}
+
+.panel-totales .pt-etiqueta {
+    color: #475569;
+    font-size: .875rem;
+}
+
+.panel-totales .pt-valor {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--sys-ink);
+    white-space: nowrap;
+}
+
+/* El descuento resta: va en rojo para que se note que baja el total */
+.panel-totales .pt-resta .pt-etiqueta,
+.panel-totales .pt-resta .pt-valor { color: var(--sys-bad); }
+
+/*
+   Las dos bases, en su propio bloque hundido.
+
+   Cuentan la misma historia —de todo esto, tanto paga impuesto y tanto
+   no— y se leen mejor juntas que sueltas entre los demás renglones.
+*/
+.panel-totales .pt-bases {
+    background: #f8fafc;
+    border-left: 3px solid var(--sys-line);
+    border-radius: 0 .35rem .35rem 0;
+    padding: .35rem .6rem;
+    margin: .4rem 0;
+}
+
+.panel-totales .pt-menor .pt-etiqueta,
+.panel-totales .pt-menor .pt-valor {
+    font-size: .8rem;
+    color: var(--sys-mute);
+    font-weight: 500;
+}
+
+.panel-totales .pt-menor { padding: .15rem 0; }
+
+/* El porcentaje, como etiqueta pequeña al lado del concepto */
+.panel-totales .pt-chip {
+    display: inline-block;
+    background: var(--sys-mute-soft);
+    border: 1px solid var(--sys-line);
+    border-radius: 999px;
+    padding: 0 .4rem;
+    font-size: .68rem;
+    font-weight: 700;
+    color: var(--sys-mute);
+    margin-left: .25rem;
+    vertical-align: middle;
+}
+
+/* ── La banda del total ── */
+
+.panel-totales .pt-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    background: linear-gradient(135deg, #047857 0%, #059669 100%);
+    color: #fff;
+    padding: .85rem 1rem;
+}
+
+.panel-totales .pt-total-label {
+    font-size: .78rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    opacity: .9;
+}
+
+.panel-totales .pt-total-valor {
+    font-size: 1.75rem;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* El signo de dólar más chico: el número es lo que importa */
+.panel-totales .pt-moneda {
+    font-size: 1rem;
+    font-weight: 600;
+    opacity: .8;
+    margin-right: .1rem;
+    vertical-align: .35rem;
+}
+
+/* ── La nota de exención ── */
+
+.panel-totales .pt-nota {
+    display: flex;
+    gap: .5rem;
+    align-items: flex-start;
+    padding: .7rem 1rem;
+    background: var(--sys-info-soft);
+    border-top: 1px solid rgba(37, 99, 235, .2);
+    font-size: .78rem;
+    color: #1e40af;
+}
+
+.panel-totales .pt-nota i { flex: 0 0 auto; margin-top: .1rem; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   14 · EL BUSCADOR DE UNIDADES
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ── POR QUÉ NINGUNA CLASE DE BOOTSTRAP ──
+
+   Por lo mismo que el panel de totales (sección 13). Este buscador
+   usaba .card, .card-header y .list-group-item, y todo eso lo define
+   también AdminLTE con el mismo peso: quién gana depende de qué hoja
+   lea el navegador de último. Con nombres propios no hay empate que
+   resolver.
+
+   Se mantiene la decisión original de NO usar el modal de Bootstrap:
+   es HTML normal que aparece según una variable de Livewire, así que
+   no hay estado de JavaScript que se descuadre en un re-render.
+
+   ── LA IDEA ──
+
+   Elegir una unidad es comparar tres cosas: cuál es, si sirve para
+   exportar, y a cuánto sale. Esas tres tienen que leerse en la misma
+   línea sin tener que buscarlas.
+
+   El precio va grande y a la derecha, alineado en columna, porque el
+   ojo lo recorre de arriba abajo comparando. La renta va debajo, más
+   chica: casi siempre se mira una o la otra, no las dos.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.bu-fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 1080;
+    display: flex;
+    justify-content: center;
+    padding: 6vh 1rem 1rem;
+    background: rgba(15, 23, 42, .6);
+    backdrop-filter: blur(3px);
+    animation: bu-entrar-fondo .15s ease-out;
+}
+
+.bu-panel {
+    width: min(820px, 100%);
+    max-height: 84vh;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, .35);
+    animation: bu-entrar-panel .18s cubic-bezier(.16, 1, .3, 1);
+}
+
+@keyframes bu-entrar-fondo { from { opacity: 0; } }
+@keyframes bu-entrar-panel {
+    from { opacity: 0; transform: translateY(-12px) scale(.985); }
+}
+
+/* ── Cabecera oscura ── */
+
+.bu-cabecera {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .9rem 1.15rem;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+}
+
+.bu-cabecera .bu-icono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .13);
+    font-size: 1.05rem;
+    flex: 0 0 auto;
+}
+
+.bu-cabecera .bu-titulo {
+    margin: 0;
+    font-size: .95rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.bu-cabecera .bu-sub {
+    display: block;
+    font-size: .72rem;
+    font-weight: 400;
+    opacity: .7;
+    letter-spacing: .02em;
+}
+
+.bu-cerrar {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .1);
+    color: #fff;
+    font-size: .85rem;
+    transition: background .12s;
+}
+
+.bu-cerrar:hover { background: rgba(255, 255, 255, .22); }
+
+/* ── La caja de búsqueda ── */
+
+.bu-busqueda {
+    padding: .9rem 1.15rem;
+    border-bottom: 1px solid var(--sys-line);
+    background: #f8fafc;
+}
+
+.bu-campo {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.bu-campo > i {
+    position: absolute;
+    left: .85rem;
+    color: var(--sys-mute);
+    pointer-events: none;
+}
+
+.bu-campo input {
+    width: 100%;
+    padding: .6rem .9rem .6rem 2.4rem;
+    font-size: .9rem;
+    color: var(--sys-ink);
+    background: #fff;
+    border: 1px solid var(--sys-line);
+    border-radius: 9px;
+    outline: none;
+    transition: border-color .12s, box-shadow .12s;
+}
+
+.bu-campo input::placeholder { color: #94a3b8; }
+
+.bu-campo input:focus {
+    border-color: var(--sys-info);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+}
+
+.bu-ayuda {
+    margin: .55rem 0 0;
+    font-size: .74rem;
+    line-height: 1.45;
+    color: var(--sys-mute);
+}
+
+/* ── La lista de resultados ── */
+
+.bu-lista {
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+.bu-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    padding: .8rem 1.15rem;
+    text-align: left;
+    background: #fff;
+    border: 0;
+    border-bottom: 1px solid #f1f5f9;
+    border-left: 3px solid transparent;
+    transition: background .1s, border-left-color .1s;
+}
+
+.bu-item:hover:not(:disabled) {
+    background: #f8fafc;
+    border-left-color: var(--sys-info);
+}
+
+.bu-item:disabled {
+    background: #fafafa;
+    opacity: .55;
+    cursor: not-allowed;
+}
+
+.bu-item-datos { flex: 1 1 auto; min-width: 0; }
+
+.bu-item-id {
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--sys-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.bu-item-clase {
+    display: block;
+    font-size: .76rem;
+    color: var(--sys-mute);
+    margin-top: .1rem;
+}
+
+.bu-tag-export {
+    display: inline-block;
+    margin-left: .4rem;
+    padding: .1rem .45rem;
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: #065f46;
+    background: var(--sys-ok-soft);
+    border: 1px solid rgba(5, 150, 105, .3);
+    border-radius: 999px;
+    vertical-align: middle;
+}
+
+.bu-aviso-usada {
+    display: block;
+    margin-top: .25rem;
+    font-size: .72rem;
+    font-weight: 600;
+    color: #92400e;
+}
+
+.bu-item-precio {
+    text-align: right;
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+
+.bu-precio {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--sys-ink);
+    line-height: 1.15;
+}
+
+.bu-precio-no { font-size: .76rem; color: var(--sys-mute); }
+
+.bu-renta {
+    display: block;
+    font-size: .72rem;
+    color: var(--sys-mute);
+    margin-top: .1rem;
+}
+
+/* ── Sin resultados ── */
+
+.bu-vacio {
+    padding: 2.75rem 1.5rem;
+    text-align: center;
+    color: var(--sys-mute);
+    font-size: .86rem;
+}
+
+.bu-vacio i {
+    display: block;
+    font-size: 2rem;
+    color: #cbd5e1;
+    margin-bottom: .6rem;
+}
+
+/* ── Pie ── */
+
+.bu-pie {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .7rem 1.15rem;
+    background: #f8fafc;
+    border-top: 1px solid var(--sys-line);
+}
+
+.bu-conteo {
+    font-size: .76rem;
+    color: var(--sys-mute);
+}
+
+.bu-btn-cerrar {
+    padding: .35rem .9rem;
+    font-size: .82rem;
+    font-weight: 500;
+    color: var(--sys-ink);
+    background: #fff;
+    border: 1px solid var(--sys-line);
+    border-radius: 8px;
+    transition: background .12s;
+}
+
+.bu-btn-cerrar:hover { background: var(--sys-mute-soft); }
+
+@media (max-width: 575.98px) {
+    .bu-fondo { padding: 0; }
+    .bu-panel { max-height: 100vh; border-radius: 0; width: 100%; }
+    .bu-item { flex-direction: column; align-items: flex-start; gap: .35rem; }
+    .bu-item-precio { text-align: left; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   15 · LA ZONA DE CONCEPTOS
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ── EL PROBLEMA QUE RESUELVE ──
+
+   Con cuatro renglones y dos filas de entrega intercaladas, la tabla se
+   volvía una pared de cajas blancas del mismo tamaño. No había forma de
+   ver de un vistazo dónde empieza una línea y dónde termina, ni cuáles
+   van juntas en un grupo.
+
+   El dato estaba bien; lo que faltaba era el contorno.
+
+   ── LAS TRES SEÑALES ──
+
+     1 · BLOQUE       Cada línea y su fila de entrega o de renta son UNA
+                      unidad, con separación gruesa entre bloques y
+                      ninguna por dentro. Lo que va junto, se ve junto.
+
+     2 · GRUPO        Los renglones del mismo grupo comparten una franja
+                      de color a la izquierda, del mismo color, y llevan
+                      la letra arriba. Se lee sin buscar en la columna
+                      GRUPO del extremo derecho.
+
+     3 · NÚMERO       Cada bloque lleva su número. Los mensajes de error
+                      dicen "línea 3": tiene que haber un 3 visible.
+
+   Seis colores de grupo. Es más de lo que nadie va a usar en un
+   presupuesto y ninguno se parece al de al lado.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.tabla-lineas { border-collapse: separate; border-spacing: 0; }
+
+/* ── El bloque: una línea y sus filas hijas ── */
+
+.tabla-lineas tr.ln-cabeza > td {
+    border-top: 8px solid #eef2f7;
+    padding-top: .7rem;
+    background: #fff;
+}
+
+.tabla-lineas tr.ln-cabeza:first-child > td { border-top: 0; }
+
+.tabla-lineas tr.ln-hija > td {
+    border-top: 0;
+    padding-top: 0;
+    padding-bottom: .8rem;
+    background: #fff;
+}
+
+/* La línea que NO tiene fila hija cierra ella misma el bloque */
+.tabla-lineas tr.ln-sola > td { padding-bottom: .8rem; }
+
+.tabla-lineas tr.ln-cabeza:hover > td,
+.tabla-lineas tr.ln-cabeza:hover + tr.ln-hija > td { background: #fbfdff; }
+
+/* ── El número del renglón ── */
+
+.ln-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: .72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── La franja de grupo ── */
+
+.tabla-lineas tr.ln-cabeza > td:first-child,
+.tabla-lineas tr.ln-hija   > td:first-child {
+    border-left: 4px solid transparent;
+}
+
+.ln-g1 > td:first-child { border-left-color: #2563eb !important; }
+.ln-g2 > td:first-child { border-left-color: #059669 !important; }
+.ln-g3 > td:first-child { border-left-color: #d97706 !important; }
+.ln-g4 > td:first-child { border-left-color: #7c3aed !important; }
+.ln-g5 > td:first-child { border-left-color: #db2777 !important; }
+.ln-g6 > td:first-child { border-left-color: #0891b2 !important; }
+
+/* El fondo tenue del grupo, para que se lea como una zona y no como
+   una rayita suelta */
+.ln-g1 > td { background: #f5f9ff !important; }
+.ln-g2 > td { background: #f3fbf7 !important; }
+.ln-g3 > td { background: #fffaf2 !important; }
+.ln-g4 > td { background: #faf7ff !important; }
+.ln-g5 > td { background: #fff5fa !important; }
+.ln-g6 > td { background: #f3fbfd !important; }
+
+/* ── La pastilla con la letra del grupo ── */
+
+.ln-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .05rem .4rem;
+    border-radius: 5px;
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: #fff;
+    cursor: pointer;
+    border: 0;
+}
+
+.ln-g1 .ln-tag { background: #2563eb; }
+.ln-g2 .ln-tag { background: #059669; }
+.ln-g3 .ln-tag { background: #d97706; }
+.ln-g4 .ln-tag { background: #7c3aed; }
+.ln-g5 .ln-tag { background: #db2777; }
+.ln-g6 .ln-tag { background: #0891b2; }
+
+.ln-tag:hover { filter: brightness(1.12); }
+
+.ln-sin-grupo {
+    font-size: .72rem;
+    color: #cbd5e1;
+}
+
+/* ── La fila hija: entrega o renta ── */
+
+.ln-hija .ln-etiqueta {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .2rem .5rem;
+    border-radius: 6px;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+
+.ln-etiqueta-entrega { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.ln-etiqueta-renta   { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+
+.ln-campos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: .75rem;
+    padding: .55rem .75rem;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .75);
+    border: 1px dashed #dbe3ec;
+}
+
+.ln-campo { flex: 0 0 145px; }
+
+.ln-campo label {
+    display: block;
+    margin-bottom: .15rem;
+    font-size: .7rem;
+    font-weight: 600;
+    color: var(--sys-mute);
+}
+
+.ln-nota {
+    flex: 1 1 190px;
+    font-size: .72rem;
+    line-height: 1.35;
+    color: var(--sys-mute);
+    padding-bottom: .3rem;
+}
+
+/* ── La unidad asignada ── */
+
+.ln-unidad {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .4rem;
+    margin-top: .3rem;
+    padding: .25rem .5rem;
+    border-radius: 6px;
+    background: #f8fafc;
+    border: 1px solid var(--sys-line);
+    font-size: .76rem;
+}
+
+.ln-unidad .ln-unidad-id {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── El importe, que es lo que se compara de arriba abajo ── */
+
+.ln-importe {
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--sys-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 991.98px) {
+    .ln-campo { flex: 1 1 130px; }
+    .ln-nota  { flex: 1 1 100%; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   16 · CONCEPTOS COMO TARJETAS
+   ═══════════════════════════════════════════════════════════════════════════
+
+   La tabla editable se fue. Enseñaba las mismas ocho columnas a todos
+   los conceptos: "Cant." en una renta de contenedor, donde un renglón
+   ES un contenedor y el número siempre era 1, y en cambio ningún sitio
+   donde contar qué se le hizo a un contenedor en una modificación.
+
+   Ahora cada renglón se LEE aquí y se EDITA en un modal que enseña solo
+   lo que ese concepto necesita. Leer y escribir son dos momentos
+   distintos y tenían necesidades opuestas: leer quiere el resumen
+   corto; escribir quiere espacio.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.cn-lista { display: flex; flex-direction: column; gap: .5rem; }
+
+.cn-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 34px 1fr auto;
+    gap: .85rem;
+    align-items: start;
+    padding: .7rem .85rem .7rem .7rem;
+    background: #fff;
+    border: 1px solid var(--sys-line);
+    border-left: 4px solid #e2e8f0;
+    border-radius: 10px;
+    transition: border-color .12s, box-shadow .12s;
+}
+
+.cn-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .07);
+}
+
+.cn-card.cn-vacia { border-style: dashed; background: #fcfdfe; }
+
+/* ── Columna 1: casilla y número ── */
+
+.cn-izq { display: flex; flex-direction: column; align-items: center; gap: .35rem; }
+
+.cn-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: .72rem; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Columna 2: el contenido ── */
+
+.cn-titulo {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .4rem;
+    margin-bottom: .2rem;
+}
+
+.cn-concepto {
+    padding: .1rem .45rem;
+    border-radius: 5px;
+    background: #eef2f7;
+    color: #475569;
+    font-size: .68rem; font-weight: 700;
+    letter-spacing: .02em; text-transform: uppercase;
+}
+
+.cn-desc {
+    font-size: .88rem; font-weight: 600; color: var(--sys-ink);
+    line-height: 1.3;
+}
+
+/* Los datos propios del concepto: unidad, plazo, millas, ZIP… */
+.cn-datos {
+    display: flex; flex-wrap: wrap; gap: .3rem .5rem;
+    margin-top: .3rem;
+}
+
+.cn-dato {
+    display: inline-flex; align-items: center; gap: .25rem;
+    padding: .12rem .45rem;
+    border-radius: 5px;
+    background: #f8fafc;
+    border: 1px solid #eef2f7;
+    font-size: .73rem; color: #475569;
+    font-variant-numeric: tabular-nums;
+}
+
+.cn-dato i { color: #94a3b8; font-size: .78rem; }
+
+.cn-trabajo {
+    margin-top: .35rem;
+    padding: .4rem .55rem;
+    border-left: 2px solid #e2e8f0;
+    background: #fbfcfd;
+    font-size: .76rem; line-height: 1.45; color: #475569;
+    white-space: pre-line;
+}
+
+/* ── Columna 3: importe y botones ── */
+
+.cn-der { display: flex; align-items: center; gap: .6rem; }
+
+.cn-importe {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.cn-importe b { display: block; font-size: 1rem; color: var(--sys-ink); }
+
+.cn-importe small { font-size: .68rem; color: var(--sys-mute); }
+
+.cn-tax {
+    display: inline-block;
+    padding: .05rem .35rem;
+    border-radius: 4px;
+    font-size: .63rem; font-weight: 700; letter-spacing: .03em;
+}
+
+.cn-tax-si { background: var(--sys-ok-soft); color: #065f46; }
+.cn-tax-no { background: #f1f5f9;            color: #94a3b8; }
+
+.cn-acciones { display: flex; flex-direction: column; gap: .25rem; }
+
+.cn-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px;
+    border: 1px solid var(--sys-line);
+    border-radius: 7px;
+    background: #fff;
+    color: #64748b;
+    font-size: .8rem;
+    transition: background .12s, color .12s, border-color .12s;
+}
+
+.cn-btn:hover { background: #f1f5f9; color: var(--sys-ink); }
+.cn-btn-borrar:hover { background: var(--sys-bad-soft); color: #b91c1c; border-color: #fecaca; }
+
+/* ── Grupos ── */
+
+.cn-g1 { border-left-color: #2563eb; } .cn-g1 .cn-grupo { background: #2563eb; }
+.cn-g2 { border-left-color: #059669; } .cn-g2 .cn-grupo { background: #059669; }
+.cn-g3 { border-left-color: #d97706; } .cn-g3 .cn-grupo { background: #d97706; }
+.cn-g4 { border-left-color: #7c3aed; } .cn-g4 .cn-grupo { background: #7c3aed; }
+.cn-g5 { border-left-color: #db2777; } .cn-g5 .cn-grupo { background: #db2777; }
+.cn-g6 { border-left-color: #0891b2; } .cn-g6 .cn-grupo { background: #0891b2; }
+
+.cn-g1 { background: #f7faff; } .cn-g2 { background: #f5fbf8; }
+.cn-g3 { background: #fffbf5; } .cn-g4 { background: #fbf9ff; }
+.cn-g5 { background: #fff7fb; } .cn-g6 { background: #f5fbfd; }
+
+.cn-grupo {
+    display: inline-flex; align-items: center; gap: .2rem;
+    padding: .05rem .4rem;
+    border: 0; border-radius: 5px;
+    color: #fff;
+    font-size: .66rem; font-weight: 700; letter-spacing: .04em;
+}
+
+.cn-grupo:hover { filter: brightness(1.12); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   17 · EL MODAL DEL RENGLÓN
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.rn-fondo {
+    position: fixed; inset: 0; z-index: 1070;
+    display: flex; justify-content: center;
+    padding: 5vh 1rem 1rem;
+    background: rgba(15, 23, 42, .6);
+    backdrop-filter: blur(3px);
+    animation: bu-entrar-fondo .15s ease-out;
+    overflow-y: auto;
+}
+
+.rn-panel {
+    width: min(720px, 100%);
+    align-self: flex-start;
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, .35);
+    animation: bu-entrar-panel .18s cubic-bezier(.16, 1, .3, 1);
+}
+
+.rn-cabecera {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .9rem 1.15rem;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+}
+
+.rn-cabecera h6 { margin: 0; font-size: .95rem; font-weight: 700; }
+.rn-cabecera .rn-sub { display: block; font-size: .72rem; font-weight: 400; opacity: .7; }
+
+.rn-cuerpo { padding: 1.1rem 1.15rem; }
+
+/* La rejilla: campos que ocupan lo que necesitan y ni un pixel más.
+   Un plazo en meses es un número de dos dígitos, no media pantalla. */
+.rn-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: .8rem;
+}
+
+.rn-c2  { grid-column: span 2;  }
+.rn-c3  { grid-column: span 3;  }
+.rn-c4  { grid-column: span 4;  }
+.rn-c5  { grid-column: span 5;  }
+.rn-c6  { grid-column: span 6;  }
+.rn-c8  { grid-column: span 8;  }
+.rn-c12 { grid-column: span 12; }
+
+.rn-grid label {
+    display: block;
+    margin-bottom: .2rem;
+    font-size: .74rem; font-weight: 600; color: #475569;
+}
+
+.rn-grid label .rn-req { color: var(--sys-bad); }
+
+.rn-ayuda { margin-top: .2rem; font-size: .71rem; color: var(--sys-mute); line-height: 1.35; }
+
+/* El bloque del concepto: separa lo común de lo particular */
+.rn-bloque {
+    grid-column: span 12;
+    margin-top: .2rem;
+    padding: .8rem;
+    border-radius: 10px;
+    background: #f8fafc;
+    border: 1px solid #eef2f7;
+}
+
+.rn-bloque-tit {
+    display: flex; align-items: center; gap: .4rem;
+    margin-bottom: .65rem;
+    font-size: .72rem; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; color: #64748b;
+}
+
+.rn-bloque .rn-grid { gap: .7rem; }
+
+/* La unidad elegida */
+.rn-unidad {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: .5rem;
+    padding: .5rem .65rem;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid var(--sys-line);
+}
+
+.rn-unidad-id { font-size: .86rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rn-unidad-sub { display: block; font-size: .72rem; font-weight: 400; color: var(--sys-mute); }
+
+/* El total, grande y al pie */
+.rn-total {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: .9rem;
+    padding: .7rem .9rem;
+    border-radius: 10px;
+    background: #0f172a;
+    color: #fff;
+}
+
+.rn-total span { font-size: .78rem; opacity: .75; }
+.rn-total b { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+
+.rn-pie {
+    display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+    padding: .8rem 1.15rem;
+    background: #f8fafc;
+    border-top: 1px solid var(--sys-line);
+}
+
+@media (max-width: 767.98px) {
+    .rn-c2, .rn-c3, .rn-c4, .rn-c5 { grid-column: span 6; }
+    .rn-c6, .rn-c8 { grid-column: span 12; }
+    .rn-fondo { padding: 0; }
+    .rn-panel { border-radius: 0; min-height: 100vh; }
+    .cn-card { grid-template-columns: 30px 1fr; }
+    .cn-der { grid-column: 2; justify-content: space-between; margin-top: .4rem; }
+}
+
+/* El buscador de unidades se abre DESDE el modal del renglón, así que
+   tiene que quedar por encima de él. 1070 es el modal; 1090, esto. */
+.bu-sobre-modal { z-index: 1090; }

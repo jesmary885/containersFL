@@ -22,6 +22,8 @@ class EstimateItem extends Model
             'unit_price' => 'decimal:2',
             'amount'     => 'decimal:2',
             'taxable'    => 'boolean',
+            'miles'         => 'decimal:2',
+            'rate_per_mile' => 'decimal:2',
         ];
     }
 

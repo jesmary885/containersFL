@@ -68,9 +68,19 @@ class Show extends Component
      * envío real lo hará el módulo de notificaciones, y cuando exista
      * llamará a este mismo método.
      */
+    /**
+     * El envío de verdad, ya con el documento revisado.
+     *
+     * Acepta tanto Draft (guardado suelto, sin pasar por Procesar) como
+     * Processed. markAsSent() del modelo no discrimina, así que basta con
+     * no bloquearlo acá.
+     */
     public function marcarEnviado(): void
     {
-        if ($this->estimate->status !== EstimateStatus::Draft) {
+        // Antes solo dejaba pasar Draft. Con el paso de revisión, el
+        // camino normal llega acá como Processed y quedaba bloqueado
+        // en silencio: el botón no hacía nada.
+        if (! in_array($this->estimate->status, [EstimateStatus::Draft, EstimateStatus::Processed], true)) {
             return;
         }
 
@@ -172,6 +182,19 @@ class Show extends Component
             session()->flash('exito',
                 'Se emitió la factura '.$factura->invoice_number.' a partir de este presupuesto. '
                 .'Quedó en borrador: revísela antes de enviarla al cliente.');
+
+            /* -------------------------------------------------------------
+             | Llevar al usuario a la factura recién creada.
+             |
+             | Antes se quedaba en el presupuesto con un mensaje verde. Si
+             | el mensaje pasaba desapercibido —y pasa— la sensación era
+             | que el botón no había hecho nada.
+             |
+             | Y como el listado de facturas abre filtrado por "con saldo",
+             | ir a buscarla ahí tampoco era evidente. Mejor no obligar a
+             | buscarla: mostrarla.
+             * ---------------------------------------------------------- */
+            return redirect()->route('finanzas.facturacion.show', $factura);
 
         } catch (\Throwable $e) {
             $this->confirmando = null;

@@ -61,6 +61,14 @@ class SettingSeeder extends Seeder
 
             ['rentals', 'late_fee_amount', 100.00, 'decimal',
              'Mora por contrato ($)'],
+            // RB-024: $100 fijos por contrato, sin importar los dias
+            // de atraso.
+
+            ['rentals', 'default_months', 1, 'int',
+             'Plazo de renta por defecto (meses)'],
+            // Con lo que nace una linea de renta en el presupuesto.
+            // Editable renglon por renglon: un presupuesto puede llevar
+            // un contenedor a 6 meses y otro a 12.
             // RB-024: $100 fijos por contrato, sin importar los días
             // de atraso.
 

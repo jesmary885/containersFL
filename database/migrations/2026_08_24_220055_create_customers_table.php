@@ -35,6 +35,7 @@ return new class extends Migration
             $table->foreignId('related_company_id')->nullable()->constrained('companies')->nullOnDelete();
             $table->text('notes')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->string('preferred_locale', 5)->default('en');
             $table->timestamps();
             $table->softDeletes();
 
