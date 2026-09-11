@@ -28,6 +28,7 @@ return [
     'back'            => 'Volver',
     'back_to_list'    => 'Volver al listado',
     'change'          => 'Cambiar',
+    'missing'         => 'Falta',
     'remove'          => 'Quitar',
     'undo'            => 'Deshacer',
     'add'             => 'Agregar',

@@ -28,6 +28,7 @@ return [
     'back'            => 'Back',
     'back_to_list'    => 'Back to list',
     'change'          => 'Change',
+    'missing'         => 'Missing',
     'remove'          => 'Remove',
     'undo'            => 'Undo',
     'add'             => 'Add',

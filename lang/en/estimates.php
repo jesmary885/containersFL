@@ -164,6 +164,38 @@ return [
      | UNIT PICKER
      * ------------------------------------------------------------ */
     'unit_picker_title'  => 'Choose a unit for line :line',
+    /* ── The steps ── */
+    'step_who'           => 'Who and when',
+    'step_what'          => 'What it includes',
+    'step_review'        => 'Review and send',
+    'step_review_locked' => 'Opens once you hit Process.',
+    'step_review_go'     => 'Go to the document. No need to process again.',
+    'step_next'          => 'Next',
+    'step_back'          => 'Previous step',
+    'step_1_of'          => 'Step 1 of :total',
+    'lines_count'        => '{0}No line items yet|{1}1 line item|[2,*]:count line items',
+
+    'the_customer'       => 'Customer',
+    'use_short'          => 'Use',
+    'issue_short'        => 'Issued',
+    'valid_short'        => 'Valid until',
+    'bill_short'         => 'Bill to',
+    'ship_short'         => 'Ship to',
+
+    /* ── Workflow ── */
+    'process'            => 'Process',
+    'process_hint'       => 'Builds the document and shows it to you. Nothing is sent yet.',
+    'review_title'       => 'Review before sending',
+    'review_text'        => 'This is how the customer will see it. If something is off, go back and edit. When it looks right, send it.',
+    'send_now'           => 'Save and email',
+    'back_to_edit'       => 'Keep editing',
+    'locked_until_sent'  => 'Available once the estimate is sent.',
+
+    /* ── Auto-written line text ── */
+    'auto_rental'        => 'Monthly rental · :unit',
+    'auto_sale'          => 'Container sale · :unit',
+    'auto_repair'        => 'Container modification · :unit',
+
     /* ── The line editor ── */
     'line_new'           => 'New line',
     'line_edit'          => 'Line :n',
@@ -196,6 +228,11 @@ return [
     'pays_tax_long'      => 'This line pays sales tax',
     'no_tax_long'        => 'This line does not pay sales tax',
 
+    'each_month'         => 'Each month',
+    'the_term'           => 'Term',
+    'invoices_count'     => 'monthly invoices',
+    'commitment'         => 'Total commitment',
+    'commitment_note'    => 'for reference · billed monthly',
     'rental_row'         => 'Term',
     'rental_months'      => 'Rental months',
     'rental_row_help'    => 'The amount is the monthly rate. Rentals are billed month by month, not upfront.',

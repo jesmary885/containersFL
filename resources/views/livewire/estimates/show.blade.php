@@ -32,6 +32,36 @@
         </div>
     @endif
 
+    {{--
+        LA BARRA DE PASOS, TAMBIÉN ACÁ
+
+        Esta pantalla ES el paso 3. Sin la barra, darle a Procesar se
+        siente como haber salido del formulario y aterrizado en otro
+        sitio; con ella se lee como lo que es: la última etapa de lo
+        mismo.
+
+        Solo mientras esté por revisar. Una vez enviado, el presupuesto
+        ya no es un formulario a medias y la barra estorbaría.
+    --}}
+    @if ($estimate->status->isPendingReview())
+        <div class="ps-barra no-imprimir">
+            <a href="{{ route('comercial.presupuestos.edit', $estimate) }}" class="ps-paso ps-hecho">
+                <span class="ps-bolita">✓</span>
+                <span class="ps-texto">{{ __('estimates.step_who') }}</span>
+            </a>
+            <span class="ps-sep"></span>
+            <a href="{{ route('comercial.presupuestos.edit', $estimate) }}" class="ps-paso ps-hecho">
+                <span class="ps-bolita">✓</span>
+                <span class="ps-texto">{{ __('estimates.step_what') }}</span>
+            </a>
+            <span class="ps-sep"></span>
+            <span class="ps-paso ps-activo">
+                <span class="ps-bolita">3</span>
+                <span class="ps-texto">{{ __('estimates.step_review') }}</span>
+            </span>
+        </div>
+    @endif
+
     @if ($estimate->status->isPendingReview())
         <div class="alert alert-primary d-flex align-items-start gap-2 no-imprimir">
             <i class="bi bi-eye fs-5"></i>
@@ -172,14 +202,21 @@
                     </button>
                 @endif
 
-                @if ($estimate->status === \App\Enums\EstimateStatus::Sent)
-                    <button class="btn btn-success" wire:click="marcarAceptado">
-                        <i class="bi bi-check-lg me-1"></i> El cliente aceptó
-                    </button>
-                    <button class="btn btn-outline-danger" wire:click="confirmar('rechazar')">
-                        <i class="bi bi-x-lg me-1"></i> Rechazó
-                    </button>
-                @endif
+                {{--
+                    "El cliente aceptó" y "Rechazó" NO van acá.
+
+                    La respuesta del cliente no se conoce en el mismo
+                    segundo en que se manda el correo: llega días
+                    después, por teléfono. Un botón que dice "el cliente
+                    aceptó" al lado de un documento que se acaba de
+                    enviar invita a pulsarlo por inercia, y entonces el
+                    estado del presupuesto deja de significar nada.
+
+                    Se registra desde el LISTADO, que es donde se está
+                    cuando el cliente llama. Los métodos marcarAceptado()
+                    y marcarRechazado() del componente siguen ahí para
+                    cuando se enganchen desde allá.
+                --}}
 
                 @if ($estimate->status->canConvert())
                     <button class="btn btn-warning" wire:click="confirmar('convertir')">
@@ -352,16 +389,44 @@
                                          style="white-space: pre-line; padding-left: .75rem; border-left: 2px solid #e2e8f0;">{{ $renglon->work_details }}</div>
                                 @endif
 
+                                {{--
+                                    EL PLAZO Y EL TAX DE LA RENTA
+
+                                    Se imprime el mes CON su tax porque es
+                                    lo que va a decir cada factura. El tax
+                                    de una renta se cobra por factura
+                                    mensual, no una vez al firmar: en el
+                                    Excel que lleva la empresa, una renta de
+                                    $150 a 4 meses tiene la columna TAX en
+                                    $10.50, que es el 7% de UN mes.
+
+                                    El compromiso del plazo va debajo y en
+                                    gris. Es informativo: no es lo que se
+                                    cobra hoy ni lo que suma este
+                                    presupuesto.
+                                --}}
                                 @if ($renglon->rental_months)
+                                    @php
+                                        $tasaR = $estimate->tax_exempt ? 0 : (float) $estimate->tax_rate;
+                                        $taxR  = $renglon->rental_taxable ? round($renglon->monthly_rate * $tasaR / 100, 2) : 0.0;
+                                    @endphp
+
                                     <div class="small">
                                         <i class="bi bi-calendar-range me-1"></i>
-                                        Plazo: {{ trans_choice('estimates.months_short', $renglon->rental_months, ['count' => $renglon->rental_months]) }}
-                                        · ${{ number_format($renglon->monthly_rate, 2) }}/mes
+                                        ${{ number_format($renglon->monthly_rate + $taxR, 2) }}/mes
+                                        @if ($taxR > 0)
+                                            <span class="text-secondary">
+                                                (${{ number_format($renglon->monthly_rate, 2) }}
+                                                + ${{ number_format($taxR, 2) }} tax)
+                                            </span>
+                                        @endif
+                                        ·
+                                        {{ trans_choice('estimates.months_short', $renglon->rental_months, ['count' => $renglon->rental_months]) }}
                                     </div>
                                     <div class="small text-secondary">
-                                        Compromiso total del plazo:
-                                        ${{ number_format($renglon->monthly_rate * $renglon->rental_months, 2) }}
-                                        · se factura mes a mes
+                                        Compromiso del plazo:
+                                        ${{ number_format(($renglon->monthly_rate + $taxR) * $renglon->rental_months, 2) }}
+                                        — se factura mes a mes, una factura por mes.
                                     </div>
                                 @endif
 

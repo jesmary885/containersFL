@@ -75,19 +75,34 @@ class Show extends Component
      * Processed. markAsSent() del modelo no discrimina, así que basta con
      * no bloquearlo acá.
      */
-    public function marcarEnviado(): void
+    public function marcarEnviado()
     {
         // Antes solo dejaba pasar Draft. Con el paso de revisión, el
         // camino normal llega acá como Processed y quedaba bloqueado
         // en silencio: el botón no hacía nada.
         if (! in_array($this->estimate->status, [EstimateStatus::Draft, EstimateStatus::Processed], true)) {
-            return;
+            return null;
         }
 
         $this->estimate->markAsSent();
-        $this->estimate->refresh();
 
-        session()->flash('exito', 'Presupuesto marcado como enviado.');
+        session()->flash('exito',
+            'Presupuesto '.$this->estimate->estimate_number.' enviado.');
+
+        /* -----------------------------------------------------------------
+         | AL ENVIAR, AL LISTADO
+         |
+         | Enviar cierra la tarea. Dejar al usuario mirando el mismo
+         | documento que acaba de mandar le da una pantalla sin nada que
+         | hacer, y lo que quiere ver a continuación es el listado con el
+         | presupuesto nuevo dentro.
+         *
+         | Los botones de respuesta del cliente se fueron de esta
+         | pantalla por lo mismo: si el cliente acepta o rechaza no se
+         | sabe en el mismo segundo del envío. Eso se registra días
+         | después, desde el listado, cuando llama.
+         * ---------------------------------------------------------- */
+        return $this->redirect(route('comercial.presupuestos.index'), navigate: true);
     }
 
     /** El cliente dijo que sí. */

@@ -187,6 +187,12 @@ class Product extends Model
      * sesion.
      * ══════════════════════════════════════════════════════════════════
      */
+    /** ¿Es la renta de yarda, la que se cobra por dia? */
+    public function isYardRental(): bool
+    {
+        return $this->code === 'YARD-RENT';
+    }
+
     public function autoDescription(?Container $contenedor = null): string
     {
         $unidad = $contenedor?->lineDescription();

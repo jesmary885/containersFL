@@ -243,6 +243,63 @@ class Form extends Component
      | EL BUSCADOR DE UNIDADES
      * ================================================================== */
 
+    /* =====================================================================
+     | LOS PASOS (diseño C)
+     |
+     | ── POR QUÉ ──
+     |
+     | Todo a la vez eran cinco secciones, unos treinta campos y el panel
+     | de totales en la misma pantalla. Cabía, pero nadie sabía por dónde
+     | empezar y la mitad de los campos no aplicaban todavía.
+     |
+     | Son dos pasos acá y uno en la ficha:
+     |
+     |   1 · QUIÉN Y CUÁNDO   cliente, uso, fechas, términos, direcciones
+     |   2 · QUÉ LLEVA        conceptos, grupos, notas, totales
+     |   3 · REVISAR          ya no es este formulario: es la ficha, con
+     |                        el documento armado (estado Processed)
+     |
+     | El paso 3 no está acá a propósito. Revisar es leer el documento
+     | como lo va a ver el cliente, y eso ya existe: es show.blade.php.
+     | Duplicarlo dentro del formulario habría sido mantener dos veces la
+     | misma plantilla, y ahí es donde se desincronizan.
+     |
+     | ── EL ESTADO NO SE PIERDE ──
+     |
+     | Los pasos son un cambio de PANTALLA, no de datos: todas las
+     | propiedades siguen cargadas en el componente. Ir y volver no borra
+     | nada, y "Guardar borrador" funciona desde cualquiera de los dos.
+     * ================================================================== */
+
+    public int $paso = 1;
+
+    public const PASOS = 2;
+
+    /**
+     * ¿Se puede saltar directo al paso 3 (la ficha)?
+     *
+     * Solo si el presupuesto ya existe y ya pasó por Procesar. En ese
+     * caso volver a "Qué lleva" a mirar algo y querer regresar no
+     * debería obligar a procesar otra vez: no se cambió nada.
+     *
+     * Si es nuevo, o si sigue en borrador, el paso 3 todavía no existe:
+     * no hay documento que revisar.
+     */
+    public function getPuedeIrARevisarProperty(): bool
+    {
+        if (! $this->estimateId) {
+            return false;
+        }
+
+        return Estimate::whereKey($this->estimateId)
+            ->whereIn('status', [
+                EstimateStatus::Processed->value,
+                EstimateStatus::Sent->value,
+                EstimateStatus::Accepted->value,
+            ])
+            ->exists();
+    }
+
     public ?int $lineaBuscandoContenedor = null;
 
     /* =====================================================================
@@ -381,7 +438,17 @@ class Form extends Component
         $this->notes        = $estimate->notes;
         $this->footer_terms = $estimate->footer_terms;
 
-         $this->lineas = $estimate->items->map(fn ($linea) => [
+         /*
+         | Al abrir uno ya guardado se entra por el paso 2.
+         |
+         | Editar un presupuesto existente casi nunca es cambiar el
+         | cliente: es tocar un precio, agregar un concepto, corregir las
+         | millas. Obligar a pasar por el paso 1 sería un clic de peaje
+         | en cada corrección.
+         */
+        $this->paso = 2;
+
+        $this->lineas = $estimate->items->map(fn ($linea) => [
             'id'           => $linea->id,
             'product_id'   => $linea->product_id,
             'container_id' => $linea->container_id,
@@ -1513,6 +1580,183 @@ class Form extends Component
      | VALIDACIÓN
      * ================================================================== */
 
+
+
+    /**
+     * ¿Este renglón está vacío?
+     *
+     * Vacío es sin concepto Y sin descripción Y sin precio. Basta con
+     * que tenga una de las tres para que cuente como intento de escribir
+     * algo, y entonces sí hay que validarlo.
+     */
+    protected function lineaEstaVacia(array $linea): bool
+    {
+        return blank($linea['product_id'] ?? null)
+            && blank($linea['description'] ?? null)
+            && (float) ($linea['unit_price'] ?? 0) === 0.0
+            && blank($linea['container_id'] ?? null);
+    }
+
+    /**
+     * Descarta los renglones en blanco antes de validar.
+     *
+     * ══════════════════════════════════════════════════════════════════
+     * POR QUÉ
+     * ══════════════════════════════════════════════════════════════════
+     *
+     * El formulario nace con un renglón en blanco esperando. Si el
+     * usuario le da a "Agregar línea" y trabaja en el nuevo, el primero
+     * se queda vacío — y Procesar moría pidiendo la descripción de un
+     * renglón que nadie quiso escribir.
+     *
+     * El sistema fue el que puso ese renglón ahí. No tiene sentido que
+     * después exija que se llene.
+     *
+     * Se descartan solo si queda al menos uno con contenido: un
+     * presupuesto sin ningún concepto sí es un error, y ahí el mensaje
+     * de "agrega al menos un concepto" es el correcto.
+     * ══════════════════════════════════════════════════════════════════
+     */
+    protected function descartarLineasVacias(): void
+    {
+        $conContenido = collect($this->lineas)
+            ->reject(fn (array $l) => $this->lineaEstaVacia($l));
+
+        if ($conContenido->isEmpty()) {
+            return;
+        }
+
+        if ($conContenido->count() === count($this->lineas)) {
+            return;
+        }
+
+        // Los grupos se reindexan solos: 'grupo' viaja dentro de cada
+        // renglón, así que reordenar el array no los rompe.
+        $this->lineas = $conContenido->values()->all();
+
+        $this->seleccionadas = [];
+
+        $this->limpiarGruposHuerfanos();
+    }
+
+    /* =====================================================================
+     | NAVEGACIÓN ENTRE PASOS
+     * ================================================================== */
+
+    /**
+     * Los campos que se validan en cada paso.
+     *
+     * Sale de rules() y se queda con las claves que pertenecen a este
+     * paso. Se escribe una sola vez y no dos: si mañana se agrega una
+     * regla, entra sola en el paso que le toca.
+     */
+    protected function reglasDelPaso(int $paso): array
+    {
+        $todas = $this->rules();
+
+        $delUno = [
+            'customer_id', 'use_type', 'issue_date', 'valid_until', 'terms',
+            'termsSeleccion', 'termsOtro', 'expected_payment_method',
+            'salesperson_id',
+        ];
+
+        return collect($todas)
+            ->filter(function ($reglas, $campo) use ($paso, $delUno) {
+                $esDelUno = in_array($campo, $delUno, true)
+                    || str_starts_with($campo, 'bill_to.')
+                    || str_starts_with($campo, 'ship_to.');
+
+                return $paso === 1 ? $esDelUno : ! $esDelUno;
+            })
+            ->all();
+    }
+
+    /**
+     * Avanza al paso siguiente, validando lo del actual.
+     *
+     * Validar por paso y no todo de golpe es la mitad del sentido de
+     * esto: en la pantalla anterior se pintaban en rojo campos de la
+     * sección de abajo, que el usuario ni había visto todavía.
+     */
+    public function siguientePaso(): void
+    {
+        $this->armarTerminos();
+        $this->descartarLineasVacias();
+
+        $this->validate($this->reglasDelPaso($this->paso), $this->messages(), $this->validationAttributes());
+
+        $this->paso = min($this->paso + 1, self::PASOS);
+
+        $this->dispatch('subir-al-inicio');
+    }
+
+    public function pasoAnterior(): void
+    {
+        $this->paso = max($this->paso - 1, 1);
+
+        $this->resetValidation();
+
+        $this->dispatch('subir-al-inicio');
+    }
+
+    /**
+     * Salta a un paso desde la barra de arriba.
+     *
+     * Hacia atrás es libre. Hacia adelante valida lo que queda en medio,
+     * porque el paso 2 sin cliente ni direcciones no significa nada.
+     */
+    public function irAlPaso(int $destino): void
+    {
+        $destino = max(1, min($destino, self::PASOS));
+
+        if ($destino <= $this->paso) {
+            $this->paso = $destino;
+            $this->resetValidation();
+            $this->dispatch('subir-al-inicio');
+
+            return;
+        }
+
+        while ($this->paso < $destino) {
+            $antes = $this->paso;
+
+            $this->siguientePaso();
+
+            // La validación no dejó pasar. Se queda donde está y con los
+            // errores en pantalla.
+            if ($this->paso === $antes) {
+                return;
+            }
+        }
+    }
+
+    /**
+     * ¿Qué se decidió en el paso 1?
+     *
+     * Es la tira de contexto que se queda arriba en el paso 2, para no
+     * tener que volver solo a comprobar un dato.
+     */
+    public function getResumenPaso1Property(): array
+    {
+        $cliente = $this->customer_id
+            ? Customer::find($this->customer_id)
+            : null;
+
+        $entrega = $this->envioDistinto ? $this->ship_to : $this->bill_to;
+
+        $ciudad = collect([$entrega['city'] ?? null, $entrega['state'] ?? null])
+            ->filter()->implode(', ');
+
+        return [
+            'cliente'  => $cliente?->name,
+            'uso'      => UseType::tryFrom((string) $this->use_type)?->label(),
+            'emision'  => $this->issue_date ? Carbon::parse($this->issue_date)->format('d/m/Y') : null,
+            'validez'  => $this->valid_until ? Carbon::parse($this->valid_until)->format('d/m/Y') : null,
+            'entrega'  => trim($ciudad.' '.($entrega['zip'] ?? '')) ?: null,
+            'distinta' => $this->envioDistinto,
+        ];
+    }
+
     protected function rules(): array
     {
         return [
@@ -1676,6 +1920,10 @@ class Form extends Component
      */
     public function guardar(bool $yEnviar = false, bool $procesar = false)
     {
+        // El renglón en blanco que puso el sistema no puede bloquear el
+        // guardado. Ver descartarLineasVacias().
+        $this->descartarLineasVacias();
+
         // Por si el usuario cambió el select y le dio a guardar sin que
         // llegara a salir el evento: se rearman los términos antes de
         // validar.
@@ -1718,7 +1966,14 @@ class Form extends Component
          | presupuesto con dos líneas y un total que no corresponde a
          | ninguna venta real. Y nadie se enteraría hasta imprimirlo.
          * -------------------------------------------------------------- */
-        $presupuesto = DB::transaction(function () use ($empresa, $yEnviar) {
+        /*
+         | $procesar tiene que entrar en el use().
+         |
+         | Una closure de PHP no ve el ámbito de fuera: lo que no está en
+         | use() no existe dentro. Faltaba, y el elseif de abajo reventaba
+         | con "Undefined variable $procesar" justo al darle a Procesar.
+         */
+        $presupuesto = DB::transaction(function () use ($empresa, $yEnviar, $procesar) {
 
             $datos = [
                 'company_id'  => $empresa->id,

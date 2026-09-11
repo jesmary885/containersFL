@@ -291,8 +291,9 @@ class Estimate extends Model
                     'container'  => $primera->container,
                     'detalle'    => $esGrupo ? $grupo : null,   // el desglose interno
 
-                    'rental_months' => $renta?->rental_months,
-                    'monthly_rate'  => $renta ? (float) $renta->unit_price : null,
+                    'rental_months'  => $renta?->rental_months,
+                    'monthly_rate'   => $renta ? (float) $renta->unit_price : null,
+                    'rental_taxable' => (bool) ($renta?->taxable ?? false),
 
                     /*
                      | El detalle de la modificacion. Se junta el de todas

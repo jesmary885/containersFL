@@ -102,6 +102,45 @@ class ProductSeeder extends Seeder
              'service',   null,   false, 'none'],
 
             // ⚠️ CONFIRMAR el monto y si paga tax.
+            /* ===============================================================
+             | RENTA DE YARDA — hoja RENTAS YARDA del Excel
+             |
+             | El cliente deja SU contenedor guardado acá y paga por día.
+             | Es lo contrario de CONT-RENT, donde el contenedor es
+             | nuestro y sale de la yarda. Por eso este cobra entrada y
+             | salida, y CONT-RENT no.
+             |
+             | Precio null: la tarifa diaria sale del contrato
+             | (rentals.daily_rate), como el resto de las rentas saca la
+             | suya de la unidad.
+             * ============================================================ */
+
+            ['YARD-RENT',   'Renta de yarda',             'Yard storage',
+             'rental',    null,   true,  'both'],
+
+            /*
+             | Los cargos del formulario de yarda: MONTO ENTRADA, MONTO
+             | SALIDA, PINTURA.
+             |
+             | Como conceptos y no como columnas del presupuesto porque
+             | casi nunca aplican los cuatro a la vez, y porque así entran
+             | en la factura con su propia línea y su propio tax.
+             |
+             | Entrada y salida NO pagan tax: es transporte y movimiento
+             | dentro de la yarda (RB-005). ⚠️ CONFIRMAR con el cliente:
+             | si lo facturan como servicio de patio y no como transporte,
+             | sí lleva tax.
+             */
+            ['YARD-IN',     'Entrada a yarda',            'Yard entry',
+             'service',   null,   false, 'both'],
+
+            ['YARD-OUT',    'Salida de yarda',            'Yard exit',
+             'service',   null,   false, 'both'],
+
+            // ⚠️ CONFIRMAR el monto. En el Excel se teclea a mano cada vez.
+            ['PAINT',       'Pintura',                    'Paint',
+             'service',   null,   true,  'both'],
+
             ['REPAIR',      'Reparación / Modificación',  'Repair / modification',
              'service',   null,   true,  'both'],
 

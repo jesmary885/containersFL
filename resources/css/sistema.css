@@ -1807,3 +1807,252 @@ body .app-content-header {
 /* El buscador de unidades se abre DESDE el modal del renglón, así que
    tiene que quedar por encima de él. 1070 es el modal; 1090, esto. */
 .bu-sobre-modal { z-index: 1090; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   18 · LA BARRA DE PASOS Y LA TIRA DE CONTEXTO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Todo a la vez eran cinco secciones, unos treinta campos y el panel de
+   totales en la misma pantalla. Cabía. El problema no era que no cupiera,
+   era que no había un orden evidente y la mitad de los campos no
+   aplicaban todavía.
+
+   Ahora son dos pantallas y una ficha:
+
+     1 · QUIÉN Y CUÁNDO   cliente, uso, fechas, términos, direcciones
+     2 · QUÉ LLEVA        conceptos, grupos, notas, totales
+     3 · REVISAR          la ficha, con el documento ya armado
+
+   La TIRA DE CONTEXTO es lo que hace que esto no moleste. Sin ella,
+   partir el formulario obliga a volver atrás cada vez que hace falta
+   comprobar a qué cliente se le está cotizando. Con ella, lo decidido
+   antes se queda a la vista en texto —no en un input— y ahí es donde se
+   ven los errores de dedo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ps-barra {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: .5rem;
+    margin-bottom: .85rem;
+    background: #fff;
+    border: 1px solid var(--sys-line);
+    border-radius: var(--sys-radius);
+    box-shadow: var(--sys-shadow);
+}
+
+.ps-paso {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    min-width: 0;
+    padding: .45rem .6rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--sys-mute);
+    font-size: .84rem;
+    font-weight: 600;
+    text-align: left;
+    transition: background .12s, color .12s;
+}
+
+.ps-paso:hover:not(:disabled) { background: var(--sys-mute-soft); }
+.ps-paso:disabled { cursor: default; }
+
+.ps-paso.ps-activo { background: var(--sys-info); color: #fff; }
+.ps-paso.ps-hecho  { color: var(--sys-ok); }
+
+.ps-bolita {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    flex: 0 0 auto;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+    font-size: .66rem;
+    font-weight: 700;
+}
+
+.ps-paso.ps-activo .ps-bolita {
+    background: #fff;
+    color: var(--sys-info);
+    border-color: #fff;
+}
+
+.ps-texto {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ps-sep {
+    width: 18px; height: 1px;
+    flex: 0 0 auto;
+    background: var(--sys-line);
+}
+
+/* ── La tira de contexto ── */
+
+.ps-tira {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem .9rem;
+    padding: .55rem .75rem;
+    margin-bottom: .85rem;
+    background: #fff;
+    border: 1px solid var(--sys-line);
+    border-radius: var(--sys-radius);
+    box-shadow: var(--sys-shadow);
+}
+
+.ps-tira-dato { min-width: 0; }
+
+.ps-tira-k {
+    display: block;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: var(--sys-mute);
+    line-height: 1.2;
+}
+
+.ps-tira-v {
+    display: block;
+    font-size: .84rem;
+    font-weight: 600;
+    color: var(--sys-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 26ch;
+}
+
+.ps-tira-v.ps-falta { color: var(--sys-bad); font-weight: 500; font-style: italic; }
+
+.ps-tira-sep { width: 1px; align-self: stretch; min-height: 26px; background: var(--sys-line); }
+
+/* ── El pie de navegación ── */
+
+.ps-pie {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .65rem .85rem;
+    margin-top: .85rem;
+    background: #fff;
+    border: 1px solid var(--sys-line);
+    border-radius: var(--sys-radius);
+    box-shadow: var(--sys-shadow);
+}
+
+.ps-pie-medio {
+    flex: 1 1 auto;
+    text-align: center;
+    font-size: .78rem;
+    color: var(--sys-mute);
+}
+
+@media (max-width: 767.98px) {
+    .ps-barra { flex-direction: column; align-items: stretch; gap: .2rem; }
+    .ps-sep { display: none; }
+    .ps-paso { flex: 0 0 auto; }
+    .ps-tira-sep { display: none; }
+    .ps-tira { gap: .5rem 1rem; }
+    .ps-tira-v { max-width: 100%; }
+    .ps-pie { flex-wrap: wrap; }
+    .ps-pie-medio { order: 3; flex: 1 1 100%; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   19 · EL DESGLOSE DE LA RENTA
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Tres números en línea, con el × y el = entre ellos:
+
+     LO DE CADA MES  ×  EL PLAZO  =  EL COMPROMISO
+
+   Se lee como la cuenta que es. Un "$850.00" solo, en un renglón de
+   renta, es ambiguo: puede leerse como el total del contrato, y esa es
+   la llamada del día siguiente.
+
+   El tax va DENTRO de la mensualidad porque así es como se cobra: una
+   factura por mes, cada una con su tax (RB-006 + RB-022). En el Excel
+   que lleva la empresa hoy la columna TAX de una renta de $150 a 4
+   meses dice $10.50, que es el 7% de UN mes, no de los cuatro.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.rn-desglose {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: .5rem;
+    padding: .65rem .75rem;
+    border-radius: 9px;
+    background: #fff;
+    border: 1px solid var(--sys-line);
+}
+
+.rn-dg {
+    flex: 1 1 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
+.rn-dg-k {
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: var(--sys-mute);
+    line-height: 1.2;
+}
+
+.rn-dg-v {
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: var(--sys-ink);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25;
+}
+
+.rn-dg-n {
+    font-size: .7rem;
+    color: var(--sys-mute);
+    line-height: 1.3;
+}
+
+.rn-dg-x {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 0 .1rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #cbd5e1;
+}
+
+/* El compromiso: se distingue sin gritar. Es informativo, no es lo que
+   se cobra hoy ni lo que suma el presupuesto. */
+.rn-dg-fin {
+    padding-left: .6rem;
+    border-left: 2px solid var(--sys-line);
+}
+
+.rn-dg-fin .rn-dg-v { color: var(--sys-info); }
+
+@media (max-width: 575.98px) {
+    .rn-dg-x { display: none; }
+    .rn-dg { flex: 1 1 100%; }
+    .rn-dg-fin { padding-left: 0; border-left: 0; border-top: 1px solid var(--sys-line); padding-top: .4rem; }
+}

@@ -126,13 +126,159 @@
     --}}
     <x-ui.errores id="resumen-errores" :titulo="__('estimates.errors_title')" />
 
+    {{--
+        Al cambiar de paso la pantalla vuelve arriba.
+
+        Sin esto, quien está al final del paso 1 le da a Siguiente y
+        aparece a media altura del paso 2, con la barra de pasos fuera de
+        vista. Parece que no pasó nada.
+    --}}
+    <script>
+        document.addEventListener('livewire:init', () => {
+            Livewire.on('subir-al-inicio', () => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        });
+    </script>
+
+    {{--
+        ═══════════════════════════════════════════════════════════════════
+        LA BARRA DE PASOS
+        ═══════════════════════════════════════════════════════════════════
+
+        Dos pantallas acá y una tercera que no es este formulario:
+
+          1 · QUIÉN Y CUÁNDO   cliente, uso, fechas, términos, direcciones
+          2 · QUÉ LLEVA        conceptos, grupos, notas, totales
+          3 · REVISAR          la ficha, con el documento armado
+
+        El 3 sale deshabilitado hasta que se le da a Procesar, y entonces
+        deja de ser este formulario: revisar es leer el documento como lo
+        va a ver el cliente, y eso ya existe en show.blade.php. Pintarlo
+        también acá sería mantener dos veces la misma plantilla.
+    --}}
+    <div class="ps-barra">
+        <button type="button"
+                class="ps-paso {{ $paso === 1 ? 'ps-activo' : 'ps-hecho' }}"
+                wire:click="irAlPaso(1)">
+            <span class="ps-bolita">{{ $paso > 1 ? '✓' : '1' }}</span>
+            <span class="ps-texto">{{ __('estimates.step_who') }}</span>
+        </button>
+
+        <span class="ps-sep"></span>
+
+        <button type="button"
+                class="ps-paso {{ $paso === 2 ? 'ps-activo' : '' }}"
+                wire:click="irAlPaso(2)">
+            <span class="ps-bolita">2</span>
+            <span class="ps-texto">{{ __('estimates.step_what') }}</span>
+        </button>
+
+        <span class="ps-sep"></span>
+
+        {{--
+            EL PASO 3 ES NAVEGABLE SI EL DOCUMENTO YA EXISTE.
+
+            Un presupuesto que ya pasó por Procesar tiene su documento
+            armado. Volver al paso 2 a comprobar un precio y querer
+            regresar no debería obligar a procesar de nuevo: no se
+            cambió nada.
+
+            Si es nuevo, o sigue en borrador, sale deshabilitado: no hay
+            documento que revisar todavía, y el único camino es el botón
+            Procesar de abajo.
+        --}}
+        @if ($this->puedeIrARevisar)
+            <a href="{{ route('comercial.presupuestos.show', $estimateId) }}"
+               class="ps-paso ps-hecho"
+               title="{{ __('estimates.step_review_go') }}">
+                <span class="ps-bolita">3</span>
+                <span class="ps-texto">{{ __('estimates.step_review') }}</span>
+            </a>
+        @else
+            <button type="button" class="ps-paso" disabled
+                    title="{{ __('estimates.step_review_locked') }}">
+                <span class="ps-bolita">3</span>
+                <span class="ps-texto">{{ __('estimates.step_review') }}</span>
+            </button>
+        @endif
+    </div>
+
+    {{--
+        LA TIRA DE CONTEXTO
+
+        Es lo que hace que partir el formulario no moleste. Sin ella hay
+        que volver al paso 1 cada vez que hace falta comprobar a qué
+        cliente se está cotizando.
+
+        Va en TEXTO y no en inputs a propósito: un dato que se lee se
+        revisa; un dato dentro de una caja de texto se ignora. Ahí es
+        donde se detectan los errores de dedo.
+    --}}
+    @if ($paso === 2)
+        @php $ctx = $this->resumenPaso1; @endphp
+
+        <div class="ps-tira">
+            <div class="ps-tira-dato">
+                <span class="ps-tira-k">{{ __('estimates.the_customer') }}</span>
+                <span class="ps-tira-v {{ $ctx['cliente'] ? '' : 'ps-falta' }}">
+                    {{ $ctx['cliente'] ?? __('common.missing') }}
+                </span>
+            </div>
+
+            <span class="ps-tira-sep"></span>
+
+            <div class="ps-tira-dato">
+                <span class="ps-tira-k">{{ __('estimates.use_short') }}</span>
+                <span class="ps-tira-v">{{ $ctx['uso'] ?? '—' }}</span>
+            </div>
+
+            <span class="ps-tira-sep"></span>
+
+            <div class="ps-tira-dato">
+                <span class="ps-tira-k">{{ __('estimates.issue_short') }}</span>
+                <span class="ps-tira-v">{{ $ctx['emision'] ?? '—' }}</span>
+            </div>
+
+            <div class="ps-tira-dato">
+                <span class="ps-tira-k">{{ __('estimates.valid_short') }}</span>
+                <span class="ps-tira-v">{{ $ctx['validez'] ?? '—' }}</span>
+            </div>
+
+            <span class="ps-tira-sep"></span>
+
+            <div class="ps-tira-dato">
+                <span class="ps-tira-k">
+                    {{ $ctx['distinta'] ? __('estimates.ship_short') : __('estimates.bill_short') }}
+                </span>
+                <span class="ps-tira-v {{ $ctx['entrega'] ? '' : 'ps-falta' }}">
+                    {{ $ctx['entrega'] ?? __('common.missing') }}
+                </span>
+            </div>
+
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+                    wire:click="irAlPaso(1)">
+                <i class="bi bi-pencil me-1"></i>{{ __('common.change') }}
+            </button>
+        </div>
+    @endif
+
     <form wire:submit.prevent="guardar">
         <div class="row g-3">
 
             {{-- ═════════════════════════════════════════════════════
                  COLUMNA IZQUIERDA
             ═════════════════════════════════════════════════════ --}}
-            <div class="col-12 col-xl-8">
+            {{--
+                En el paso 1 la columna ocupa el ancho completo: no hay
+                panel de totales al lado que le robe un tercio. Las
+                direcciones, que eran una pila de inputs estrechos,
+                respiran.
+            --}}
+            <div class="col-12 {{ $paso === 2 ? 'col-xl-8' : '' }}">
+
+                {{-- ═══════════ PASO 1 · QUIÉN Y CUÁNDO ═══════════ --}}
+                @if ($paso === 1)
 
                 {{-- ─────────────────────────────────────────────
                      1 · EL CLIENTE
@@ -632,6 +778,11 @@
                     </div>
                 </div>
 
+                @endif {{-- fin paso 1 --}}
+
+                {{-- ═══════════ PASO 2 · QUÉ LLEVA ═══════════ --}}
+                @if ($paso === 2)
+
                 {{-- ─────────────────────────────────────────────
                      4 · LAS LÍNEAS
 
@@ -906,11 +1057,19 @@
                     </div>
                 </div>
 
+                @endif {{-- fin paso 2 --}}
+
             </div>
 
             {{-- ═════════════════════════════════════════════════════
                  COLUMNA DERECHA · LOS TOTALES
+
+                 Solo en el paso 2. En el paso 1 no hay conceptos
+                 todavía: un panel de totales en $0.00 al lado de los
+                 datos del cliente no informa de nada y ocupa un tercio
+                 de la pantalla.
             ═════════════════════════════════════════════════════ --}}
+            @if ($paso === 2)
             <div class="col-12 col-xl-4">
                 {{--
                     panel-pegajoso y no position-sticky de Bootstrap.
@@ -1133,63 +1292,24 @@
 
                     </div>
 
-                    {{-- BOTONES --}}
+                    {{--
+                        Los botones se fueron al pie de navegación.
+
+                        Estaban acá Y en una barra abajo, los dos juegos
+                        con "Guardar borrador" y "Procesar". Dos botones
+                        iguales en la misma pantalla obligan a pararse a
+                        pensar si de verdad hacen lo mismo.
+
+                        Lo que sí se queda es el resumen de errores: es
+                        donde el usuario tiene la vista cuando revisa los
+                        números.
+                    --}}
                     <div class="card">
-                        <div class="card-body d-grid gap-2">
-
-                            {{--
-                                EL RESUMEN DE ERRORES, TAMBIÉN AQUÍ.
-
-                                El de arriba de la página no se ve cuando
-                                el usuario está mirando los botones, que es
-                                justo el momento en que le hace falta.
-                            --}}
-                            <x-ui.errores class="small mb-1 py-2" />
-
-                            <div class="leyenda-obligatorio align-self-start mb-1">
+                        <div class="card-body py-2">
+                            <x-ui.errores class="small mb-0 py-2" />
+                            <div class="leyenda-obligatorio">
                                 <strong>*</strong> {{ __('common.required_field') }}
                             </div>
-
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-save me-1"></i>
-                                {{ __('common.save_draft') }}
-                            </button>
-
-                            {{--
-                                GUARDAR Y ENVIAR
-
-                                Guarda y manda el PDF al correo del
-                                cliente. El resultado se informa con un
-                                mensaje de sesión concreto: a qué correo
-                                salió, o por qué no salió.
-
-                                Lo que NO hace es decir "enviado" sin
-                                haber enviado. Si el cliente no tiene
-                                correo cargado, o el envío falla, el
-                                mensaje lo dice. El día que alguien
-                                reclame "no me llegó", el sistema tiene
-                                que poder respaldar lo que afirma.
-                            --}}
-                            <button type="button" class="btn btn-success"
-                                    wire:click="guardar(false, true)">
-                                <i class="bi bi-check2-circle me-1"></i>
-                                {{ __('estimates.process') }}
-                            </button>
-
-                            <div class="form-text text-center">
-                                {{ __('estimates.process_hint') }}
-                            </div>
-
-                            <a href="{{ route('comercial.presupuestos.index') }}"
-                               class="btn btn-outline-secondary">
-                                {{ __('common.cancel') }}
-                            </a>
-
-                            <div wire:loading class="text-center text-secondary small pt-2">
-                                <span class="spinner-border spinner-border-sm me-1"></span>
-                                {{ __('common.saving') }}
-                            </div>
-
                         </div>
                     </div>
 
@@ -1219,6 +1339,7 @@
              x-cloak evita que la barra se vea un instante antes de que
              Alpine arranque.
         ═════════════════════════════════════════════════════════ --}}
+        @if ($paso === 2)
         <div class="barra-totales"
              x-show="!totalesVisibles"
              x-transition.opacity
@@ -1274,29 +1395,94 @@
 
                 </div>
 
-                <div class="d-flex align-items-center gap-2">
-
-                    @if ($errors->any())
-                        <span class="text-danger small fw-semibold">
-                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                            {{ $errors->count() === 1
-                                ? __('estimates.missing_one')
-                                : __('estimates.missing_many', ['count' => $errors->count()]) }}
-                        </span>
-                    @endif
-
-                    <button type="submit" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-save me-1"></i> {{ __('common.save_draft') }}
-                    </button>
-
-                    <button type="button" class="btn btn-success btn-sm"
-                            wire:click="guardar(false, true)">
-                        <i class="bi bi-check2-circle me-1"></i> {{ __('estimates.process') }}
-                    </button>
-
-                </div>
-
             </div>
+            @endif {{-- fin columna de totales --}}
+        </div>
+
+        @endif {{-- fin barra flotante de totales --}}
+
+        {{--
+            ═══════════════════════════════════════════════════════════════
+            EL PIE DE NAVEGACIÓN
+            ═══════════════════════════════════════════════════════════════
+
+            Un solo sitio con los botones, y solo los que aplican al paso.
+
+            Antes había dos juegos: uno en la columna derecha y otro en una
+            barra abajo, los dos con "Guardar borrador" y "Procesar". Dos
+            botones que hacen lo mismo en la misma pantalla obligan a
+            pensar si de verdad hacen lo mismo.
+
+            "Guardar borrador" está en los dos pasos a propósito: es la
+            salida de emergencia de quien tiene que atender el teléfono a
+            mitad de cotización.
+        --}}
+        <div class="ps-pie">
+
+            <div>
+                @if ($paso > 1)
+                    <button type="button" class="btn btn-outline-secondary"
+                            wire:click="pasoAnterior">
+                        <i class="bi bi-arrow-left me-1"></i>{{ __('estimates.step_back') }}
+                    </button>
+                @else
+                    <a href="{{ route('comercial.presupuestos.index') }}"
+                       class="btn btn-outline-secondary">
+                        {{ __('common.cancel') }}
+                    </a>
+                @endif
+            </div>
+
+            <div class="ps-pie-medio">
+                @if ($errors->any())
+                    <span class="text-danger fw-semibold">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        {{ $errors->count() === 1
+                            ? __('estimates.missing_one')
+                            : __('estimates.missing_many', ['count' => $errors->count()]) }}
+                    </span>
+                @elseif ($paso === 2)
+                    {{ trans_choice('estimates.lines_count', count($lineas), ['count' => count($lineas)]) }}
+                @else
+                    {{ __('estimates.step_1_of', ['total' => \App\Livewire\Estimates\Form::PASOS + 1]) }}
+                @endif
+
+                <div wire:loading>
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                    {{ __('common.saving') }}
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-save me-1"></i>{{ __('common.save_draft') }}
+                </button>
+
+                @if ($paso < 2)
+                    <button type="button" class="btn btn-primary"
+                            wire:click="siguientePaso">
+                        {{ __('estimates.step_next') }}<i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                @elseif ($this->puedeIrARevisar)
+                    {{--
+                        Ya procesado: el botón guarda los cambios y lleva
+                        a la ficha. Se llama "Revisar y enviar" y no
+                        "Procesar" porque es lo que hace, y porque el
+                        usuario ya sabe que ese paso existe: acaba de
+                        volver de él.
+                    --}}
+                    <button type="button" class="btn btn-success"
+                            wire:click="guardar(false, true)">
+                        {{ __('estimates.step_review') }}<i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                @else
+                    <button type="button" class="btn btn-success"
+                            wire:click="guardar(false, true)">
+                        <i class="bi bi-check2-circle me-1"></i>{{ __('estimates.process') }}
+                    </button>
+                @endif
+            </div>
+
         </div>
 
     </form>
@@ -1443,15 +1629,77 @@
                                             @enderror
                                         </div>
 
+                                        {{--
+                                            EL DESGLOSE DE LA RENTA
+
+                                            Tres números y cada uno contesta una
+                                            pregunta distinta:
+
+                                              · LO DE CADA MES     es lo que va a
+                                                decir cada factura. Con su tax,
+                                                porque el tax se cobra por
+                                                factura mensual, no una vez al
+                                                firmar (RB-006 + RB-022).
+
+                                              · EL PLAZO           cuántas de esas
+                                                facturas van a llegar.
+
+                                              · EL COMPROMISO      lo que el
+                                                cliente acaba pagando en total.
+                                                Va en gris: es informativo, no es
+                                                lo que se cobra hoy ni lo que
+                                                suma el presupuesto.
+
+                                            Sin el desglose, "$850.00" en un
+                                            renglón de renta es ambiguo: puede
+                                            leerse como el total del contrato. Es
+                                            la llamada del día siguiente.
+                                        --}}
+                                        @php
+                                            $mens  = (float) ($borrador['unit_price'] ?? 0);
+                                            $meses = (int) ($borrador['rental_months'] ?? 0);
+                                            $tasa  = $tax_exempt ? 0 : (float) $tax_rate;
+                                            $taxM  = ! empty($borrador['taxable']) ? round($mens * $tasa / 100, 2) : 0.0;
+                                        @endphp
+
+                                        @if ($meses > 0 && $mens > 0)
+                                            <div class="rn-c12">
+                                                <div class="rn-desglose">
+                                                    <div class="rn-dg">
+                                                        <span class="rn-dg-k">{{ __('estimates.each_month') }}</span>
+                                                        <span class="rn-dg-v">${{ number_format($mens + $taxM, 2) }}</span>
+                                                        @if ($taxM > 0)
+                                                            <span class="rn-dg-n">
+                                                                ${{ number_format($mens, 2) }}
+                                                                + ${{ number_format($taxM, 2) }} tax
+                                                            </span>
+                                                        @else
+                                                            <span class="rn-dg-n">{{ __('estimates.no_tax_long') }}</span>
+                                                        @endif
+                                                    </div>
+
+                                                    <span class="rn-dg-x">×</span>
+
+                                                    <div class="rn-dg">
+                                                        <span class="rn-dg-k">{{ __('estimates.the_term') }}</span>
+                                                        <span class="rn-dg-v">{{ $meses }}</span>
+                                                        <span class="rn-dg-n">{{ __('estimates.invoices_count') }}</span>
+                                                    </div>
+
+                                                    <span class="rn-dg-x">=</span>
+
+                                                    <div class="rn-dg rn-dg-fin">
+                                                        <span class="rn-dg-k">{{ __('estimates.commitment') }}</span>
+                                                        <span class="rn-dg-v">${{ number_format(($mens + $taxM) * $meses, 2) }}</span>
+                                                        <span class="rn-dg-n">{{ __('estimates.commitment_note') }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endif
+
                                         <div class="rn-c12">
                                             <div class="rn-ayuda">
                                                 <i class="bi bi-info-circle me-1"></i>{{ __('estimates.rental_row_help') }}
-                                                @if (! empty($borrador['rental_months']) && (float) ($borrador['unit_price'] ?? 0) > 0)
-                                                    <strong>{{ __('estimates.rental_commitment', [
-                                                        'total'  => number_format((float) $borrador['unit_price'] * (int) $borrador['rental_months'], 2),
-                                                        'months' => (int) $borrador['rental_months'],
-                                                    ]) }}</strong>
-                                                @endif
                                             </div>
                                         </div>
                                     @endif

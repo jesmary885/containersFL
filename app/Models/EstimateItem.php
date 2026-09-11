@@ -24,6 +24,14 @@ class EstimateItem extends Model
             'taxable'    => 'boolean',
             'miles'         => 'decimal:2',
             'rate_per_mile' => 'decimal:2',
+
+            /*
+             | Plazo cotizado de la renta. Entero y no decimal: nadie
+             | renta 4.5 meses, y sin el cast llegaba como string "4" y
+             | number_format lo aceptaba pero las comparaciones con > 0
+             | quedaban a merced de la conversion automatica de PHP.
+             */
+            'rental_months' => 'integer',
         ];
     }
 

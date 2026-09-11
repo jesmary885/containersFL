@@ -191,35 +191,37 @@
                             <div class="small text-uppercase text-secondary fw-semibold mb-1">Facturar a</div>
                             <div class="fw-semibold">{{ $invoice->customer?->name }}</div>
                             <div class="small">
-                                {{--
-                                    Se arma saltando las partes vacías. Sin
-                                    el filter(), un cliente sin "línea 2"
-                                    saldría con dos comas seguidas, que es
-                                    de esas cosas que nadie reporta pero
-                                    todos notan en un documento que se le
-                                    manda a un cliente.
-
-                                    El 'label' se salta a propósito: es el
-                                    nombre interno de la dirección
-                                    ("Oficina", "Yarda"), no parte de ella.
-                                --}}
-                                {{ collect($invoice->bill_to ?? [])
-                                    ->except('label')->filter()->implode(', ') }}
+                                {{-- El armado de la línea vive en el modelo:
+                                     ver HasDocumentAddresses::addressToLine(). --}}
+                                {{ \App\Models\Invoice::addressToLine($invoice->bill_to) }}
                             </div>
                             @if ($invoice->customer?->primary_email)
                                 <div class="small text-secondary">{{ $invoice->customer->primary_email }}</div>
                             @endif
                         </div>
 
-                        @if ($invoice->ship_to)
-                            <div class="col-6">
-                                <div class="small text-uppercase text-secondary fw-semibold mb-1">Entregar en</div>
-                                <div class="small">
-                                    {{ collect($invoice->ship_to)
-                                        ->except('label')->filter()->implode(', ') }}
-                                </div>
+                        {{--
+                            ENTREGAR EN — se imprime SIEMPRE, aunque sea la
+                            misma dirección.
+
+                            Es como vienen las facturas del cliente y es lo
+                            correcto en un documento fiscal: el bloque que
+                            falta se lee como un dato omitido, no como
+                            "coincide con el de arriba".
+
+                            En la BASE ship_to sigue siendo null cuando no
+                            se pidió otro destino. El porqué está en el
+                            trait HasDocumentAddresses.
+                        --}}
+                        <div class="col-6">
+                            <div class="small text-uppercase text-secondary fw-semibold mb-1">Entregar en</div>
+                            <div class="small">
+                                {{ \App\Models\Invoice::addressToLine($invoice->printableShipTo()) }}
                             </div>
-                        @endif
+                            @unless ($invoice->shipsElsewhere())
+                                <div class="small text-secondary fst-italic">Misma dirección de facturación</div>
+                            @endunless
+                        </div>
 
                     </div>
 

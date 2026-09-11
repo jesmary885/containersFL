@@ -69,6 +69,20 @@ class SettingSeeder extends Seeder
             // Con lo que nace una linea de renta en el presupuesto.
             // Editable renglon por renglon: un presupuesto puede llevar
             // un contenedor a 6 meses y otro a 12.
+
+            /* -------------------------------------------------------------
+             | RENTA DE YARDA — hoja RENTAS YARDA del Excel
+             |
+             | El contrato de MODUGO va a $2.00/dia. ⚠️ CONFIRMAR si es la
+             | tarifa de lista o un precio pactado con ese cliente: en el
+             | Excel no hay ninguna hoja de tarifas de yarda, el numero se
+             | teclea en cada contrato.
+             * ---------------------------------------------------------- */
+            ['rentals', 'default_daily_rate', 2.00, 'decimal',
+             'Tarifa de yarda por dia ($)'],
+            // Con lo que nace una linea de renta en el presupuesto.
+            // Editable renglon por renglon: un presupuesto puede llevar
+            // un contenedor a 6 meses y otro a 12.
             // RB-024: $100 fijos por contrato, sin importar los días
             // de atraso.
 
