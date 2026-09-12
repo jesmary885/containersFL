@@ -54,6 +54,42 @@ return Application::configure(basePath: dirname(__DIR__))
         * -------------------------------------------------------------- */
         $middleware->appendToGroup('web', \App\Http\Middleware\SetLocale::class);
 
+        /* -----------------------------------------------------------------
+        | UN USUARIO DESACTIVADO SE VA EN SU SIGUIENTE CLIC
+        |
+        | `Login` ya comprueba `is_active`, pero solo al entrar. El caso
+        | que importa es el otro: alguien a quien desactivan el martes
+        | con la sesión abierta desde el lunes. Con "recordarme" marcado
+        | esa sesión dura semanas.
+        |
+        | Al grupo 'web' entero, por lo mismo que los dos de arriba:
+        | Livewire viaja por /livewire/update. Si solo estuviera en las
+        | rutas con `auth`, la persona no podría cargar páginas nuevas
+        | pero seguiría operando en la que ya tenía abierta.
+        |
+        | Va DESPUÉS de SetLocale a propósito: el mensaje de expulsión
+        | sale en el idioma del usuario.
+        * -------------------------------------------------------------- */
+        $middleware->appendToGroup('web', \App\Http\Middleware\EnsureUserIsActive::class);
+
+        /* -----------------------------------------------------------------
+        | LOS ALIAS DE SPATIE
+        |
+        | `can:` ya viene registrado por Laravel y es el que usan las
+        | rutas de web.php. Estos tres son de la librería de permisos y
+        | hacen falta para poder escribir `role:admin` o
+        | `permission:invoices.void` en una ruta.
+        |
+        | Sin registrarlos, esa línea no da un error claro: Laravel dice
+        | "Target class [role] does not exist", que no señala a ninguna
+        | parte.
+        * -------------------------------------------------------------- */
+        $middleware->alias([
+            'role'               => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission'         => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+        ]);
+
         $middleware->prependToPriorityList(
     before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
     prepend: \App\Http\Middleware\SetCompanyContext::class,

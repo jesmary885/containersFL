@@ -5,6 +5,7 @@ namespace App\Livewire\Estimates;
 use App\Enums\EstimateStatus;
 use App\Models\Estimate;
 use Livewire\Attributes\Layout;
+use App\Livewire\Concerns\AuthorizesAccess;
 use Livewire\Component;
 
 /**
@@ -34,6 +35,19 @@ use Livewire\Component;
 #[Layout('layouts.app')]
 class Show extends Component
 {
+    use AuthorizesAccess;
+
+    /* =====================================================================
+     | LOS PERMISOS
+     |
+     | El `can:` de la ruta impide ABRIR esta pantalla. No impide llamar
+     | a sus metodos: Livewire manda cada clic a /livewire/update, que es
+     | otra ruta y no lleva ese `can:` encima.
+     |
+     | Por eso cada metodo que cambia algo exige el permiso otra vez.
+     * ================================================================== */
+
+    protected string $permisoBase = 'estimates';
     public Estimate $estimate;
 
     /** Qué acción está esperando confirmación: 'convertir' | 'rechazar' | null */
@@ -48,6 +62,8 @@ class Show extends Component
      */
     public function mount(Estimate $estimate): void
     {
+        $this->exigirPermiso('view');
+
         $this->estimate = $estimate->load([
             'items.product',
             'items.container.size',
@@ -77,6 +93,8 @@ class Show extends Component
      */
     public function marcarEnviado()
     {
+        $this->exigirPermiso('send');
+
         // Antes solo dejaba pasar Draft. Con el paso de revisión, el
         // camino normal llega acá como Processed y quedaba bloqueado
         // en silencio: el botón no hacía nada.
@@ -108,6 +126,8 @@ class Show extends Component
     /** El cliente dijo que sí. */
     public function marcarAceptado(): void
     {
+        $this->exigirPermiso('update');
+
         if ($this->estimate->status !== EstimateStatus::Sent) {
             return;
         }
@@ -121,6 +141,8 @@ class Show extends Component
     /** El cliente dijo que no. */
     public function marcarRechazado(): void
     {
+        $this->exigirPermiso('update');
+
         if ($this->estimate->status->isClosed()) {
             return;
         }
@@ -142,6 +164,8 @@ class Show extends Component
      */
     public function reabrir(): void
     {
+        $this->exigirPermiso('update');
+
         if (! $this->estimate->status->is(EstimateStatus::Rejected, EstimateStatus::Expired)) {
             return;
         }
@@ -188,6 +212,20 @@ class Show extends Component
      */
     public function convertirEnFactura()
     {
+        /* -----------------------------------------------------------------
+         | EL PERMISO ES DE FACTURAS, NO DE PRESUPUESTOS
+         |
+         | El boton esta en la pantalla del presupuesto, pero lo que hace
+         | es EMITIR UNA FACTURA: consume un numero de la secuencia de
+         | facturas y crea un documento que se cobra.
+         |
+         | Un vendedor con `estimates.*` completo y sin `invoices.create`
+         | puede cotizar todo lo que quiera y no puede facturar. Es
+         | exactamente el reparto que trae el RoleSeeder para el rol de
+         | ventas, y sin esta linea se lo saltaba entero.
+         * -------------------------------------------------------------- */
+        $this->exigirPermiso('invoices.create');
+
         try {
             $factura = $this->estimate->convertToInvoice();
 
@@ -226,6 +264,9 @@ class Show extends Component
 
     public function duplicar()
     {
+        // Duplicar CREA un presupuesto nuevo, no edita este.
+        $this->exigirPermiso('create');
+
         try {
             $copia = $this->estimate->duplicate();
 

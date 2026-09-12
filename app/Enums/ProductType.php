@@ -15,6 +15,7 @@ enum ProductType: string
     case Service   = 'service';     // delivery, pickup, modificación
     case Fee       = 'fee';         // recargo de tarjeta, mora, fee de depósito
     case Part      = 'part';        // repuesto, candado, piso
+    case Rental     = 'rental';        // renta de yarda
 
     public function label(): string
     {
@@ -23,6 +24,7 @@ enum ProductType: string
             self::Service   => 'Servicio',
             self::Fee       => 'Recargo',
             self::Part      => 'Repuesto',
+            self::Rental      => 'Renta',
         };
     }
 

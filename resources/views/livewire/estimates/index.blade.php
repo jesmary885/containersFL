@@ -86,9 +86,11 @@
                 </button>
             </div>
 
+            @can('estimates.create')
             <a href="{{ route('comercial.presupuestos.create') }}" class="btn btn-primary">
                 <i class="bi bi-plus-lg me-1"></i> Nuevo presupuesto
             </a>
+            @endcan
 
         </div>
 

@@ -53,9 +53,9 @@ class Sale extends Model
         // (trips.miles / trips.rate_per_mile) porque una venta puede
         // tener tres destinos y cada viaje necesita los suyos.
         //
-        // 'pickup_fee' tampoco: la columna esta comentada en la migracion
-        // de sales junto con depot_id. Si se decide activarla, hay que
-        // descomentar las dos alla y volver a agregar el cast aca.
+        // 'pickup_fee' vuelve: la recogida desde deposito es un requisito
+        // del negocio, no una idea a medias.
+        'pickup_fee'                 => 'decimal:2',
 
         'tax_exempt'                 => 'boolean',
         'requires_export_certificate' => 'boolean',
@@ -69,9 +69,16 @@ class Sale extends Model
     public function customer()    { return $this->belongsTo(Customer::class); }
     public function estimate()    { return $this->belongsTo(Estimate::class); }
 
-    // sales.depot_id esta comentada en la migracion. Mientras siga asi,
-    // llamar a $sale->depot revienta con "Unknown column 'depot_id'".
-    // public function depot()    { return $this->belongsTo(Depot::class); }
+    /*
+     | El deposito de donde se retira el contenedor.
+     |
+     | La habia comentado yo al ver que la columna estaba comentada en la
+     | migracion. Era al reves: el levantamiento del 14 de agosto dice que
+     | "las recogidas tienen un costo fijo asociado a los depositos", asi
+     | que las dos columnas son un requisito, no una idea a medias.
+     | Restauradas por la migracion ..._enable_depot_pickup_on_documents.
+     */
+    public function depot()       { return $this->belongsTo(Depot::class); }
     public function invoices()    { return $this->hasMany(Invoice::class); }
     public function trips()       { return $this->hasMany(Trip::class); }
     public function commissions() { return $this->hasMany(Commission::class); }

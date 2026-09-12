@@ -2,7 +2,6 @@
 
 namespace App\Livewire\Auth;
 
-
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -11,27 +10,42 @@ use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 
 /**
- * LOGIN EN DOS PASOS
- * ==================
+ * ═══════════════════════════════════════════════════════════════════════════
+ * LOGIN EN UN SOLO PASO
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * Paso 1: email y contraseña.
- * Paso 2: en qué empresa quiere entrar.
+ * Correo, contraseña y adentro. Nada más.
  *
- * El paso 2 se salta solo si el usuario tiene acceso a una sola
- * empresa. No tiene sentido preguntarle algo que solo tiene una
- * respuesta posible.
+ * ── QUÉ CAMBIÓ ──
  *
- * ── POR QUÉ EN DOS PASOS Y NO TODO JUNTO ──
+ * Antes había un segundo paso que preguntaba a qué empresa quería
+ * entrar, y salía cada vez que el usuario tenía acceso a las dos.
  *
- * Poner el selector de empresa arriba del formulario le mostraría a
- * cualquiera que abra la página cuáles empresas existen y cuántas son.
- * Es poco, pero es información que no hace falta regalar. Primero
- * demuestras quién eres, después ves las opciones.
+ * Se quitó. Ahora entra siempre a su empresa predeterminada —la que
+ * tiene marcada en `company_user.is_default`— y si quiere trabajar en la
+ * otra la cambia desde el selector de arriba del menú, que ya existe y
+ * ya funciona.
+ *
+ * ── POR QUÉ ES MEJOR ASÍ ──
+ *
+ * Preguntar en el login costaba un clic a todo el mundo todos los días
+ * para resolver algo que casi nadie cambia. Y era un clic que se hacía
+ * sin mirar: quien entra ochenta veces al mes a FLCHR aprende la
+ * posición del botón y lo pulsa sin leer. El día que necesita RST, lo
+ * pulsa igual.
+ *
+ * El selector de arriba es mejor sitio para esa decisión porque está
+ * siempre a la vista y porque dice, todo el tiempo, en cuál está.
+ *
+ * ── LO QUE NO CAMBIÓ ──
+ *
+ * El freno de cinco intentos, el aviso distinto para el usuario dado de
+ * baja, y la verificación de que tenga al menos una empresa asignada.
+ * Todo eso sigue igual.
+ * ═══════════════════════════════════════════════════════════════════════════
  */
-
 class Login extends Component
 {
-
     /* =====================================================================
      | LO QUE ESCRIBE EL USUARIO
      * ================================================================== */
@@ -41,31 +55,10 @@ class Login extends Component
     public bool   $remember = false;
 
     /* =====================================================================
-     | EL ESTADO DE LA PANTALLA
+     | ENTRAR
      * ================================================================== */
 
-    /** 1 = pidiendo credenciales. 2 = pidiendo empresa. */
-    public int $paso = 1;
-
-    /** La empresa que marcó en el paso 2. */
-    public ?int $companyId = null;
-
-    /**
-     * Las empresas a las que tiene acceso, ya convertidas a arreglo
-     * simple para pintarlas en la vista.
-     *
-     * Se guardan como arreglo y no como objetos de Eloquent porque
-     * Livewire tiene que mandar esto al navegador y traerlo de vuelta
-     * en cada clic. Un arreglo plano viaja bien; un objeto con
-     * relaciones cargadas, no siempre.
-     */
-    public array $companies = [];
-
-    /* =====================================================================
-     | PASO 1 — VERIFICAR CREDENCIALES
-     * ================================================================== */
-
-    public function verificarCredenciales(): void
+    public function entrar()
     {
         $this->validate([
             'email'    => ['required', 'email'],
@@ -87,7 +80,7 @@ class Login extends Component
          | por correo permitiría que alguien bloquee a propósito la
          | cuenta de un compañero fallando cinco veces a mano.
          * -------------------------------------------------------- */
-        $llave = Str::lower($this->email) . '|' . request()->ip();
+        $llave = Str::lower($this->email).'|'.request()->ip();
 
         if (RateLimiter::tooManyAttempts($llave, 5)) {
             $segundos = RateLimiter::availableIn($llave);
@@ -98,11 +91,12 @@ class Login extends Component
         }
 
         /* -----------------------------------------------------------
-         | Auth::validate() comprueba la contraseña SIN iniciar sesión.
+         | Auth::validate() comprueba la contraseña SIN abrir sesión.
          |
-         | Es lo que queremos: todavía falta que elija empresa. Si
-         | usáramos Auth::attempt() aquí, quedaría dentro del sistema a
-         | medias, con sesión abierta pero sin compañía activa.
+         | Se usa a propósito en vez de Auth::attempt(): todavía faltan
+         | dos comprobaciones —que el usuario esté activo y que tenga
+         | empresa asignada— y no queremos dejar la sesión abierta a
+         | medias si alguna de las dos falla.
          * -------------------------------------------------------- */
         if (! Auth::validate(['email' => $this->email, 'password' => $this->password])) {
             RateLimiter::hit($llave, 60);
@@ -119,10 +113,9 @@ class Login extends Component
         /* -----------------------------------------------------------
          | Usuario dado de baja.
          |
-         | Se revisa aquí y no en Auth::validate() porque la
-         | contraseña sigue siendo correcta: no es un problema de
-         | credenciales, es que la persona ya no trabaja aquí.
-         | Merece un mensaje distinto.
+         | Se revisa aparte porque la contraseña sigue siendo correcta:
+         | no es un problema de credenciales, es que la persona ya no
+         | trabaja aquí. Merece un mensaje distinto.
          * -------------------------------------------------------- */
         if (! $usuario->is_active) {
             throw ValidationException::withMessages([
@@ -131,87 +124,39 @@ class Login extends Component
         }
 
         /* -----------------------------------------------------------
-         | Sus empresas.
+         | SU EMPRESA DE ENTRADA
          |
-         | Se ordenan poniendo primero la marcada como predeterminada
-         | en company_user, para que la que usa siempre le quede a la
-         | mano.
+         | defaultCompany() devuelve la marcada como predeterminada en
+         | company_user y, si no hay ninguna marcada, la primera que
+         | tenga. Nunca inventa una: si no tiene ninguna, devuelve null
+         | y aquí se corta con un mensaje claro.
+         |
+         | Ojo: se filtra por empresas activas. Entrar a una empresa
+         | desactivada dejaría al usuario mirando listados vacíos sin
+         | entender por qué.
          * -------------------------------------------------------- */
-        $empresas = $usuario->companies()
+        $empresa = $usuario->companies()
             ->where('is_active', true)
             ->orderByPivot('is_default', 'desc')
             ->orderBy('name')
-            ->get();
+            ->first();
 
-        if ($empresas->isEmpty()) {
+        if (! $empresa) {
             throw ValidationException::withMessages([
                 'email' => 'Su usuario no tiene ninguna empresa asignada. '
-                         . 'Contacte al administrador del sistema.',
+                         .'Contacte al administrador del sistema.',
             ]);
         }
 
         /* -----------------------------------------------------------
-         | Una sola empresa: no hay nada que preguntar. Entra directo.
-         * -------------------------------------------------------- */
-        if ($empresas->count() === 1) {
-            $this->companyId = $empresas->first()->id;
-            $this->entrar();
-
-            return;
-        }
-
-        /* -----------------------------------------------------------
-         | Varias empresas: se pasa al paso 2.
-         |
-         | brand_color viene de la migración de companies. Es lo que
-         | permite que los dos botones se vean distintos de un
-         | vistazo, que es toda la gracia del asunto.
-         * -------------------------------------------------------- */
-        $this->companies = $empresas->map(fn ($empresa) => [
-            'id'    => $empresa->id,
-            'name'  => $empresa->name,
-            'code'  => $empresa->code,
-            'color' => $empresa->brand_color ?: '#334155',
-        ])->all();
-
-        // Se preselecciona la predeterminada: un clic menos.
-        $this->companyId = $this->companies[0]['id'];
-
-        $this->paso = 2;
-    }
-
-    /* =====================================================================
-     | PASO 2 — ENTRAR CON LA EMPRESA ELEGIDA
-     * ================================================================== */
-
-    public function entrar()
-    {
-        if (! $this->companyId) {
-            $this->addError('companyId', 'Seleccione una empresa para continuar.');
-
-            return null;
-        }
-
-        /* -----------------------------------------------------------
-         | Se vuelven a mandar las credenciales.
-         |
-         | Puede parecer redundante, pero no lo es: entre el paso 1 y
-         | el paso 2 pasó tiempo y una petición nueva. Confiar en que
-         | "ya lo validamos hace un momento" es exactamente lo que
-         | permite entrar al sistema manipulando la petición del
-         | segundo paso.
-         |
          | Esta es la única llamada que abre sesión de verdad.
          * -------------------------------------------------------- */
         if (! Auth::attempt(
             ['email' => $this->email, 'password' => $this->password],
             $this->remember,
         )) {
-            $this->reset(['password', 'paso', 'companies', 'companyId']);
-            $this->paso = 1;
-
             throw ValidationException::withMessages([
-                'email' => 'La sesión expiró. Vuelva a iniciar sesión.',
+                'email' => 'No se pudo iniciar la sesión. Intente de nuevo.',
             ]);
         }
 
@@ -219,15 +164,16 @@ class Login extends Component
          | switchCompany() verifica que el usuario tenga acceso real a
          | esa empresa antes de guardarla en la sesión.
          |
-         | Sin esa verificación, alguien podría cambiar el número que
-         | viaja en la petición y entrar a la contabilidad de la otra
-         | empresa. El método ya está escrito en el modelo User.
+         | Aquí la empresa la eligió el servidor, no el navegador, así
+         | que no puede venir manipulada. Se llama igual porque es el
+         | único sitio que escribe `current_company_id` y conviene que
+         | siga siendo el único.
          * -------------------------------------------------------- */
-        if (! auth()->user()->switchCompany($this->companyId)) {
+        if (! auth()->user()->switchCompany($empresa->id)) {
             Auth::logout();
 
             throw ValidationException::withMessages([
-                'email' => 'No tiene acceso a la empresa seleccionada.',
+                'email' => 'No tiene acceso a la empresa asignada. Contacte al administrador.',
             ]);
         }
 
@@ -241,17 +187,6 @@ class Login extends Component
         request()->session()->regenerate();
 
         return redirect()->intended(route('dashboard'));
-    }
-
-    /** Botón "volver" del paso 2. */
-    public function volver(): void
-    {
-        $this->paso      = 1;
-        $this->password  = '';
-        $this->companies = [];
-        $this->companyId = null;
-
-        $this->resetErrorBag();
     }
 
     public function render()

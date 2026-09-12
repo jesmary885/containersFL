@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
+use App\Livewire\Concerns\AuthorizesAccess;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -31,6 +32,19 @@ use Livewire\WithFileUploads;
 #[Layout('layouts.app')]
 class Show extends Component
 {
+    use AuthorizesAccess;
+
+    /* =====================================================================
+     | LOS PERMISOS
+     |
+     | El `can:` de la ruta impide ABRIR esta pantalla. No impide llamar
+     | a sus metodos: Livewire manda cada clic a /livewire/update, que es
+     | otra ruta y no lleva ese `can:` encima.
+     |
+     | Por eso cada metodo que cambia algo exige el permiso otra vez.
+     * ================================================================== */
+
+    protected string $permisoBase = 'invoices';
     /*
      | WithFileUploads le da al componente la capacidad de recibir
      | archivos. Sin este trait, wire:model sobre un <input type="file">
@@ -78,6 +92,8 @@ class Show extends Component
      */
     public function mount(Invoice $invoice): void
     {
+        $this->exigirPermiso('view');
+
         $this->invoice = $invoice->load([
             'items.product',
             'items.container.size',
@@ -105,6 +121,8 @@ class Show extends Component
      */
     public function marcarEnviada(): void
     {
+        $this->exigirPermiso('send');
+
         try {
             $this->invoice->markAsSent();
             $this->invoice->refresh();
@@ -144,6 +162,14 @@ class Show extends Component
      */
     public function anular(): void
     {
+        /*
+         | Anular es el acto mas caro de esta pantalla: el numero queda
+         | consumido para siempre y el documento no se puede recuperar.
+         | Tiene su propio permiso justo por eso, y el RoleSeeder solo se
+         | lo da a contabilidad.
+         */
+        $this->exigirPermiso('void');
+
         $this->validate(
             ['motivoAnulacion' => 'required|string|min:10|max:255'],
             [
@@ -197,6 +223,9 @@ class Show extends Component
      */
     public function subirArchivo(): void
     {
+        // Adjuntar cambia el documento: es edicion, no lectura.
+        $this->exigirPermiso('update');
+
         $this->validate([
             'archivo'          => 'required|file|max:10240',
             'categoriaArchivo' => 'required|string',
@@ -257,6 +286,14 @@ class Show extends Component
      */
     public function descargar(int $documentId)
     {
+        /*
+         | Bajar un adjunto es leer, y el mount() ya exigio 'view'. Se
+         | repite igual porque este metodo DEVUELVE UN ARCHIVO: si algun
+         | dia se llama desde otro sitio sin pasar por el mount, el
+         | permiso tiene que seguir estando.
+         */
+        $this->exigirPermiso('view');
+
         $documento = $this->invoice->documents()->find($documentId);
 
         if (! $documento) {
@@ -287,6 +324,8 @@ class Show extends Component
      */
     public function quitarArchivo(int $documentId): void
     {
+        $this->exigirPermiso('update');
+
         $documento = $this->invoice->documents()->find($documentId);
 
         if (! $documento) {

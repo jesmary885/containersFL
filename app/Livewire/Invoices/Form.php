@@ -13,6 +13,7 @@ use App\Support\CompanyContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
+use App\Livewire\Concerns\AuthorizesAccess;
 use Livewire\Component;
 
 /**
@@ -49,6 +50,19 @@ use Livewire\Component;
 #[Layout('layouts.app')]
 class Form extends Component
 {
+    use AuthorizesAccess;
+
+    /* =====================================================================
+     | LOS PERMISOS
+     |
+     | El `can:` de la ruta impide ABRIR esta pantalla. No impide llamar
+     | a sus metodos: Livewire manda cada clic a /livewire/update, que es
+     | otra ruta y no lleva ese `can:` encima.
+     |
+     | Por eso cada metodo que cambia algo exige el permiso otra vez.
+     * ================================================================== */
+
+    protected string $permisoBase = 'invoices';
     /* =====================================================================
      | QUÉ SE ESTÁ EDITANDO
      * ================================================================== */
@@ -146,6 +160,8 @@ class Form extends Component
          * -------------------------------------------------------------- */
         if ($invoice && $invoice->exists) {
 
+            $this->exigirPermiso('update');
+
             if (! $invoice->isEditable()) {
                 session()->flash('error', $this->porQueNoSePuedeEditar($invoice));
 
@@ -160,6 +176,8 @@ class Form extends Component
         /* -----------------------------------------------------------------
          | CASO B · UNA NUEVA
          * -------------------------------------------------------------- */
+        $this->exigirPermiso('create');
+
         $this->issue_date = now()->toDateString();
 
         if ($empresa) {
@@ -683,6 +701,18 @@ class Form extends Component
      */
     public function guardar(bool $yEnviar = false)
     {
+        /*
+         | Emitir y enviar son dos actos distintos, igual que en el
+         | presupuesto. El rol de ventas del RoleSeeder tiene
+         | invoices.create y invoices.send pero NO invoices.update:
+         | puede emitir, no puede corregir una ya emitida.
+         */
+        $this->exigirPermiso($this->invoiceId ? 'update' : 'create');
+
+        if ($yEnviar) {
+            $this->exigirPermiso('send');
+        }
+
         try {
             $this->validate();
         } catch (\Illuminate\Validation\ValidationException $e) {

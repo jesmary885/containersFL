@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import 'admin-lte/dist/css/adminlte.css';
 @import './sistema.css';
+@import './sidebar.css';
+@import './ajustes.css';
 @import 'bootstrap-icons/font/bootstrap-icons.css';
 
 

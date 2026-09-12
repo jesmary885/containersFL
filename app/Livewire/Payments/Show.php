@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use Livewire\Attributes\Layout;
+use App\Livewire\Concerns\AuthorizesAccess;
 use Livewire\Component;
 
 /**
@@ -35,6 +36,19 @@ use Livewire\Component;
 #[Layout('layouts.app')]
 class Show extends Component
 {
+    use AuthorizesAccess;
+
+    /* =====================================================================
+     | LOS PERMISOS
+     |
+     | El `can:` de la ruta impide ABRIR esta pantalla. No impide llamar
+     | a sus metodos: Livewire manda cada clic a /livewire/update, que es
+     | otra ruta y no lleva ese `can:` encima.
+     |
+     | Por eso cada metodo que cambia algo exige el permiso otra vez.
+     * ================================================================== */
+
+    protected string $permisoBase = 'payments';
     public Payment $payment;
 
     /** Qué acción está esperando confirmación. */
@@ -53,6 +67,8 @@ class Show extends Component
 
     public function mount(Payment $payment): void
     {
+        $this->exigirPermiso('view');
+
         $this->payment = $payment->load([
             'customer',
             'cardAuth',
@@ -87,6 +103,9 @@ class Show extends Component
 
     public function aplicarSaldo(): void
     {
+        // Aplicar mueve dinero de una factura a otra: es edicion.
+        $this->exigirPermiso('update');
+
         $this->validate([
             'facturaParaAplicar' => ['required', 'integer'],
             'montoParaAplicar'   => ['required', 'numeric', 'min:0.01'],
@@ -126,6 +145,13 @@ class Show extends Component
 
     public function confirmarReversion(): void
     {
+        /*
+         | Revertir una aplicacion devuelve saldo a la factura: el cliente
+         | vuelve a deber lo que ya se le habia descontado. Es el acto mas
+         | delicado de esta pantalla.
+         */
+        $this->exigirPermiso('update');
+
         $allocation = PaymentAllocation::where('payment_id', $this->payment->id)
             ->find($this->allocationIdAConfirmar);
 
@@ -165,6 +191,8 @@ class Show extends Component
      */
     public function confirmarCambioEstado(): void
     {
+        $this->exigirPermiso('update');
+
         $estado = PaymentStatus::tryFrom((string) $this->nuevoEstado);
 
         if (! $estado) {

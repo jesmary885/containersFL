@@ -6,6 +6,7 @@ use App\Models;
 use App\Observers;
 use App\Support\CompanyContext;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -24,6 +25,13 @@ class AppServiceProvider extends ServiceProvider
         Models\Estimate::class                => Observers\EstimateObserver::class,
         Models\EstimateItem::class            => Observers\EstimateItemObserver::class,
         Models\Payment::class                 => Observers\PaymentObserver::class,
+
+        /*
+         | Genera `customer_number` y `display_name`, que son NOT NULL y
+         | no los llenaba nadie. Sin esto, guardar un cliente desde la
+         | pantalla nueva falla con un error de SQL.
+         */
+        Models\Customer::class                => Observers\CustomerObserver::class,
     ];
 
     public function register(): void
@@ -58,7 +66,40 @@ class AppServiceProvider extends ServiceProvider
          * -------------------------------------------------------------- */
         Paginator::useBootstrapFive();
 
+        $this->registrarPermisos();
+
         $this->compartirEmpresaConLasVistas();
+    }
+
+    /**
+     * EL SUPER ADMINISTRADOR PASA POR ENCIMA DE TODO
+     * ==============================================
+     *
+     * `Gate::before` corre ANTES que cualquier comprobación de permiso.
+     * Si devuelve true, la autorización se concede sin mirar nada más;
+     * si devuelve null, el sistema sigue su curso normal y pregunta a
+     * Spatie.
+     *
+     * ── POR QUÉ HACE FALTA ──
+     *
+     * Sin esto, el super administrador necesitaría tener asignados los
+     * 80 y pico permisos uno a uno. Y cada vez que se agregue un módulo
+     * nuevo —con sus cuatro o cinco permisos— habría que acordarse de
+     * volver a asignárselos. El día que alguien se olvide, el dueño del
+     * sistema se queda fuera de una pantalla sin entender por qué.
+     *
+     * ── OJO CON EL `null` ──
+     *
+     * Tiene que devolver `null` y NO `false` cuando el usuario no es
+     * super admin. Un `false` aquí significa "denegado, no preguntes
+     * más", y eso cerraría el sistema entero para todos los demás.
+     * Es un error de una sola letra que deja a todo el mundo fuera.
+     */
+    protected function registrarPermisos(): void
+    {
+        Gate::before(function ($user, string $ability) {
+            return $user->hasRole('super_admin') ? true : null;
+        });
     }
     
 

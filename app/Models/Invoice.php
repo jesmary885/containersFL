@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\DocumentCategory;
+use App\Enums\CommissionMode;
 use App\Enums\InvoiceStatus;
 use App\Enums\InvoiceType;
 use App\Enums\PaymentMethod;
@@ -60,6 +61,21 @@ class Invoice extends Model
         return [
             'type'                    => InvoiceType::class,
             'status'                  => InvoiceStatus::class,
+
+            /*
+             | LA COMISION PACTADA, CONGELADA EN EL DOCUMENTO
+             |
+             | Igual que las direcciones (RB-058): si mañana cambia el
+             | porcentaje del vendedor, esta factura conserva el que se
+             | acordo el dia que se emitio.
+             |
+             | commission_mode en null significa "esta factura no genera
+             | comision". Una renta que se factura sola cada mes no la
+             | cierra nadie.
+             */
+            'commission_mode'         => CommissionMode::class,
+            'commission_percent'      => 'decimal:2',
+            'commission_amount'       => 'decimal:2',
             'expected_payment_method' => PaymentMethod::class,
             'bill_to'                 => 'array',
             'ship_to'                 => 'array',
@@ -89,6 +105,23 @@ class Invoice extends Model
     /* =====================================================================
      | RELACIONES
      * ================================================================== */
+
+    /**
+     * Quien CERRO la venta. No es lo mismo que created_by.
+     *
+     * created_by es quien tecleo el documento; puede ser la
+     * administradora. salesperson_id es quien cerro el negocio y cobra
+     * la comision. Denisse registra, Miguelito vendio.
+     */
+    public function salesperson()
+    {
+        return $this->belongsTo(User::class, 'salesperson_id');
+    }
+
+    public function commission()
+    {
+        return $this->hasOne(Commission::class);
+    }
 
     public function customer()     { return $this->belongsTo(Customer::class); }
     public function items()        { return $this->hasMany(InvoiceItem::class)->orderBy('sort_order')->orderBy('id'); }
@@ -369,6 +402,22 @@ class Invoice extends Model
         }
 
         $this->save();
+
+        /* -----------------------------------------------------------------
+         | LA COMISION DEL VENDEDOR
+         |
+         | Al EMITIR, no al cobrar. El vendedor pregunta todos los dias
+         | cuanto va ganando, y esa respuesta no puede depender de que el
+         | cliente haya pagado.
+         |
+         | Nace en 'pending'. Pagarsela es otro acto, con sus abonos
+         | parciales, que ya resuelve commission_payments.
+         |
+         | Es idempotente: reenviar una factura no duplica la deuda con el
+         | vendedor. Y si la comision ya tiene abonos, no la recalcula —
+         | deja una nota y que lo decida una persona.
+         * -------------------------------------------------------------- */
+        app(\App\Services\CommissionResolver::class)->syncFromInvoice($this);
 
         return $this;
     }

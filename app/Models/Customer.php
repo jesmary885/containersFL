@@ -107,9 +107,112 @@ class Customer extends Model
             ->first();
     }
 
-    /** Contactos que aceptaron recibir recordatorios de cobro. */
+    /**
+     * A quien hay que avisarle cuando este cliente debe.
+     *
+     * Devuelve una lista de destinos: cada uno con nombre, correo y
+     * telefono. No devuelve contactos, devuelve DONDE mandar el aviso,
+     * que no es lo mismo.
+     *
+     * -- QUE ESTABA MAL --
+     *
+     * Antes devolvia solo los contactos con `notify_reminders`. Si el
+     * cliente no tenia ningun contacto cargado, devolvia una lista
+     * vacia y el aviso no salia para ninguna parte, en silencio.
+     *
+     * Y el cliente sin contactos es el caso NORMAL: una persona natural
+     * que compro un contenedor da su telefono y su correo, y no hay
+     * ninguna "persona de pagos" que registrar.
+     *
+     * -- LO QUE PIDIO EL CLIENTE --
+     *
+     * Textual del segundo levantamiento, 14 de agosto:
+     *
+     *   "Normalmente el sistema va a utilizar los modos de comunicacion
+     *   que tengamos archivados para ese cliente. Si hay un telefono y
+     *   hay un email, una notificacion por email y un text message al
+     *   cliente."
+     *
+     * O sea: se usa TODO lo que este archivado, no solo los contactos.
+     *
+     * -- EL ORDEN Y LOS REPETIDOS --
+     *
+     * Primero los contactos que lo pidieron, y despues el telefono y el
+     * correo de la ficha si no los cubre ya ningun contacto.
+     *
+     * Lo de "si no los cubre ya" importa: es normal que el contacto
+     * principal tenga el mismo correo que la ficha, y mandarle el mismo
+     * aviso dos veces al mismo buzon hace que lo marquen como spam.
+     */
     public function reminderRecipients()
     {
-        return $this->contacts()->where('notify_reminders', true)->get();
+        return $this->destinosDeAviso('notify_reminders');
+    }
+
+    /**
+     * Los mismos destinos, para mandar la factura.
+     *
+     * Existe aparte porque hay clientes donde la factura va a
+     * contabilidad y la cobranza va al dueno.
+     */
+    public function invoiceRecipients()
+    {
+        return $this->destinosDeAviso('notify_invoices');
+    }
+
+    /**
+     * El motor de los dos de arriba.
+     *
+     * Se descartan los destinos sin correo NI telefono. Un renglon al
+     * que no hay por donde escribirle no es un destino: es una fila que
+     * hace creer que el aviso salio.
+     */
+    protected function destinosDeAviso(string $bandera)
+    {
+        $destinos = $this->contacts()
+            ->where($bandera, true)
+            ->get()
+            ->map(fn (CustomerContact $c) => [
+                'nombre'   => $c->name,
+                'email'    => $c->email,
+                'telefono' => $c->phone,
+                'origen'   => 'contacto',
+            ]);
+
+        $correosCubiertos   = $destinos->pluck('email')->filter()
+                                       ->map(fn ($e) => strtolower($e))->all();
+
+        $telefonosCubiertos = $destinos->pluck('telefono')->filter()->all();
+
+        $faltaCorreo = filled($this->primary_email)
+            && ! in_array(strtolower($this->primary_email), $correosCubiertos, true);
+
+        $faltaTelefono = filled($this->primary_phone)
+            && ! in_array($this->primary_phone, $telefonosCubiertos, true);
+
+        if ($faltaCorreo || $faltaTelefono) {
+            $destinos->push([
+                'nombre'   => $this->name,
+                'email'    => $faltaCorreo ? $this->primary_email : null,
+                'telefono' => $faltaTelefono ? $this->primary_phone : null,
+                'origen'   => 'ficha',
+            ]);
+        }
+
+        return $destinos
+            ->filter(fn (array $d) => filled($d['email']) || filled($d['telefono']))
+            ->values();
+    }
+
+    /**
+     * Hay por donde avisarle a este cliente?
+     *
+     * Para poder ensenar el aviso en la ficha antes de que haga falta,
+     * en vez de descubrirlo el dia que una factura se vence y el aviso
+     * no sale.
+     */
+    public function tieneComoAvisar(): bool
+    {
+        return $this->reminderRecipients()->isNotEmpty();
     }
 }

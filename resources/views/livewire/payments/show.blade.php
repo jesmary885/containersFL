@@ -122,6 +122,7 @@
                                             @if ($payment->status->isSettled())
                                                 <button type="button" class="btn btn-sm btn-outline-danger"
                                                         wire:click="pedirReversion({{ $a->id }})"
+                                                        @cannot('payments.update') disabled @endcannot
                                                         title="Revertir esta aplicación">
                                                     <i class="bi bi-arrow-counterclockwise"></i>
                                                 </button>
@@ -165,7 +166,8 @@
                                     </div>
                                 </div>
                                 <div class="col-md-3">
-                                    <button type="button" class="btn btn-primary btn-sm w-100" wire:click="aplicarSaldo">
+                                    <button type="button" class="btn btn-primary btn-sm w-100" wire:click="aplicarSaldo"
+                                            @cannot('payments.update') disabled @endcannot>
                                         Aplicar
                                     </button>
                                 </div>
@@ -182,6 +184,15 @@
             <div class="card">
                 <div class="card-header"><h6 class="card-title mb-0">Estado del pago</h6></div>
                 <div class="card-body d-grid gap-2">
+
+                    {{--
+                        Todo este bloque cambia el estado del cobro y puede
+                        revertir aplicaciones: es edicion, no consulta. Se
+                        esconde entero en vez de boton por boton, porque el
+                        texto de ayuda de abajo tampoco tiene sentido para
+                        quien no puede pulsar nada.
+                    --}}
+                    @can('payments.update')
 
                     @if ($payment->status->value === 'pending')
                         <button type="button" class="btn btn-success btn-sm" wire:click="pedirCambioEstado('completed')">
@@ -207,6 +218,8 @@
                         Marcar el pago como fallido, en disputa o reembolsado revierte
                         automáticamente todo lo que tuviera aplicado a facturas.
                     </div>
+
+                    @endcan
                 </div>
             </div>
         </div>

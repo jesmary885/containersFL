@@ -1,59 +1,79 @@
 {{--
-    SELECTOR DE EMPRESA DEL HEADER
+    ═══════════════════════════════════════════════════════════════════════
+    SELECTOR DE EMPRESA
+    ═══════════════════════════════════════════════════════════════════════
 
     Dos comportamientos según el usuario:
 
-      - Con acceso a UNA empresa: una etiqueta fija. No hay nada que
-        elegir, así que no se le ofrece un menú que solo tiene una
-        opción y encima deshabilitada.
+      · Con acceso a UNA empresa: una pastilla fija, sin menú. No hay
+        nada que elegir, así que no se le ofrece un desplegable que solo
+        tiene una opción y encima deshabilitada.
 
-      - Con acceso a VARIAS: un menú desplegable.
+      · Con acceso a VARIAS: la misma pastilla, pero se abre.
 
-    Cada opción es un formulario POST propio. Es más código que unos
-    enlaces, pero un enlace haría el cambio por GET, y cualquier cosa
-    que modifique la sesión tiene que ir por POST con su token.
+    ── QUÉ CAMBIÓ ──
+
+    Era un enlace gris con una etiquetita de color al lado. Ahora la
+    pastilla entera va del color de la empresa.
+
+    No es maquillaje. Desde que el login dejó de preguntar en cuál
+    empresa entrar, esta pastilla es lo ÚNICO que dice dónde estás
+    parado, y emitir una factura desde la empresa equivocada es el error
+    más caro que tiene este sistema.
+
+    Tiene que verse desde la puerta.
+
+    ── POR QUÉ CADA OPCIÓN ES UN FORMULARIO ──
+
+    Es más código que unos enlaces, pero un enlace haría el cambio por
+    GET, y cualquier cosa que modifique la sesión tiene que ir por POST
+    con su token. Un GET se puede disparar con una imagen escondida en
+    un correo.
 --}}
+
+@php
+    $color = $empresaActual?->brand_color ?: '#334155';
+@endphp
 
 @if ($empresasDisponibles->count() <= 1)
 
-    {{-- UNA SOLA EMPRESA: etiqueta informativa --}}
-    <li class="nav-item d-flex align-items-center me-2">
-        <span
-            class="badge rounded-pill px-3 py-2"
-            style="background-color: {{ $empresaActual?->brand_color ?: '#334155' }}"
-            title="{{ $empresaActual?->legal_name }}"
-        >
-            {{ $empresaActual?->code ?? '—' }}
+    {{-- UNA SOLA EMPRESA: pastilla informativa, sin menú --}}
+    <li class="nav-item">
+        <span class="bs-empresa bs-empresa-fija"
+              style="--bs-empresa-color: {{ $color }}"
+              title="{{ $empresaActual?->legal_name }}">
+
+            <span class="bs-empresa-codigo">{{ $empresaActual?->code ?? '—' }}</span>
+
+            <span class="bs-empresa-nombre d-none d-md-inline">
+                {{ $empresaActual?->name }}
+            </span>
         </span>
     </li>
 
 @else
 
-    {{-- VARIAS EMPRESAS: menú desplegable --}}
-    <li class="nav-item dropdown me-2">
+    {{-- VARIAS EMPRESAS: la misma pastilla, pero se abre --}}
+    <li class="nav-item dropdown">
 
         <a href="#"
-           class="nav-link d-flex align-items-center gap-2"
+           class="bs-empresa"
+           style="--bs-empresa-color: {{ $color }}"
            data-bs-toggle="dropdown"
            role="button"
-           aria-expanded="false">
+           aria-expanded="false"
+           title="Está trabajando en {{ $empresaActual?->legal_name }}. Pulse para cambiar.">
 
-            {{-- El cuadrito de color: es lo que se ve sin leer --}}
-            <span
-                class="badge rounded-pill px-3 py-2"
-                style="background-color: {{ $empresaActual?->brand_color ?: '#334155' }}"
-            >
-                {{ $empresaActual?->code ?? '—' }}
-            </span>
+            <span class="bs-empresa-codigo">{{ $empresaActual?->code ?? '—' }}</span>
 
-            <span class="d-none d-md-inline text-body">
+            <span class="bs-empresa-nombre d-none d-md-inline">
                 {{ $empresaActual?->name }}
             </span>
 
-            <i class="bi bi-chevron-down small text-secondary"></i>
+            <i class="bi bi-chevron-down bs-chevron"></i>
         </a>
 
-        <ul class="dropdown-menu dropdown-menu-end shadow" style="min-width: 260px;">
+        <ul class="dropdown-menu dropdown-menu-end shadow bs-menu-empresa" style="min-width: 280px;">
 
             <li>
                 <h6 class="dropdown-header">Cambiar de empresa</h6>
@@ -61,8 +81,6 @@
 
             @foreach ($empresasDisponibles as $empresa)
                 @php
-                    // ¿Es la que ya está activa? Se compara con <=> por si
-                    // uno de los dos viene como texto y el otro como número.
                     $esLaActual = $empresaActual && $empresa->id === $empresaActual->id;
                 @endphp
 
@@ -71,27 +89,22 @@
                         @csrf
                         <input type="hidden" name="company_id" value="{{ $empresa->id }}">
 
-                        <button
-                            type="submit"
-                            class="dropdown-item d-flex align-items-center gap-2 py-2 {{ $esLaActual ? 'active' : '' }}"
-                            @disabled($esLaActual)
-                        >
-                            <span
-                                class="badge rounded-pill px-2"
-                                style="background-color: {{ $empresa->brand_color ?: '#334155' }}"
-                            >
+                        <button type="submit"
+                                class="dropdown-item bs-opcion-empresa {{ $esLaActual ? 'activa' : '' }}"
+                                @disabled($esLaActual)>
+
+                            <span class="bs-opcion-chip"
+                                  style="background-color: {{ $empresa->brand_color ?: '#334155' }}">
                                 {{ $empresa->code }}
                             </span>
 
-                            <span class="flex-grow-1 text-start">
-                                <span class="d-block small fw-semibold">{{ $empresa->name }}</span>
-                                <span class="d-block text-secondary" style="font-size: .75rem;">
-                                    {{ $empresa->legal_name }}
-                                </span>
+                            <span class="bs-opcion-texto">
+                                <span class="bs-opcion-nombre">{{ $empresa->name }}</span>
+                                <span class="bs-opcion-legal">{{ $empresa->legal_name }}</span>
                             </span>
 
                             @if ($esLaActual)
-                                <i class="bi bi-check-lg"></i>
+                                <i class="bi bi-check-lg text-success"></i>
                             @endif
                         </button>
                     </form>
@@ -102,6 +115,7 @@
 
             <li>
                 <span class="dropdown-item-text small text-secondary">
+                    <i class="bi bi-info-circle me-1"></i>
                     Cada empresa emite sus documentos por separado.
                 </span>
             </li>

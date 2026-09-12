@@ -39,9 +39,11 @@
             </small>
         </div>
 
+        @can('invoices.create')
         <a href="{{ route('finanzas.facturacion.create') }}" class="btn btn-primary">
             <i class="bi bi-plus-lg me-1"></i> Nueva factura
         </a>
+        @endcan
 
     </div>
 

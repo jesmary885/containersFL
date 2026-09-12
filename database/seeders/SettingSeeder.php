@@ -80,6 +80,86 @@ class SettingSeeder extends Seeder
              * ---------------------------------------------------------- */
             ['rentals', 'default_daily_rate', 2.00, 'decimal',
              'Tarifa de yarda por dia ($)'],
+
+            /* -------------------------------------------------------------
+             | LOS DOS DIAS DE GRACIA DE LA YARDA
+             |
+             | Levantamiento del 8 de agosto: "Cobro por permanencia del
+             | contenedor en el patio despues de vendido. Se otorgan 2 dias
+             | de gracia; a partir del tercer dia se cobra el espacio. Se
+             | implemento el año pasado porque quedaban contenedores hasta
+             | dos semanas sin ser retirados."
+             |
+             | Confirmado el 14 de agosto: "los clientes tienen un plazo de
+             | dos dias para retirar los contenedores adquiridos. A partir
+             | del tercer dia se generan tarifas de almacenamiento."
+             |
+             | El cobro NO empieza el dia de la venta: empieza al tercero.
+             * ---------------------------------------------------------- */
+            ['rentals', 'yard_grace_days', 2, 'int',
+             'Dias de gracia antes de cobrar yarda'],
+
+            /* -------------------------------------------------------------
+             | LOS AVISOS DE MORA
+             |
+             | Levantamiento del 14 de agosto: los avisos salen entre el dia
+             | 5 y el 10 despues del vencimiento, uno cada dos dias, a TODOS
+             | los contactos del cliente (telefonos y correos).
+             |
+             | Erik prometio en esa reunion que la frecuencia seria
+             | administrable desde el sistema "sin necesidad de solicitar
+             | cambios externos a los desarrolladores". De ahi que sean
+             | ajustes y no numeros escritos en el codigo.
+             * ---------------------------------------------------------- */
+            ['notifications', 'dunning_start_day', 5, 'int',
+             'Primer aviso de mora: dias tras el vencimiento'],
+
+            ['notifications', 'dunning_end_day', 10, 'int',
+             'Ultimo aviso de mora: dias tras el vencimiento'],
+
+            ['notifications', 'dunning_every_days', 2, 'int',
+             'Cada cuantos dias se repite el aviso'],
+
+            ['notifications', 'dunning_all_contacts', true, 'bool',
+             'Avisar a todos los telefonos y correos del cliente'],
+
+            /* -------------------------------------------------------------
+             | EL PLAZO DE RETIRO DE UN RELEASE
+             |
+             | Levantamiento del 14 de agosto: "los releases son compras
+             | masivas de contenedores con un plazo de retiro de 14 dias".
+             | Pasado el plazo, el deposito cobra tarifas diarias que se
+             | registran como gasto.
+             * ---------------------------------------------------------- */
+            ['purchases', 'release_pickup_days', 14, 'int',
+             'Dias para retirar los contenedores de un release'],
+
+            /* -------------------------------------------------------------
+             | COMISIONES DE VENTA
+             |
+             | Las dos formas, porque el Excel usa las dos. En la hoja
+             | COMISIONES VENTAS todos los pagos son montos planos ($200,
+             | $300, $1,100, $650, $40); en la hoja VENTAS hay una
+             | comision de $150 sobre $2,650, que es 5.66% — un numero que
+             | nadie pacta como porcentaje pero que tampoco es redondo,
+             | asi que salio de un calculo y se ajusto.
+             |
+             | default_mode es con lo que NACE la factura. Se cambia
+             | factura por factura.
+             |
+             | ⚠️ CONFIRMAR default_percent. Puse 5% porque es lo mas
+             | comun en el sector y porque 5.66% de la hoja VENTAS anda
+             | cerca, pero en el Excel no hay ninguna hoja de tarifas de
+             | comision: el numero se teclea en cada venta.
+             * ---------------------------------------------------------- */
+            ['commissions', 'default_mode', 'percent', 'string',
+             'Como nace la comision: percent | fixed'],
+
+            ['commissions', 'default_percent', 5.00, 'decimal',
+             'Porcentaje de comision por defecto (%)'],
+
+            ['commissions', 'default_fixed', 0.00, 'decimal',
+             'Monto fijo de comision por defecto ($)'],
             // Con lo que nace una linea de renta en el presupuesto.
             // Editable renglon por renglon: un presupuesto puede llevar
             // un contenedor a 6 meses y otro a 12.

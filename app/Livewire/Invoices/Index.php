@@ -7,6 +7,7 @@ use App\Enums\InvoiceType;
 use App\Models\Invoice;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
+use App\Livewire\Concerns\AuthorizesAccess;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -33,7 +34,20 @@ use Livewire\WithPagination;
 #[Layout('layouts.app')]
 class Index extends Component
 {
-    use WithPagination;
+
+    use WithPagination, AuthorizesAccess;
+
+    /* =====================================================================
+     | LOS PERMISOS
+     |
+     | El `can:` de la ruta impide ABRIR esta pantalla. No impide llamar
+     | a sus metodos: Livewire manda cada clic a /livewire/update, que es
+     | otra ruta y no lleva ese `can:` encima.
+     |
+     | Por eso cada metodo que cambia algo exige el permiso otra vez.
+     * ================================================================== */
+
+    protected string $permisoBase = 'invoices';
 
     /* =====================================================================
      | LOS FILTROS
@@ -70,6 +84,16 @@ class Index extends Component
     public string $direccion = 'desc';
 
     public int $porPagina = 15;
+
+    /* =====================================================================
+     | ARRANQUE
+     * ================================================================== */
+
+    /** El permiso de ver, una sola vez al abrir. */
+    public function mount(): void
+    {
+        $this->exigirPermiso('view');
+    }
 
     /* =====================================================================
      | REACCIONES

@@ -23,6 +23,7 @@ class Commission extends Model
     {
         return [
             'status'      => CommissionStatus::class,
+            'mode'        => \App\Enums\CommissionMode::class,
             'base_amount' => 'decimal:2',   // sobre qué monto se calculó
             'percent'     => 'decimal:2',
             'amount'      => 'decimal:2',
@@ -37,6 +38,7 @@ class Commission extends Model
      * ================================================================== */
 
     public function sale()        { return $this->belongsTo(Sale::class); }
+    public function invoice()     { return $this->belongsTo(Invoice::class); }
     public function payments()    { return $this->hasMany(CommissionPayment::class); }
     public function salesperson() { return $this->belongsTo(User::class, 'salesperson_id'); }
     public function container() { return $this->belongsTo(Container::class); }

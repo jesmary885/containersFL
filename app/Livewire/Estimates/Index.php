@@ -7,6 +7,7 @@ use App\Enums\EstimateStatus;
 use App\Models\Estimate;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
+use App\Livewire\Concerns\AuthorizesAccess;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -35,11 +36,24 @@ use Livewire\WithPagination;
 #[Layout('layouts.app')]
 class Index extends Component
 {
+
     /*
      | WithPagination le da al componente los botones de "anterior /
      | siguiente" y el método resetPage() que se usa más abajo.
      */
-    use WithPagination;
+    use WithPagination, AuthorizesAccess;
+
+    /* =====================================================================
+     | LOS PERMISOS
+     |
+     | El `can:` de la ruta impide ABRIR esta pantalla. No impide llamar
+     | a sus metodos: Livewire manda cada clic a /livewire/update, que es
+     | otra ruta y no lleva ese `can:` encima.
+     |
+     | Por eso cada metodo que cambia algo exige el permiso otra vez.
+     * ================================================================== */
+
+    protected string $permisoBase = 'estimates';
 
     /* =====================================================================
      | LOS FILTROS
@@ -136,6 +150,17 @@ class Index extends Component
      * Borrar en un solo clic es de las cosas que más rabia dan cuando el
      * dedo se resbala.
      */
+    /**
+     * El permiso de ver, una sola vez al abrir.
+     *
+     * La ruta ya lo comprueba, pero este componente tambien se puede
+     * montar desde otro sitio. El permiso vive donde vive el codigo.
+     */
+    public function mount(): void
+    {
+        $this->exigirPermiso('view');
+    }
+
     public function confirmarBorrado(int $id): void
     {
         $this->porBorrar = $id;
@@ -159,6 +184,8 @@ class Index extends Component
      */
     public function borrar(): void
     {
+        $this->exigirPermiso('delete');
+
         if (! $this->porBorrar) {
             return;
         }
@@ -185,6 +212,14 @@ class Index extends Component
      */
     public function duplicar(int $id)
     {
+        /*
+         | Duplicar CREA un presupuesto, no edita el que se esta mirando.
+         | Por eso el permiso es 'create' y no 'update': alguien que solo
+         | puede corregir los suyos no deberia poder generar documentos
+         | nuevos desde el listado.
+         */
+        $this->exigirPermiso('create');
+
         try {
             $copia = Estimate::with('items')->findOrFail($id)->duplicate();
 

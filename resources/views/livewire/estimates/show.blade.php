@@ -164,14 +164,18 @@
 
                 {{-- ── ETAPA 1 · REVISAR ── --}}
 
-                <a href="{{ route('comercial.presupuestos.edit', $estimate) }}"
-                   class="btn btn-outline-secondary">
-                    <i class="bi bi-pencil me-1"></i> {{ __('estimates.back_to_edit') }}
-                </a>
+                @can('estimates.update')
+                    <a href="{{ route('comercial.presupuestos.edit', $estimate) }}"
+                       class="btn btn-outline-secondary">
+                        <i class="bi bi-pencil me-1"></i> {{ __('estimates.back_to_edit') }}
+                    </a>
+                @endcan
 
-                <button class="btn btn-success" wire:click="marcarEnviado">
-                    <i class="bi bi-envelope-arrow-up me-1"></i> {{ __('estimates.send_now') }}
-                </button>
+                @can('estimates.send')
+                    <button class="btn btn-success" wire:click="marcarEnviado">
+                        <i class="bi bi-envelope-arrow-up me-1"></i> {{ __('estimates.send_now') }}
+                    </button>
+                @endcan
 
             @else
 
@@ -184,22 +188,28 @@
                 @endif
 
                 @if ($estimate->isEditable())
-                    <a href="{{ route('comercial.presupuestos.edit', $estimate) }}"
-                       class="btn btn-outline-secondary">
-                        <i class="bi bi-pencil me-1"></i> Editar
-                    </a>
+                    @can('estimates.update')
+                        <a href="{{ route('comercial.presupuestos.edit', $estimate) }}"
+                           class="btn btn-outline-secondary">
+                            <i class="bi bi-pencil me-1"></i> Editar
+                        </a>
+                    @endcan
                 @endif
 
                 @if ($estimate->status->isOut())
-                    <button class="btn btn-outline-secondary" wire:click="duplicar">
-                        <i class="bi bi-files me-1"></i> Duplicar
-                    </button>
+                    @can('estimates.create')
+                        <button class="btn btn-outline-secondary" wire:click="duplicar">
+                            <i class="bi bi-files me-1"></i> Duplicar
+                        </button>
+                    @endcan
                 @endif
 
                 @if ($estimate->status === \App\Enums\EstimateStatus::Draft)
-                    <button class="btn btn-primary" wire:click="marcarEnviado">
-                        <i class="bi bi-send me-1"></i> Marcar como enviado
-                    </button>
+                    @can('estimates.send')
+                        <button class="btn btn-primary" wire:click="marcarEnviado">
+                            <i class="bi bi-send me-1"></i> Marcar como enviado
+                        </button>
+                    @endcan
                 @endif
 
                 {{--
@@ -218,18 +228,27 @@
                     cuando se enganchen desde allá.
                 --}}
 
+                {{--
+                    El permiso es de FACTURAS, no de presupuestos: lo que
+                    hace este boton es emitir una factura. Un vendedor que
+                    cotiza pero no factura no tiene por que verlo.
+                --}}
                 @if ($estimate->status->canConvert())
-                    <button class="btn btn-warning" wire:click="confirmar('convertir')">
-                        <i class="bi bi-receipt me-1"></i> Convertir en factura
-                    </button>
+                    @can('invoices.create')
+                        <button class="btn btn-warning" wire:click="confirmar('convertir')">
+                            <i class="bi bi-receipt me-1"></i> Convertir en factura
+                        </button>
+                    @endcan
                 @endif
 
             @endif
 
             @if ($estimate->status->is(\App\Enums\EstimateStatus::Rejected, \App\Enums\EstimateStatus::Expired))
-                <button class="btn btn-outline-primary" wire:click="reabrir">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i> Reabrir
-                </button>
+                @can('estimates.update')
+                    <button class="btn btn-outline-primary" wire:click="reabrir">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Reabrir
+                    </button>
+                @endcan
             @endif
 
         </div>

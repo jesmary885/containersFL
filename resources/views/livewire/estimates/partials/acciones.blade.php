@@ -47,18 +47,22 @@
         La copia nace como borrador y con número nuevo. No toca el
         original.
     --}}
-    <button class="acc acc-copiar"
-            wire:click="duplicar({{ $p->id }})"
-            title="Duplicar como borrador nuevo">
-        <i class="bi bi-files"></i>
-    </button>
+    @can('estimates.create')
+        <button class="acc acc-copiar"
+                wire:click="duplicar({{ $p->id }})"
+                title="Duplicar como borrador nuevo">
+            <i class="bi bi-files"></i>
+        </button>
+    @endcan
 
     @if ($p->status === \App\Enums\EstimateStatus::Draft)
-        <button class="acc acc-borrar acc-separado"
-                wire:click="confirmarBorrado({{ $p->id }})"
-                title="Eliminar">
-            <i class="bi bi-trash"></i>
-        </button>
+        @can('estimates.delete')
+            <button class="acc acc-borrar acc-separado"
+                    wire:click="confirmarBorrado({{ $p->id }})"
+                    title="Eliminar">
+                <i class="bi bi-trash"></i>
+            </button>
+        @endcan
     @endif
 
 </div>

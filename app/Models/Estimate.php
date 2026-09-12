@@ -109,10 +109,12 @@ class Estimate extends Model
      * ================================================================== */
 
     public function customer() { return $this->belongsTo(Customer::class); }
-    // estimates.depot_id esta comentada en la migracion. Mientras siga
-    // asi, llamar a $estimate->depot revienta con "Unknown column
-    // 'depot_id'". Descomentar las dos cosas a la vez o ninguna.
-    // public function depot() { return $this->belongsTo(Depot::class); }
+    /*
+     | El deposito de donde se retira el contenedor. Ver la nota en
+     | Sale::depot(): la columna vuelve a existir porque el levantamiento
+     | la exige.
+     */
+    public function depot()    { return $this->belongsTo(Depot::class); }
     public function sale()     { return $this->hasOne(Sale::class); }
 
     /** Las líneas, siempre en el orden en que el usuario las acomodó. */
@@ -468,6 +470,47 @@ class Estimate extends Model
                 'bill_to' => $billTo,
                 'ship_to' => $this->ship_to,
 
+                /* -------------------------------------------------------------
+                 | PARA QUÉ SE USA EL CONTENEDOR (RB-056)
+                 |
+                 | Se perdía acá. Una exportación cotizada llegaba a la
+                 | factura como una venta normal, y el certificado CSC
+                 | —que va INCLUIDO en el precio de exportación— quedaba
+                 | sin señal de que ya estaba cobrado. Cobrarlo aparte es
+                 | cobrarlo dos veces.
+                 * ---------------------------------------------------------- */
+                'use_type' => $this->use_type,
+
+                /* -------------------------------------------------------------
+                 | CON QUÉ DIJO EL CLIENTE QUE IBA A PAGAR
+                 |
+                 | Se copiaba el recargo de 3.5% pero NO el método que lo
+                 | justifica. La factura mostraba un cargo por tarjeta sin
+                 | decir en ninguna parte que el cliente eligió tarjeta, y
+                 | cuando llamaba a preguntar no había qué contestarle.
+                 * ---------------------------------------------------------- */
+                'expected_payment_method' => $this->expected_payment_method,
+
+                /* -------------------------------------------------------------
+                 | DE DÓNDE SALE EL CONTENEDOR (RB-031)
+                 |
+                 | La recogida es depósito → yarda y la paga FLCHR: no se
+                 | le cotiza al cliente, pero es un costo real de esta
+                 | operación. Sin él en la factura, el margen de la venta
+                 | sale inflado por el importe de la recogida.
+                 * ---------------------------------------------------------- */
+                'depot_id'   => $this->depot_id,
+                'pickup_fee' => $this->pickup_fee,
+
+                /* -------------------------------------------------------------
+                 | EL TRANSPORTE COBRADO (RB-030)
+                 |
+                 | Lo vuelve a calcular recalculate() desde las líneas,
+                 | pero se copia igual para que la factura sea correcta
+                 | aunque nadie la recalcule nunca.
+                 * ---------------------------------------------------------- */
+                'delivery_amount' => $this->delivery_amount,
+
                 'discount_amount' => $this->discount_amount,
                 'tax_rate'        => $this->tax_rate,
                 'tax_exempt'      => $this->tax_exempt,
@@ -490,6 +533,34 @@ class Estimate extends Model
 
                 'notes'        => $this->notes,
                 'footer_terms' => $this->footer_terms,
+
+                /* -------------------------------------------------------------
+                 | QUIEN CERRO LA VENTA VIAJA A LA FACTURA
+                 |
+                 | Antes se perdia acá. convertToInvoice() copiaba las
+                 | direcciones, el tax, el recargo de tarjeta y hasta el
+                 | pie de pagina, pero no el vendedor — porque invoices no
+                 | tenia dónde ponerlo.
+                 |
+                 | Y la factura es el documento que se cobra: si el
+                 | vendedor no está ahí, la comision no tiene de dónde
+                 | colgarse. El caso real: Denisse registra el presupuesto
+                 | y la factura, pero la venta la cerro Miguelito. El
+                 | sistema guardaba a Denisse en las dos y a Miguelito en
+                 | ninguna.
+                 |
+                 | La comision no se calcula acá. La factura nace en
+                 | borrador y todavia puede cambiar de monto; se resuelve
+                 | al emitirla (ver CommissionResolver).
+                 * ---------------------------------------------------------- */
+                'salesperson_id'     => $this->salesperson_id,
+                'commission_mode'    => $this->salesperson_id
+                    ? ($this->company?->setting('commissions', 'default_mode', 'percent'))
+                    : null,
+                'commission_percent' => $this->salesperson_id
+                    ? ($this->company?->setting('commissions', 'default_percent', 0))
+                    : null,
+
                 'created_by'   => auth()->id(),
             ]);
 
@@ -510,6 +581,34 @@ class Estimate extends Model
                     'quantity'           => $linea->quantity,
                     'unit_price'         => $linea->unit_price,
                     'taxable'            => $linea->taxable,
+
+                    /* ---------------------------------------------------------
+                     | EL DETALLE DEL TRANSPORTE (RB-049)
+                     |
+                     | Las tres columnas ya existían en invoice_items y
+                     | nadie las llenaba. El importe sobrevivía —es
+                     | cantidad × precio— pero el CÓMO se llegó a él se
+                     | perdía: 45 millas a $7.80.
+                     |
+                     | Sin eso, una factura de transporte no se puede
+                     | auditar contra el viaje, y la liquidación del
+                     | chofer no tiene contra qué compararse.
+                     * ------------------------------------------------------ */
+                    'delivery_zip'  => $linea->delivery_zip,
+                    'miles'         => $linea->miles,
+                    'rate_per_mile' => $linea->rate_per_mile,
+
+                    /* ---------------------------------------------------------
+                     | EL PLAZO Y EL TRABAJO
+                     |
+                     | Columnas nuevas (ver la migración del 11-sep). El
+                     | cliente aprobaba un presupuesto que decía "cambio
+                     | de pisos y pintura" y recibía una factura que decía
+                     | "reparación" a secas.
+                     * ------------------------------------------------------ */
+                    'rental_months' => $linea->rental_months,
+                    'work_details'  => $linea->work_details,
+
                     'bundle_key'         => $linea->bundle_key,
                     'bundle_description' => $linea->bundle_description,
                     'sort_order'         => $linea->sort_order,

@@ -67,23 +67,33 @@
             </button>
 
             @if ($invoice->isEditable())
-                <a href="{{ route('finanzas.facturacion.edit', $invoice) }}"
-                   class="btn btn-outline-secondary">
-                    <i class="bi bi-pencil me-1"></i> Corregir
-                </a>
+                @can('invoices.update')
+                    <a href="{{ route('finanzas.facturacion.edit', $invoice) }}"
+                       class="btn btn-outline-secondary">
+                        <i class="bi bi-pencil me-1"></i> Corregir
+                    </a>
+                @endcan
             @endif
 
             @if ($invoice->status !== \App\Enums\InvoiceStatus::Void)
-                <button class="btn btn-primary" wire:click="marcarEnviada">
-                    <i class="bi bi-send me-1"></i>
-                    {{ $invoice->sent_at ? 'Reenviar' : 'Marcar como enviada' }}
-                </button>
+                @can('invoices.send')
+                    <button class="btn btn-primary" wire:click="marcarEnviada">
+                        <i class="bi bi-send me-1"></i>
+                        {{ $invoice->sent_at ? 'Reenviar' : 'Marcar como enviada' }}
+                    </button>
+                @endcan
             @endif
 
+            {{--
+                Anular tiene permiso propio porque consume el numero para
+                siempre. El RoleSeeder solo se lo da a contabilidad.
+            --}}
             @if ($invoice->status !== \App\Enums\InvoiceStatus::Void)
-                <button class="btn btn-outline-danger" wire:click="confirmar('anular')">
-                    <i class="bi bi-x-octagon me-1"></i> Anular
-                </button>
+                @can('invoices.void')
+                    <button class="btn btn-outline-danger" wire:click="confirmar('anular')">
+                        <i class="bi bi-x-octagon me-1"></i> Anular
+                    </button>
+                @endcan
             @endif
 
         </div>
@@ -467,11 +477,13 @@
                                     <i class="bi bi-download"></i>
                                 </button>
 
-                                <button class="btn btn-outline-danger"
-                                        wire:click="quitarArchivo({{ $documento->id }})"
-                                        title="Quitar">
-                                    <i class="bi bi-trash"></i>
-                                </button>
+                                @can('invoices.update')
+                                    <button class="btn btn-outline-danger"
+                                            wire:click="quitarArchivo({{ $documento->id }})"
+                                            title="Quitar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                @endcan
                             </div>
 
                         </div>
@@ -520,11 +532,13 @@
                             tarjeta firmada: esa no sale de la oficina.
                         </div>
 
-                        <button class="btn btn-sm btn-primary w-100 mt-2"
-                                wire:click="subirArchivo"
-                                wire:loading.attr="disabled">
-                            <i class="bi bi-upload me-1"></i> Adjuntar
-                        </button>
+                        @can('invoices.update')
+                            <button class="btn btn-sm btn-primary w-100 mt-2"
+                                    wire:click="subirArchivo"
+                                    wire:loading.attr="disabled">
+                                <i class="bi bi-upload me-1"></i> Adjuntar
+                            </button>
+                        @endcan
 
                     </div>
 

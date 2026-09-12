@@ -33,9 +33,11 @@
             </small>
         </div>
 
+        @can('payments.create')
         <a href="{{ route('finanzas.pagos.create') }}" class="btn btn-primary">
             <i class="bi bi-plus-lg me-1"></i> Registrar cobro
         </a>
+        @endcan
 
     </div>
 

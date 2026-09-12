@@ -1,0 +1,220 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   EL MENÚ LATERAL
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Archivo aparte, igual que sistema.css, por la misma razón: app.css es
+   de la instalación. El día que actualices AdminLTE no tienes que ir
+   separando a mano qué era tuyo.
+
+   ── QUÉ PROBLEMA RESUELVE ──
+
+   El menú venía en el gris de fábrica de AdminLTE, con un círculo
+   idéntico delante de cada submenú. Quince círculos iguales, uno debajo
+   del otro, no distinguen nada: hay que leer las quince palabras para
+   encontrar una.
+
+   Lo que se hace acá:
+
+     · Fondo azul pizarra en degradado, no gris plano.
+     · Cada bloque tiene un color y su icono lo lleva.
+     · Los submenús heredan el color del bloque al que pertenecen, más
+       apagado. Así "Pagos" se ve verde aunque esté cerrado el menú.
+     · El renglón activo lleva una barra del color a la izquierda.
+     · Los círculos se fueron: cada módulo tiene su propio icono.
+
+   ── LOS CINCO COLORES ──
+
+   Son los mismos cinco de sistema.css, con el mismo significado, para
+   que el menú y las pantallas hablen igual:
+
+     azul      comercial, lo que entra
+     ámbar     operaciones, lo que se mueve
+     violeta   compras, lo que sale a proveedores
+     verde     finanzas, el dinero
+     gris      sistema, lo que no es del negocio
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sidebar-containers {
+    --sb-fondo-1:   #0f172a;
+    --sb-fondo-2:   #1e293b;
+    --sb-texto:     #cbd5e1;
+    --sb-texto-on:  #ffffff;
+    --sb-linea:     rgba(148, 163, 184, .16);
+
+    --sb-comercial:   #3b82f6;
+    --sb-operaciones: #f59e0b;
+    --sb-compras:     #a78bfa;
+    --sb-finanzas:    #10b981;
+    --sb-sistema:     #94a3b8;
+    --sb-panel:       #38bdf8;
+
+    background: linear-gradient(180deg, var(--sb-fondo-1) 0%, var(--sb-fondo-2) 100%) !important;
+    border-right: 1px solid rgba(15, 23, 42, .6);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1 · LA CABECERA DEL LOGO
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sidebar-containers .sidebar-brand {
+    border-bottom: 1px solid var(--sb-linea);
+    background: rgba(0, 0, 0, .18);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2 · LOS RENGLONES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sidebar-containers .sidebar-menu .nav-link {
+    color: var(--sb-texto);
+    border-radius: .5rem;
+    margin: 1px .5rem;
+    padding: .55rem .7rem;
+    font-size: .9rem;
+    transition: background-color .14s ease, color .14s ease;
+}
+
+.sidebar-containers .sidebar-menu .nav-link:hover {
+    background-color: rgba(255, 255, 255, .07);
+    color: var(--sb-texto-on);
+}
+
+/* El renglón donde estás parado */
+.sidebar-containers .sidebar-menu .nav-link.active {
+    background-color: rgba(255, 255, 255, .12);
+    color: var(--sb-texto-on);
+    font-weight: 600;
+}
+
+/*
+   La barra de color a la izquierda del activo.
+
+   Va con box-shadow y no con border-left a propósito: un borde mueve el
+   texto 3px hacia la derecha y el renglón activo queda desalineado con
+   los de arriba y abajo. El shadow pinta encima sin ocupar espacio.
+*/
+.sidebar-containers .sidebar-menu .nav-link.active {
+    box-shadow: inset 3px 0 0 currentColor;
+}
+
+/* El iconito de la flecha de los desplegables */
+.sidebar-containers .nav-arrow {
+    color: rgba(203, 213, 225, .55);
+    font-size: .72rem;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3 · LOS ICONOS
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Un tamaño fijo para todos. Sin esto los iconos de Bootstrap se ven de
+   anchos distintos y el texto de cada renglón arranca en una columna
+   diferente, que es de esas cosas que molestan sin que sepas por qué.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sidebar-containers .nav-icon {
+    width: 1.6rem;
+    font-size: 1.02rem;
+    text-align: center;
+    margin-right: .35rem;
+    opacity: .95;
+}
+
+/* El icono del Panel */
+.sidebar-containers .ic-panel { color: var(--sb-panel); }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4 · EL COLOR DE CADA BLOQUE
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Una sola variable por bloque —--sb-color— y de ahí sale todo: el icono
+   de la cabecera, los iconos de los submenús y la barra del activo.
+
+   Agregar un bloque nuevo es agregar dos líneas acá abajo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sidebar-containers .bloque-comercial   { --sb-color: var(--sb-comercial); }
+.sidebar-containers .bloque-operaciones { --sb-color: var(--sb-operaciones); }
+.sidebar-containers .bloque-compras     { --sb-color: var(--sb-compras); }
+.sidebar-containers .bloque-finanzas    { --sb-color: var(--sb-finanzas); }
+.sidebar-containers .bloque-sistema     { --sb-color: var(--sb-sistema); }
+
+/* El icono de la cabecera del bloque, a todo color */
+.sidebar-containers [class*="bloque-"] > .nav-link > .nav-icon {
+    color: var(--sb-color);
+}
+
+/* Los iconos de los submenús: el mismo color, un punto más apagado */
+.sidebar-containers [class*="bloque-"] .nav-treeview .nav-icon {
+    color: var(--sb-color);
+    opacity: .78;
+}
+
+/* Al pasar por encima o al estar activo, el icono se enciende del todo */
+.sidebar-containers [class*="bloque-"] .nav-treeview .nav-link:hover .nav-icon,
+.sidebar-containers [class*="bloque-"] .nav-treeview .nav-link.active .nav-icon {
+    opacity: 1;
+}
+
+/*
+   La barra del activo toma el color del bloque.
+
+   El currentColor del punto 2 funciona, pero deja la barra blanca; esto
+   la pinta del color que corresponde. Va después a propósito: gana la
+   última regla.
+*/
+.sidebar-containers [class*="bloque-"] .nav-treeview .nav-link.active {
+    box-shadow: inset 3px 0 0 var(--sb-color);
+}
+
+/* Cuando el bloque está abierto, su cabecera se distingue */
+.sidebar-containers .menu-open > .nav-link {
+    background-color: rgba(255, 255, 255, .05);
+    color: var(--sb-texto-on);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5 · EL SUBMENÚ
+   ═══════════════════════════════════════════════════════════════════════════
+
+   La línea vertical a la izquierda es lo que dice "esto cuelga de lo de
+   arriba". Sin ella, con el menú abierto, los submenús se leen como
+   entradas sueltas del mismo nivel.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sidebar-containers .nav-treeview {
+    margin-left: 1.35rem;
+    padding-left: .25rem;
+    border-left: 1px solid var(--sb-linea);
+}
+
+.sidebar-containers .nav-treeview .nav-link {
+    font-size: .855rem;
+    padding: .42rem .65rem;
+    color: rgba(203, 213, 225, .88);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6 · CON EL MENÚ ENCOGIDO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Con la barra colapsada solo se ven los iconos. Ahí el color pasa de
+   ser un adorno a ser la única pista de en qué bloque estás, así que se
+   enciende del todo y se agranda un poco.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body.sidebar-collapse .sidebar-containers .nav-icon {
+    opacity: 1;
+    font-size: 1.15rem;
+}
+
+body.sidebar-collapse .sidebar-containers .nav-treeview {
+    border-left: 0;
+    margin-left: 0;
+}

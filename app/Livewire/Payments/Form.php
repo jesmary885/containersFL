@@ -11,6 +11,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
+use App\Livewire\Concerns\AuthorizesAccess;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -46,6 +47,19 @@ use Livewire\WithFileUploads;
 #[Layout('layouts.app')]
 class Form extends Component
 {
+    use AuthorizesAccess;
+
+    /* =====================================================================
+     | LOS PERMISOS
+     |
+     | El `can:` de la ruta impide ABRIR esta pantalla. No impide llamar
+     | a sus metodos: Livewire manda cada clic a /livewire/update, que es
+     | otra ruta y no lleva ese `can:` encima.
+     |
+     | Por eso cada metodo que cambia algo exige el permiso otra vez.
+     * ================================================================== */
+
+    protected string $permisoBase = 'payments';
     use WithFileUploads;
 
      /**
@@ -116,6 +130,8 @@ class Form extends Component
 
     public function mount(): void
     {
+        $this->exigirPermiso('create');
+
         $this->received_at        = now()->toDateString();
         $this->nuevaAuthFirmadaEl = now()->toDateString();
 
@@ -401,6 +417,13 @@ class Form extends Component
 
     public function guardar()
     {
+        /*
+         | Este formulario solo crea: no hay pantalla de editar un cobro
+         | ya registrado. Si algun dia la hay, aqui habra que distinguir
+         | entre create y update como en factura.
+         */
+        $this->exigirPermiso('create');
+
          try {
             $this->validate();
         } catch (\Illuminate\Validation\ValidationException $e) {

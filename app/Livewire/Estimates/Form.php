@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
+use App\Livewire\Concerns\AuthorizesAccess;
 use Livewire\Component;
 
 /**
@@ -66,6 +67,19 @@ use Livewire\Component;
 #[Layout('layouts.app')]
 class Form extends Component
 {
+    use AuthorizesAccess;
+
+    /* =====================================================================
+     | LOS PERMISOS
+     |
+     | El `can:` de la ruta impide ABRIR esta pantalla. No impide llamar
+     | a sus metodos: Livewire manda cada clic a /livewire/update, que es
+     | otra ruta y no lleva ese `can:` encima.
+     |
+     | Por eso cada metodo que cambia algo exige el permiso otra vez.
+     * ================================================================== */
+
+    protected string $permisoBase = 'estimates';
     /* =====================================================================
      | LOS TÉRMINOS DE PAGO
      |
@@ -347,6 +361,8 @@ class Form extends Component
          * -------------------------------------------------------------- */
         if ($estimate && $estimate->exists) {
 
+            $this->exigirPermiso('update');
+
             // Un presupuesto ya convertido en factura no se edita.
             if (! $estimate->isEditable()) {
                 session()->flash('error',
@@ -364,6 +380,8 @@ class Form extends Component
         /* -----------------------------------------------------------------
          | CASO B · UNO NUEVO
          * -------------------------------------------------------------- */
+        $this->exigirPermiso('create');
+
         $this->issue_date     = now()->toDateString();
         $this->salesperson_id = auth()->id();
 
@@ -1920,6 +1938,24 @@ class Form extends Component
      */
     public function guardar(bool $yEnviar = false, bool $procesar = false)
     {
+        /* -----------------------------------------------------------------
+         | LOS PERMISOS, ANTES DE TOCAR NADA
+         |
+         | Dos comprobaciones y no una, porque son dos actos distintos:
+         |
+         |   crear o corregir   estimates.create / estimates.update
+         |   marcarlo enviado   estimates.send
+         |
+         | El vendedor que puede cotizar no necesariamente es quien manda
+         | el documento al cliente. Separarlo cuesta dos lineas y permite
+         | que el rol lo decida.
+         * -------------------------------------------------------------- */
+        $this->exigirPermiso($this->estimateId ? 'update' : 'create');
+
+        if ($yEnviar) {
+            $this->exigirPermiso('send');
+        }
+
         // El renglón en blanco que puso el sistema no puede bloquear el
         // guardado. Ver descartarLineasVacias().
         $this->descartarLineasVacias();
