@@ -1,754 +1,1134 @@
 {{--
     ═══════════════════════════════════════════════════════════════════════
-    FORMULARIO DE FACTURA
+    FACTURA — crear y editar
     ═══════════════════════════════════════════════════════════════════════
 
-    Misma estructura que el de presupuestos —documento a la izquierda,
-    totales a la derecha— con lo propio de una factura: tipo, período de
-    servicio, método de pago esperado y depósito.
+    Mismo asistente que el presupuesto: barra de pasos arriba, tira de
+    contexto que recuerda lo ya decidido, y un solo pie con los botones
+    que aplican al paso donde estás.
+
+      1 · A QUIÉN Y CUÁNDO   cliente, fechas, términos, direcciones
+      2 · QUÉ SE LE COBRA    los renglones
+      3 · REVISAR Y EMITIR   el documento armado
+
+    ── POR QUÉ LOS RENGLONES SE EDITAN EN UN MODAL ──
+
+    Porque cada concepto pide lo suyo. Una renta no tiene cantidad —un
+    renglón es un contenedor— y un viaje de transporte necesita su fecha
+    de servicio. Una tabla con ocho columnas iguales para todos pide
+    datos que no significan nada en la mitad de los casos.
+
+    Lo que se edita en el modal es una copia. Solo al guardar se escribe
+    sobre el renglón, así "Cancelar" cancela de verdad.
 --}}
 <div>
 
-    {{-- ─────────────────────────────────────────────────────────────
-         ENCABEZADO
-    ───────────────────────────────────────────────────────────── --}}
+    {{-- ───── ENCABEZADO ───── --}}
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
 
         <div>
-            <h4 class="mb-0">
-                @if ($invoiceId)
-                    Corregir factura {{ $numero }}
-                @else
-                    Nueva factura
+            <h4 class="mb-0 fw-semibold">
+                {{ $invoiceId ? 'Editar factura' : 'Nueva factura' }}
+                @if ($numero)
+                    <span class="text-secondary fw-normal font-monospace fs-6">{{ $numero }}</span>
                 @endif
             </h4>
             <small class="text-secondary">
                 @if ($invoiceId)
-                    Los cambios se guardan al presionar el botón de abajo.
+                    Lo que se cambie aquí reemplaza el documento. Los pagos ya aplicados no se tocan.
                 @else
-                    El número se asigna al guardar y ya no se puede reutilizar.
+                    El número se asigna solo al guardar, siguiendo la secuencia de la empresa.
                 @endif
             </small>
         </div>
 
-        <a href="{{ route('finanzas.facturacion.index') }}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-1"></i> Volver al listado
-        </a>
+        <div class="d-flex align-items-center gap-2">
+            <span class="leyenda-obligatorio"><strong>*</strong> Campo obligatorio</span>
+
+            <a href="{{ $invoiceId
+                        ? route('finanzas.facturacion.show', $invoiceId)
+                        : route('finanzas.facturacion.index') }}"
+               class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Volver
+            </a>
+        </div>
 
     </div>
 
-    {{--
-        EL AVISO DE "YA SE LA MANDASTE AL CLIENTE"
+    @if (session('error'))
+        <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ session('error') }}
+        </div>
+    @endif
 
-        No bloquea nada: corregir una factura enviada es normal —el
-        cliente llama a los diez minutos diciendo que el delivery era a
-        otra dirección—. Pero quien lo haga tiene que saber que hay una
-        copia distinta circulando por ahí.
+    {{--
+        LA FACTURA YA ENVIADA
+
+        Editar un documento que el cliente ya tiene en su correo no está
+        prohibido, pero sí merece un aviso: la copia que él guarda y la
+        que queda aquí van a decir cosas distintas.
     --}}
     @if ($yaEnviada)
         <div class="alert alert-warning">
             <i class="bi bi-envelope-exclamation me-1"></i>
             <strong>Esta factura ya se le envió al cliente.</strong>
-            Si la modifica, el documento que él tiene dejará de coincidir
-            con el del sistema. Vuelva a enviársela después de guardar.
+            Si la cambia, vuelva a enviársela: la copia que él tiene seguirá diciendo lo de antes.
         </div>
     @endif
 
-    @if (session('error'))
-        <div class="alert alert-danger">{{ session('error') }}</div>
-    @endif
+    <x-ui.errores id="resumen-errores" titulo="Falta algo para poder guardar." />
 
-    {{--
-        El resumen de errores de arriba.
+    <script>
+        document.addEventListener('livewire:init', () => {
+            Livewire.on('subir-al-inicio', () => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        });
+    </script>
 
-        Livewire ya pinta el error debajo de cada campo, pero cuando el
-        formulario es largo el usuario da a "Guardar", no ve nada, y cree
-        que el botón está roto. En realidad el error está seiscientos
-        píxeles más abajo.
-    --}}
+    {{-- ───── LA BARRA DE PASOS ───── --}}
+    <div class="ps-barra">
 
-    @if ($errors->any())
-        <div class="alert alert-danger">
-            <strong><i class="bi bi-exclamation-triangle me-1"></i> Faltan datos:</strong>
-            <ul class="mb-0 mt-2">
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
+        <button type="button"
+                class="ps-paso {{ $paso === 1 ? 'ps-activo' : 'ps-hecho' }}"
+                wire:click="irAlPaso(1)">
+            <span class="ps-bolita">{{ $paso > 1 ? '✓' : '1' }}</span>
+            <span class="ps-texto">A quién y cuándo</span>
+        </button>
+
+        <span class="ps-sep"></span>
+
+        <button type="button"
+                class="ps-paso {{ $paso === 2 ? 'ps-activo' : ($paso > 2 ? 'ps-hecho' : '') }}"
+                wire:click="irAlPaso(2)">
+            <span class="ps-bolita">{{ $paso > 2 ? '✓' : '2' }}</span>
+            <span class="ps-texto">Qué se le cobra</span>
+        </button>
+
+        <span class="ps-sep"></span>
+
+        <button type="button"
+                class="ps-paso {{ $paso === 3 ? 'ps-activo' : '' }}"
+                wire:click="irAlPaso(3)">
+            <span class="ps-bolita">3</span>
+            <span class="ps-texto">Revisar y emitir</span>
+        </button>
+
+    </div>
+
+    {{-- ───── LA TIRA DE CONTEXTO ───── --}}
+    @if ($paso > 1)
+        @php $ctx = $this->resumen; @endphp
+
+        <div class="ps-tira">
+
+            <div class="ps-tira-dato">
+                <span class="ps-tira-k">Cliente</span>
+                <span class="ps-tira-v {{ $ctx['cliente'] ? '' : 'ps-falta' }}">
+                    {{ $ctx['cliente'] ?? 'Falta' }}
+                </span>
+            </div>
+
+            <span class="ps-tira-sep"></span>
+
+            <div class="ps-tira-dato">
+                <span class="ps-tira-k">Emisión</span>
+                <span class="ps-tira-v">{{ $ctx['emision'] ?? '—' }}</span>
+            </div>
+
+            <div class="ps-tira-dato">
+                <span class="ps-tira-k">Vence</span>
+                <span class="ps-tira-v">{{ $ctx['vence'] ?? '—' }}</span>
+            </div>
+
+            <span class="ps-tira-sep"></span>
+
+            <div class="ps-tira-dato">
+                <span class="ps-tira-k">Factura a</span>
+                <span class="ps-tira-v">{{ $ctx['direccion'] ?? '—' }}</span>
+            </div>
+
+            @if ($tax_exempt)
+                <span class="badge bg-success-subtle text-success">Exento de tax</span>
+            @endif
+
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+                    wire:click="irAlPaso(1)">
+                <i class="bi bi-pencil me-1"></i>Cambiar
+            </button>
+
         </div>
     @endif
 
     <form wire:submit.prevent="guardar">
-        <div class="row g-3">
 
-            {{-- ═══════════════════════════════════════════════════
-                 COLUMNA IZQUIERDA
-            ═══════════════════════════════════════════════════ --}}
-            <div class="col-12 col-xl-8">
+        {{-- ═════════════════════════════════════════════════════════
+             PASO 1 · A QUIÉN Y CUÁNDO
+        ═════════════════════════════════════════════════════════ --}}
+        @if ($paso === 1)
 
-                {{-- 1 · CLIENTE --}}
-                <div class="card mb-3">
-                    <div class="card-header">
-                        <h6 class="card-title mb-0">1 · Cliente</h6>
-                    </div>
+            <div class="card mb-3 seccion seccion-cliente">
+                <div class="card-header">
+                    <h6 class="seccion-titulo">
+                        <span class="paso-num">1</span>
+                        <i class="bi bi-person-vcard"></i>
+                        <span>A quién se le factura</span>
+                    </h6>
+                </div>
 
-                    <div class="card-body">
-                        @if ($customer_id)
-                            <div class="d-flex justify-content-between align-items-center
-                                        border rounded p-3 bg-body-tertiary">
-                                <div>
-                                    <div class="fw-semibold">{{ $clienteNombre }}</div>
+                <div class="card-body">
+
+                    @if (! $customer_id)
+
+                        {{--
+                            EL BUSCADOR
+
+                            Busca por nombre, número, teléfono, correo y por los
+                            contactos del cliente. Es normal que llamen diciendo
+                            "soy Carlos, de la constructora" sin acordarse del
+                            nombre de la empresa.
+                        --}}
+                        <label class="form-label">Cliente <span class="text-danger">*</span></label>
+
+                        <div class="input-group">
+                            <span class="input-group-text bg-body">
+                                <i class="bi bi-search text-secondary"></i>
+                            </span>
+                            <input type="search"
+                                   class="form-control @error('customer_id') is-invalid @enderror"
+                                   placeholder="Nombre, número, teléfono o un contacto…"
+                                   wire:model.live.debounce.400ms="buscarCliente">
+                        </div>
+
+                        @error('customer_id')
+                            <div class="text-danger small mt-1">{{ $message }}</div>
+                        @enderror
+
+                        @if (strlen($buscarCliente) >= 2)
+                            <div class="list-group mt-2">
+                                @forelse ($this->resultadosCliente as $c)
+                                    <button type="button"
+                                            class="list-group-item list-group-item-action"
+                                            wire:key="cli-{{ $c->id }}"
+                                            wire:click="seleccionarCliente({{ $c->id }})">
+
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <div class="fw-semibold">{{ $c->name }}</div>
+                                                <div class="small text-secondary">
+                                                    {{ $c->customer_number }}
+                                                    @if ($c->primary_phone) · {{ $c->primary_phone }} @endif
+                                                </div>
+                                            </div>
+
+                                            <div class="text-end">
+                                                @if ($c->tax_exempt)
+                                                    <span class="badge bg-success-subtle text-success">Exento</span>
+                                                @endif
+                                                @if ($c->credit_hold)
+                                                    <span class="badge bg-warning-subtle text-warning-emphasis">Retenido</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </button>
+                                @empty
+                                    <div class="list-group-item text-secondary small">
+                                        Nadie coincide con eso.
+                                        <a href="{{ route('comercial.clientes.create') }}" target="_blank">
+                                            Registrar un cliente nuevo
+                                        </a>
+                                    </div>
+                                @endforelse
+                            </div>
+                        @endif
+
+                    @else
+
+                        <div class="d-flex justify-content-between align-items-center border rounded p-3">
+                            <div>
+                                <div class="fw-semibold fs-6">{{ $clienteNombre }}</div>
+                                <div class="small text-secondary">
                                     @if ($tax_exempt)
-                                        <span class="badge text-bg-info mt-1">
-                                            <i class="bi bi-patch-check me-1"></i> Exento de impuesto
+                                        <span class="badge bg-success-subtle text-success">
+                                            Exento de impuesto
                                         </span>
+                                        Tiene certificado vigente: no se le cobra el 7%.
+                                    @else
+                                        Se le cobra el impuesto normal.
                                     @endif
                                 </div>
-
-                                <button type="button" class="btn btn-sm btn-outline-secondary"
-                                        wire:click="quitarCliente">
-                                    Cambiar
-                                </button>
-                            </div>
-                        @else
-                            <label class="form-label">Buscar cliente</label>
-
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-search"></i></span>
-                                <input type="text"
-                                       class="form-control @error('customer_id') is-invalid @enderror"
-                                       placeholder="Empresa, contacto, teléfono o número de cliente…"
-                                       wire:model.live.debounce.300ms="buscarCliente">
                             </div>
 
-                            @error('customer_id')
-                                <div class="text-danger small mt-1">{{ $message }}</div>
-                            @enderror
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    wire:click="quitarCliente">
+                                <i class="bi bi-x-lg me-1"></i> Cambiar
+                            </button>
+                        </div>
 
-                            @if ($this->resultadosCliente->isNotEmpty())
-                                <div class="list-group mt-2">
-                                    @foreach ($this->resultadosCliente as $cliente)
-                                        <button type="button"
-                                                class="list-group-item list-group-item-action"
-                                                wire:key="cliente-{{ $cliente->id }}"
-                                                wire:click="seleccionarCliente({{ $cliente->id }})">
+                    @endif
 
-                                            <div class="d-flex justify-content-between">
-                                                <span class="fw-semibold">{{ $cliente->name }}</span>
-                                                <small class="text-secondary">{{ $cliente->customer_number }}</small>
-                                            </div>
+                </div>
+            </div>
 
-                                            <small class="text-secondary">
-                                                {{ $cliente->primary_email ?: $cliente->primary_phone ?: 'Sin contacto registrado' }}
-                                            </small>
-                                        </button>
-                                    @endforeach
+            {{-- ───── FECHAS Y TÉRMINOS ───── --}}
+            <div class="card mb-3 seccion seccion-datos">
+                <div class="card-header">
+                    <h6 class="seccion-titulo">
+                        <span class="paso-num">2</span>
+                        <i class="bi bi-calendar3"></i>
+                        <span>Cuándo y bajo qué condiciones</span>
+                    </h6>
+                </div>
+
+                <div class="card-body">
+                    <div class="row g-3">
+
+                        <div class="col-12 col-md-3">
+                            <label class="form-label">Tipo <span class="text-danger">*</span></label>
+                            <select class="form-select @error('type') is-invalid @enderror"
+                                    wire:model.live="type">
+                                @foreach ($tipos as $valor => $etiqueta)
+                                    <option value="{{ $valor }}">{{ $etiqueta }}</option>
+                                @endforeach
+                            </select>
+                            @error('type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            <div class="form-text">
+                                El transporte nunca lleva impuesto en Florida.
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Emisión <span class="text-danger">*</span></label>
+                            <input type="date"
+                                   class="form-control @error('issue_date') is-invalid @enderror"
+                                   wire:model.live="issue_date">
+                            @error('issue_date') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Términos de pago</label>
+                            <input type="text"
+                                   class="form-control @error('terms') is-invalid @enderror"
+                                   placeholder="Net 30, Due on receipt..."
+                                   wire:model.live.debounce.600ms="terms">
+                            @error('terms') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            <div class="form-text">Al escribirlos se recalcula el vencimiento.</div>
+                        </div>
+
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Vence</label>
+                            <input type="date"
+                                   class="form-control @error('due_date') is-invalid @enderror"
+                                   wire:model="due_date">
+                            @error('due_date') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            <div class="form-text">Se propone según los términos.</div>
+                        </div>
+
+                        {{--
+                            EL PERÍODO DE SERVICIO
+
+                            Obligatorio en las facturas de renta. Una factura
+                            mensual que no dice qué mes cubre es una factura que
+                            el cliente no puede comprobar, y la primera que
+                            discute.
+                        --}}
+                        @if ($type === 'rental')
+                            <div class="col-12">
+                                <div class="alert alert-light border py-2 small mb-2">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Una factura de renta <strong>tiene que decir qué período cubre</strong>.
+                                    El ciclo va del día de entrega al mismo día del mes siguiente,
+                                    no del 1 al 30.
                                 </div>
-                            @elseif (strlen(trim($buscarCliente)) >= 2)
-                                <div class="text-secondary small mt-2">
-                                    No se encontró ningún cliente con ese dato.
-                                </div>
-                            @endif
+                            </div>
+
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">Período desde <span class="text-danger">*</span></label>
+                                <input type="date"
+                                       class="form-control @error('service_period_start') is-invalid @enderror"
+                                       wire:model="service_period_start">
+                                @error('service_period_start') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
+
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">Hasta <span class="text-danger">*</span></label>
+                                <input type="date"
+                                       class="form-control @error('service_period_end') is-invalid @enderror"
+                                       wire:model="service_period_end">
+                                @error('service_period_end') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
                         @endif
+
                     </div>
                 </div>
+            </div>
 
-                {{-- 2 · DATOS DEL DOCUMENTO --}}
-                <div class="card mb-3">
-                    <div class="card-header">
-                        <h6 class="card-title mb-0">2 · Datos del documento</h6>
-                    </div>
-
-                    <div class="card-body">
-                        <div class="row g-3">
-
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">Tipo de factura</label>
-                                <select class="form-select @error('type') is-invalid @enderror"
-                                        wire:model.live="type">
-                                    @foreach ($tipos as $valor => $etiqueta)
-                                        <option value="{{ $valor }}">{{ $etiqueta }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">Fecha de emisión</label>
-                                <input type="date"
-                                       class="form-control @error('issue_date') is-invalid @enderror"
-                                       wire:model.live="issue_date">
-                                @error('issue_date') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                            </div>
-
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">Términos</label>
-                                {{--
-                                    Al cambiar los términos se recalcula el
-                                    vencimiento en pantalla, para que se vea
-                                    el efecto antes de guardar.
-                                --}}
-                                <select class="form-select" wire:model.live="terms">
-                                    <option value="Due on receipt">Due on receipt</option>
-                                    <option value="Net 15">Net 15</option>
-                                    <option value="Net 30">Net 30</option>
-                                    <option value="Net 45">Net 45</option>
-                                    <option value="Net 60">Net 60</option>
-                                </select>
-                            </div>
-
-                            <div class="col-6 col-md-3">
-                                <label class="form-label">Vence</label>
-                                <input type="date"
-                                       class="form-control @error('due_date') is-invalid @enderror"
-                                       wire:model="due_date">
-                                @error('due_date') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                            </div>
-
-                            {{--
-                                EL PERÍODO DE SERVICIO (RB-023)
-
-                                Solo en las de renta, y ahí es obligatorio:
-                                el invoice tiene que decir explícitamente
-                                desde cuándo y hasta cuándo cubre.
-
-                                En las facturas de RS Transport ese dato lo
-                                metían a mano en el campo TRACKING#. Aquí
-                                tiene su propio sitio.
-                            --}}
-                            @if ($type === 'rental')
-                                <div class="col-12">
-                                    <div class="border rounded p-3 bg-body-tertiary">
-                                        <div class="fw-semibold small mb-2">
-                                            <i class="bi bi-calendar-range me-1"></i>
-                                            Período que cubre esta factura
-                                        </div>
-
-                                        <div class="row g-2">
-                                            <div class="col-6 col-md-3">
-                                                <label class="form-label small">Desde</label>
-                                                <input type="date"
-                                                       class="form-control form-control-sm @error('service_period_start') is-invalid @enderror"
-                                                       wire:model="service_period_start">
-                                                @error('service_period_start')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                @enderror
-                                            </div>
-
-                                            <div class="col-6 col-md-3">
-                                                <label class="form-label small">Hasta</label>
-                                                <input type="date"
-                                                       class="form-control form-control-sm @error('service_period_end') is-invalid @enderror"
-                                                       wire:model="service_period_end">
-                                                @error('service_period_end')
-                                                    <div class="invalid-feedback">{{ $message }}</div>
-                                                @enderror
-                                            </div>
-                                        </div>
-
-                                        <div class="form-text mt-2">
-                                            Sale impreso en la factura. Sin esto el cliente no sabe
-                                            qué mes está pagando.
-                                        </div>
-                                    </div>
-                                </div>
-                            @endif
-
-                            @if ($type === 'transport')
-                                <div class="col-12">
-                                    <div class="alert alert-info mb-0">
-                                        <i class="bi bi-truck me-1"></i>
-                                        <strong>Factura de transporte.</strong>
-                                        El transporte no lleva sales tax en Florida (RB-005),
-                                        así que las líneas se desmarcaron solas. Si en esta misma
-                                        factura va también un contenedor, márquelo a mano.
-                                    </div>
-                                </div>
-                            @endif
-
-                        </div>
-                    </div>
+            {{-- ───── LAS DIRECCIONES ───── --}}
+            <div class="card mb-3 seccion seccion-direccion">
+                <div class="card-header">
+                    <h6 class="seccion-titulo">
+                        <span class="paso-num">3</span>
+                        <i class="bi bi-geo-alt"></i>
+                        <span>Dónde se factura y dónde se entrega</span>
+                    </h6>
                 </div>
 
-                {{-- 3 · DIRECCIONES (RB-035) --}}
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6 class="card-title mb-0">3 · Direcciones</h6>
+                <div class="card-body">
 
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox"
-                                   id="envio-distinto" wire:model.live="envioDistinto">
-                            <label class="form-check-label small" for="envio-distinto">
-                                La entrega va a otra dirección
-                            </label>
-                        </div>
+                    <div class="alert alert-light border py-2 small">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Las dos se imprimen <strong>siempre</strong>, aunque sean la misma. Y quedan
+                        congeladas: si el cliente se muda el año que viene, esta factura seguirá
+                        diciendo dónde estaba hoy.
                     </div>
 
-                    <div class="card-body">
-                        <div class="row g-3">
+                    <div class="row g-3">
 
-                            <div class="{{ $envioDistinto ? 'col-md-6' : 'col-12' }}">
-                                <div class="fw-semibold small text-uppercase text-secondary mb-2">
-                                    Facturar a (BILL TO)
-                                    <span class="text-danger">*</span>
+                        <div class="col-12 col-lg-6">
+                            <div class="fw-semibold small text-secondary mb-2">
+                                <i class="bi bi-receipt me-1"></i> FACTURAR A
+                            </div>
+
+                            <div class="row g-2">
+                                <div class="col-12">
+                                    <input type="text" class="form-control form-control-sm @error('bill_to.line1') is-invalid @enderror"
+                                           placeholder="Calle y número" wire:model.blur="bill_to.line1">
+                                    @error('bill_to.line1') <div class="invalid-feedback">{{ $message }}</div> @enderror
                                 </div>
+                                <div class="col-12">
+                                    <input type="text" class="form-control form-control-sm"
+                                           placeholder="Suite, unidad (opcional)" wire:model.blur="bill_to.line2">
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <select class="form-select form-select-sm" wire:model.live="bill_to.state">
+                                        <option value="">Estado</option>
+                                        @foreach (\App\Support\UsPlaces::estadosParaSelect() as $cod => $nom)
+                                            <option value="{{ $cod }}">{{ $nom }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-12 col-md-5">
+                                    <input type="text" list="ciudades-bill" autocomplete="off"
+                                           class="form-control form-control-sm"
+                                           placeholder="Ciudad" wire:model.blur="bill_to.city">
+                                    <datalist id="ciudades-bill">
+                                        @foreach (($bill_to['state'] ?? '')
+                                            ? \App\Support\UsPlaces::ciudadesDe($bill_to['state'])
+                                            : \App\Support\UsPlaces::todasLasCiudades() as $ciu)
+                                            <option value="{{ $ciu }}"></option>
+                                        @endforeach
+                                    </datalist>
+                                </div>
+                                <div class="col-12 col-md-3">
+                                    <input type="text" class="form-control form-control-sm"
+                                           placeholder="ZIP" wire:model.blur="bill_to.zip">
+                                </div>
+                            </div>
+                        </div>
 
-                                <div class="row g-2">
-                                    <div class="col-12">
-                                        <input type="text"
-                                               class="form-control form-control-sm @error('bill_to.line1') is-invalid @enderror"
-                                               placeholder="Dirección línea 1"
-                                               wire:model="bill_to.line1">
-                                        @error('bill_to.line1')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                    <div class="col-12">
-                                        <input type="text" class="form-control form-control-sm"
-                                               placeholder="Dirección línea 2 (opcional)"
-                                               wire:model="bill_to.line2">
-                                    </div>
-                                    <div class="col-6">
-                                        <input type="text" class="form-control form-control-sm"
-                                               placeholder="Ciudad" wire:model="bill_to.city">
-                                    </div>
-                                    <div class="col-3">
-                                        <input type="text" class="form-control form-control-sm"
-                                               placeholder="FL" maxlength="2" wire:model="bill_to.state">
-                                    </div>
-                                    <div class="col-3">
-                                        <input type="text" class="form-control form-control-sm"
-                                               placeholder="ZIP" wire:model="bill_to.zip">
-                                    </div>
+                        <div class="col-12 col-lg-6">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-semibold small text-secondary">
+                                    <i class="bi bi-truck me-1"></i> ENTREGAR EN
+                                </span>
+
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox"
+                                           id="envioDistinto" wire:model.live="envioDistinto">
+                                    <label class="form-check-label small" for="envioDistinto">
+                                        Es otra dirección
+                                    </label>
                                 </div>
                             </div>
 
                             @if ($envioDistinto)
-                                <div class="col-md-6">
-                                    <div class="fw-semibold small text-uppercase text-secondary mb-2">
-                                        Entregar en (SHIP TO)
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <input type="text" class="form-control form-control-sm"
+                                               placeholder="Calle y número" wire:model.blur="ship_to.line1">
                                     </div>
-
-                                    <div class="row g-2">
-                                        <div class="col-12">
-                                            <input type="text" class="form-control form-control-sm"
-                                                   placeholder="Dirección línea 1"
-                                                   wire:model="ship_to.line1">
-                                        </div>
-                                        <div class="col-12">
-                                            <input type="text" class="form-control form-control-sm"
-                                                   placeholder="Dirección línea 2 (opcional)"
-                                                   wire:model="ship_to.line2">
-                                        </div>
-                                        <div class="col-6">
-                                            <input type="text" class="form-control form-control-sm"
-                                                   placeholder="Ciudad" wire:model="ship_to.city">
-                                        </div>
-                                        <div class="col-3">
-                                            <input type="text" class="form-control form-control-sm"
-                                                   placeholder="FL" maxlength="2" wire:model="ship_to.state">
-                                        </div>
-                                        <div class="col-3">
-                                            <input type="text" class="form-control form-control-sm"
-                                                   placeholder="ZIP" wire:model="ship_to.zip">
-                                        </div>
+                                    <div class="col-12">
+                                        <input type="text" class="form-control form-control-sm"
+                                               placeholder="Referencia (opcional)" wire:model.blur="ship_to.line2">
                                     </div>
+                                    <div class="col-12 col-md-4">
+                                        <select class="form-select form-select-sm" wire:model.live="ship_to.state">
+                                            <option value="">Estado</option>
+                                            @foreach (\App\Support\UsPlaces::estadosParaSelect() as $cod => $nom)
+                                                <option value="{{ $cod }}">{{ $nom }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-5">
+                                        <input type="text" list="ciudades-ship" autocomplete="off"
+                                               class="form-control form-control-sm"
+                                               placeholder="Ciudad" wire:model.blur="ship_to.city">
+                                        <datalist id="ciudades-ship">
+                                            @foreach (($ship_to['state'] ?? '')
+                                                ? \App\Support\UsPlaces::ciudadesDe($ship_to['state'])
+                                                : \App\Support\UsPlaces::todasLasCiudades() as $ciu)
+                                                <option value="{{ $ciu }}"></option>
+                                            @endforeach
+                                        </datalist>
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <input type="text" class="form-control form-control-sm"
+                                               placeholder="ZIP" wire:model.blur="ship_to.zip">
+                                    </div>
+                                </div>
+                            @else
+                                <div class="border rounded p-3 bg-body-tertiary small text-secondary">
+                                    <i class="bi bi-arrow-left-right me-1"></i>
+                                    Se entrega en la misma dirección de facturación.
                                 </div>
                             @endif
-
                         </div>
 
-                        <div class="form-text mt-2">
-                            Se guardan como copia del día de hoy. Si el cliente se muda el año
-                            que viene, esta factura seguirá mostrando dónde estaba hoy.
-                        </div>
                     </div>
                 </div>
-
-                {{-- 4 · LAS LÍNEAS --}}
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6 class="card-title mb-0">4 · Conceptos</h6>
-
-                        <button type="button" class="btn btn-sm btn-primary" wire:click="agregarLinea">
-                            <i class="bi bi-plus-lg me-1"></i> Agregar línea
-                        </button>
-                    </div>
-
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-sm align-middle mb-0">
-
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 160px;">Concepto</th>
-                                        <th>Descripción</th>
-                                        <th style="width: 130px;">
-                                            Fecha serv.
-                                            <i class="bi bi-info-circle text-secondary"
-                                               title="El día en que se prestó. En una factura semanal de viajes, cada línea es un día distinto."></i>
-                                        </th>
-                                        <th style="width: 70px;" class="text-end">Cant.</th>
-                                        <th style="width: 100px;" class="text-end">Precio</th>
-                                        <th style="width: 100px;" class="text-end">Importe</th>
-                                        <th style="width: 50px;" class="text-center">
-                                            Tax
-                                            <i class="bi bi-info-circle text-secondary"
-                                               title="Marcado = paga el 7%. El transporte nunca se marca (RB-005)."></i>
-                                        </th>
-                                        <th style="width: 70px;" class="text-center">
-                                            Grupo
-                                            <i class="bi bi-info-circle text-secondary"
-                                               title="Las líneas con la misma etiqueta se imprimen como un solo renglón (RB-007)."></i>
-                                        </th>
-                                        <th style="width: 40px;"></th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
-                                    {{--
-                                        wire:key es obligatorio: es cómo
-                                        Livewire sabe qué fila es cuál al
-                                        agregar o borrar del medio. Sin él,
-                                        borrar la fila 2 hace que el
-                                        contenido de la 3 aparezca en la 2.
-                                    --}}
-                                    @foreach ($lineas as $i => $linea)
-                                        <tr wire:key="linea-{{ $i }}">
-
-                                            <td>
-                                                <select class="form-select form-select-sm"
-                                                        wire:model.live="lineas.{{ $i }}.product_id">
-                                                    <option value="">— Libre —</option>
-                                                    @foreach ($productos as $producto)
-                                                        <option value="{{ $producto->id }}">
-                                                            {{ $producto->name }}
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-
-                                                @php
-                                                    $productoElegido = $productos->firstWhere('id', $linea['product_id'] ?? null);
-                                                @endphp
-
-                                                @if ($productoElegido && $productoElegido->type->requiresContainer())
-                                                    <select class="form-select form-select-sm mt-1"
-                                                            wire:model="lineas.{{ $i }}.container_id">
-                                                        <option value="">— Sin unidad asignada —</option>
-                                                        @foreach ($contenedores as $contenedor)
-                                                            <option value="{{ $contenedor->id }}">
-                                                                {{ $contenedor->full_identifier }}
-                                                                — {{ $contenedor->classification }}
-                                                            </option>
-                                                        @endforeach
-                                                    </select>
-                                                @endif
-                                            </td>
-
-                                            <td>
-                                                <input type="text"
-                                                       class="form-control form-control-sm @error('lineas.'.$i.'.description') is-invalid @enderror"
-                                                       placeholder="Lo que va a leer el cliente"
-                                                       wire:model.blur="lineas.{{ $i }}.description">
-                                            </td>
-
-                                            <td>
-                                                <input type="date"
-                                                       class="form-control form-control-sm"
-                                                       wire:model="lineas.{{ $i }}.service_date">
-                                            </td>
-
-                                            <td>
-                                                <input type="number" step="0.01" min="0.01"
-                                                       class="form-control form-control-sm text-end @error('lineas.'.$i.'.quantity') is-invalid @enderror"
-                                                       wire:model.live.debounce.500ms="lineas.{{ $i }}.quantity">
-                                            </td>
-
-                                            <td>
-                                                <input type="number" step="0.01" min="0"
-                                                       class="form-control form-control-sm text-end @error('lineas.'.$i.'.unit_price') is-invalid @enderror"
-                                                       wire:model.live.debounce.500ms="lineas.{{ $i }}.unit_price">
-                                            </td>
-
-                                            {{-- Calculado, no se escribe --}}
-                                            <td class="text-end fw-semibold">
-                                                ${{ number_format($this->importeLinea($i), 2) }}
-                                            </td>
-
-                                            <td class="text-center">
-                                                <input type="checkbox" class="form-check-input"
-                                                       wire:model.live="lineas.{{ $i }}.taxable">
-                                            </td>
-
-                                            <td>
-                                                <input type="text" maxlength="20"
-                                                       class="form-control form-control-sm text-center"
-                                                       placeholder="—"
-                                                       wire:model.live.debounce.600ms="lineas.{{ $i }}.grupo">
-                                            </td>
-
-                                            <td class="text-center">
-                                                <button type="button"
-                                                        class="btn btn-sm btn-outline-danger border-0"
-                                                        wire:click="quitarLinea({{ $i }})"
-                                                        title="Quitar línea">
-                                                    <i class="bi bi-x-lg"></i>
-                                                </button>
-                                            </td>
-
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-
-                            </table>
-                        </div>
-                    </div>
-
-                    {{-- LOS TEXTOS DE LOS GRUPOS --}}
-                    @if (count($grupos) > 0)
-                        <div class="card-footer bg-body-tertiary">
-                            <div class="fw-semibold small mb-2">
-                                <i class="bi bi-collection me-1"></i>
-                                Cómo se imprime cada grupo
-                            </div>
-
-                            <p class="text-secondary small">
-                                Estas líneas se suman en un solo renglón para el cliente, pero
-                                por dentro cada una conserva si paga impuesto. Es lo que permite
-                                mostrar un precio consolidado y aun así cobrar el 7% solo sobre
-                                el contenedor.
-                            </p>
-
-                            @foreach ($grupos as $grupo)
-                                <div class="input-group input-group-sm mb-2" wire:key="grupo-{{ $grupo }}">
-                                    <span class="input-group-text" style="min-width: 90px;">
-                                        Grupo {{ $grupo }}
-                                    </span>
-                                    <input type="text" class="form-control"
-                                           placeholder="Ej: Contenedor 40HC entregado en Homestead"
-                                           wire:model.blur="gruposDescripcion.{{ $grupo }}">
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-
-                {{-- 5 · NOTAS --}}
-                <div class="card mb-3">
-                    <div class="card-header">
-                        <h6 class="card-title mb-0">5 · Notas</h6>
-                    </div>
-
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Notas del documento</label>
-                                <textarea class="form-control" rows="3"
-                                          placeholder="Aparecen impresas en la factura."
-                                          wire:model="notes"></textarea>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Condiciones al pie</label>
-                                <textarea class="form-control" rows="3"
-                                          placeholder="Si se deja vacío se usan las de la empresa."
-                                          wire:model="footer_terms"></textarea>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
             </div>
 
-            {{-- ═══════════════════════════════════════════════════
-                 COLUMNA DERECHA · TOTALES
-            ═══════════════════════════════════════════════════ --}}
-            <div class="col-12 col-xl-4">
-                <div class="position-sticky" style="top: 1rem;">
+        @endif
 
-                    <div class="card mb-3">
+        {{-- ═════════════════════════════════════════════════════════
+             PASO 2 · QUÉ SE LE COBRA
+        ═════════════════════════════════════════════════════════ --}}
+        @if ($paso === 2)
+
+            <div class="card mb-3 seccion seccion-lineas">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="seccion-titulo mb-0">
+                        <span class="paso-num">4</span>
+                        <i class="bi bi-list-ul"></i>
+                        <span>Qué se le cobra</span>
+                    </h6>
+
+                    <button type="button" class="btn btn-sm btn-primary" wire:click="agregarLinea">
+                        <i class="bi bi-plus-lg me-1"></i> Agregar concepto
+                    </button>
+                </div>
+
+                <div class="card-body">
+
+                    @error('lineas')
+                        <div class="alert alert-danger py-2 small">{{ $message }}</div>
+                    @enderror
+
+                    @if (empty(array_filter($lineas, fn ($l) => filled($l['description'] ?? null))))
+                        <div class="text-center py-4 text-secondary">
+                            <i class="bi bi-receipt fs-3 d-block mb-2 opacity-50"></i>
+                            <div class="small">
+                                Todavía no hay nada que cobrar. Agregue el primer concepto.
+                            </div>
+                        </div>
+                    @endif
+
+                    {{--
+                        AGRUPAR
+
+                        Se marcan dos o más renglones y se pulsa el botón. La
+                        letra la pone el sistema, y la descripción del grupo se
+                        toma del renglón más caro: si se agrupan un contenedor de
+                        $2.400 y su entrega de $150, el cliente tiene que leer
+                        "contenedor", no "entrega".
+                    --}}
+                    @if (count(array_filter($seleccionadas)) > 0)
+                        <div class="alert alert-info py-2 d-flex justify-content-between align-items-center">
+                            <span class="small">
+                                <i class="bi bi-check2-square me-1"></i>
+                                {{ count(array_filter($seleccionadas)) }} renglones marcados
+                            </span>
+                            <button type="button" class="btn btn-sm btn-primary"
+                                    wire:click="agruparSeleccionadas">
+                                <i class="bi bi-boxes me-1"></i> Agruparlos como uno solo
+                            </button>
+                        </div>
+                    @endif
+
+                    @if ($avisoAgrupar)
+                        <div class="alert alert-warning py-2 small">
+                            <i class="bi bi-exclamation-triangle me-1"></i> {{ $avisoAgrupar }}
+                        </div>
+                    @endif
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+
+                            <thead>
+                                <tr>
+                                    <th style="width: 36px;"></th>
+                                    <th>Concepto</th>
+                                    <th class="text-end" style="width: 90px;">Cant.</th>
+                                    <th class="text-end" style="width: 130px;">Precio</th>
+                                    <th class="text-center" style="width: 80px;">Tax</th>
+                                    <th class="text-end" style="width: 130px;">Importe</th>
+                                    <th class="text-end" style="width: 110px;"></th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                            @foreach ($lineas as $i => $linea)
+
+                                @continue (blank($linea['description'] ?? null) && ! $linea['product_id'])
+
+                                <tr wire:key="lin-{{ $i }}">
+
+                                    <td>
+                                        <input type="checkbox" class="form-check-input"
+                                               value="{{ $i }}"
+                                               wire:model.live="seleccionadas.{{ $i }}"
+                                               title="Marcar para agrupar con otros">
+                                    </td>
+
+                                    <td>
+                                        <div class="fw-medium">{{ $linea['description'] ?: '—' }}</div>
+
+                                        <div class="small text-secondary">
+                                            @if ($linea['service_date'])
+                                                <i class="bi bi-calendar3"></i>
+                                                {{ \Carbon\Carbon::parse($linea['service_date'])->format('d/m/Y') }}
+                                            @endif
+
+                                            @if ($linea['grupo'])
+                                                <span class="badge bg-primary-subtle text-primary">
+                                                    <i class="bi bi-boxes"></i> Grupo {{ $linea['grupo'] }}
+                                                </span>
+                                                <button type="button"
+                                                        class="btn btn-link btn-sm p-0 align-baseline text-secondary"
+                                                        wire:click="desagrupar('{{ $linea['grupo'] }}')"
+                                                        title="Deshacer este grupo">deshacer</button>
+                                            @endif
+                                        </div>
+                                    </td>
+
+                                    <td class="text-end">{{ rtrim(rtrim(number_format((float) $linea['quantity'], 2), '0'), '.') }}</td>
+
+                                    <td class="text-end monto">${{ number_format((float) $linea['unit_price'], 2) }}</td>
+
+                                    <td class="text-center">
+                                        @if ($linea['taxable'])
+                                            <i class="bi bi-check-circle-fill text-success" title="Paga impuesto"></i>
+                                        @else
+                                            <span class="text-secondary" title="No paga impuesto">—</span>
+                                        @endif
+                                    </td>
+
+                                    <td class="text-end fw-semibold monto">
+                                        ${{ number_format($this->importeLinea($i), 2) }}
+                                    </td>
+
+                                    <td class="text-end">
+                                        <div class="acciones">
+                                            <button type="button" class="acc acc-editar"
+                                                    wire:click="abrirLinea({{ $i }})" title="Editar">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button type="button" class="acc acc-borrar acc-separado"
+                                                    wire:click="quitarLinea({{ $i }})" title="Quitar">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+
+                                </tr>
+
+                            @endforeach
+                            </tbody>
+
+                        </table>
+                    </div>
+
+                    <div class="form-text mt-2">
+                        <i class="bi bi-check2-square me-1"></i>
+                        Marque dos o más renglones para <strong>imprimirlos como uno solo</strong>.
+                        Es lo que se hace con un contenedor y su entrega: el cliente ve un precio
+                        consolidado y el sistema sigue aplicando el impuesto solo a lo que
+                        corresponde.
+                    </div>
+
+                    <div class="form-text">
+                        <i class="bi bi-lightbulb me-1"></i>
+                        El <strong>transporte no paga impuesto</strong> en Florida. El contenedor sí.
+                        Por eso cada renglón lleva su propia marca de tax y no una sola para toda la
+                        factura.
+                    </div>
+
+                </div>
+            </div>
+
+            {{-- El total, mientras se cargan renglones --}}
+            <div class="card mb-3">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-secondary small">
+                            {{ count($lineas) }} {{ count($lineas) === 1 ? 'renglón' : 'renglones' }}
+                        </span>
+                        <span class="fs-5 fw-semibold monto">
+                            ${{ number_format($this->totales['total'], 2) }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+        @endif
+
+        {{-- ═════════════════════════════════════════════════════════
+             PASO 3 · REVISAR Y EMITIR
+        ═════════════════════════════════════════════════════════ --}}
+        @if ($paso === 3)
+
+            @php $t = $this->totales; @endphp
+
+            <div class="row g-3">
+
+                <div class="col-12 col-xl-7">
+
+                    {{-- ───── EL DOCUMENTO ───── --}}
+                    <div class="card mb-3 seccion seccion-entrega">
                         <div class="card-header">
-                            <h6 class="card-title mb-0">Totales</h6>
+                            <h6 class="seccion-titulo mb-0">
+                                <span class="paso-num">5</span>
+                                <i class="bi bi-eye"></i>
+                                <span>Así la va a ver el cliente</span>
+                            </h6>
+                        </div>
+
+                        <div class="card-body">
+
+                            <div class="row g-3 mb-3 small">
+                                <div class="col-6">
+                                    <div class="text-secondary">FACTURAR A</div>
+                                    <div class="fw-semibold">{{ $clienteNombre }}</div>
+                                    <div>{{ $bill_to['line1'] }}</div>
+                                    @if ($bill_to['line2'])<div>{{ $bill_to['line2'] }}</div>@endif
+                                    <div>
+                                        {{ collect([$bill_to['city'], $bill_to['state']])->filter()->implode(', ') }}
+                                        {{ $bill_to['zip'] }}
+                                    </div>
+                                </div>
+
+                                <div class="col-6">
+                                    <div class="text-secondary">ENTREGAR EN</div>
+                                    @if ($envioDistinto)
+                                        <div>{{ $ship_to['line1'] }}</div>
+                                        @if ($ship_to['line2'])<div>{{ $ship_to['line2'] }}</div>@endif
+                                        <div>
+                                            {{ collect([$ship_to['city'], $ship_to['state']])->filter()->implode(', ') }}
+                                            {{ $ship_to['zip'] }}
+                                        </div>
+                                    @else
+                                        <div class="text-secondary fst-italic">La misma de facturación</div>
+                                    @endif
+                                </div>
+                            </div>
+
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Concepto</th>
+                                        <th class="text-end">Cant.</th>
+                                        <th class="text-end">Precio</th>
+                                        <th class="text-end">Importe</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                @foreach ($lineas as $i => $linea)
+                                    @continue (blank($linea['description'] ?? null))
+                                    <tr wire:key="rev-{{ $i }}">
+                                        <td>
+                                            {{ $linea['description'] }}
+                                            @unless ($linea['taxable'])
+                                                <span class="badge bg-light text-secondary border">sin tax</span>
+                                            @endunless
+                                        </td>
+                                        <td class="text-end">{{ rtrim(rtrim(number_format((float) $linea['quantity'], 2), '0'), '.') }}</td>
+                                        <td class="text-end monto">${{ number_format((float) $linea['unit_price'], 2) }}</td>
+                                        <td class="text-end monto">${{ number_format($this->importeLinea($i), 2) }}</td>
+                                    </tr>
+                                @endforeach
+                                </tbody>
+                            </table>
+
+                        </div>
+                    </div>
+
+                    {{-- ───── TEXTOS ───── --}}
+                    <div class="card mb-3 seccion seccion-notas">
+                        <div class="card-header">
+                            <h6 class="seccion-titulo mb-0">
+                                <i class="bi bi-chat-left-text"></i>
+                                <span>Lo que se escribe en el documento</span>
+                            </h6>
+                        </div>
+                        <div class="card-body">
+
+                            <div class="mb-3">
+                                <label class="form-label">Nota para el cliente</label>
+                                <textarea class="form-control" rows="2"
+                                          placeholder="Sale impresa en la factura."
+                                          wire:model.blur="notes"></textarea>
+                            </div>
+
+                            <div>
+                                <label class="form-label">Términos del pie</label>
+                                <textarea class="form-control" rows="2"
+                                          wire:model.blur="footer_terms"></textarea>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+
+                {{-- ───── LOS NÚMEROS ───── --}}
+                <div class="col-12 col-xl-5">
+
+                    <div class="card mb-3 seccion seccion-datos">
+                        <div class="card-header">
+                            <h6 class="seccion-titulo mb-0">
+                                <span class="paso-num">6</span>
+                                <i class="bi bi-calculator"></i>
+                                <span>Las cuentas</span>
+                            </h6>
                         </div>
 
                         <div class="card-body">
 
                             <div class="row g-2 mb-3">
 
-                                <div class="col-12">
-                                    <label class="form-label small">Método de pago esperado</label>
-                                    <select class="form-select form-select-sm"
-                                            wire:model.live="expected_payment_method">
-                                        <option value="">— Sin definir —</option>
+                                <div class="col-6">
+                                    <label class="form-label small">Descuento</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" step="0.01"
+                                               class="form-control @error('discount_amount') is-invalid @enderror"
+                                               wire:model.live.debounce.500ms="discount_amount">
+                                    </div>
+                                </div>
+
+                                <div class="col-6">
+                                    <label class="form-label small">Anticipo aplicado</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" step="0.01"
+                                               class="form-control @error('deposit_applied') is-invalid @enderror"
+                                               wire:model.live.debounce.500ms="deposit_applied">
+                                    </div>
+                                </div>
+
+                                <div class="col-6">
+                                    <label class="form-label small">Tasa de impuesto</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="0.01"
+                                               class="form-control @error('tax_rate') is-invalid @enderror"
+                                               wire:model.live.debounce.500ms="tax_rate"
+                                               @disabled($tax_exempt)>
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                    @if ($tax_exempt)
+                                        <div class="form-text text-success">
+                                            Cliente exento: no se cobra.
+                                        </div>
+                                    @endif
+                                </div>
+
+                                <div class="col-6">
+                                    <label class="form-label small">Cómo va a pagar</label>
+                                    <select class="form-select form-select-sm" wire:model.live="expected_payment_method">
+                                        <option value="">Sin decidir</option>
                                         @foreach ($metodosDePago as $valor => $etiqueta)
                                             <option value="{{ $valor }}">{{ $etiqueta }}</option>
                                         @endforeach
                                     </select>
-                                    <div class="form-text">
-                                        Al elegir tarjeta entra el recargo del
-                                        {{ number_format($credit_card_fee_percent ?: 3.5, 2) }}% (RB-009).
-                                    </div>
-                                </div>
-
-                                <div class="col-6">
-                                    <label class="form-label small">Descuento ($)</label>
-                                    <input type="number" step="0.01" min="0"
-                                           class="form-control form-control-sm text-end"
-                                           wire:model.live.debounce.500ms="discount_amount">
-                                </div>
-
-                                <div class="col-6">
-                                    <label class="form-label small">Sales tax (%)</label>
-                                    <input type="number" step="0.01" min="0" max="100"
-                                           class="form-control form-control-sm text-end"
-                                           wire:model.live.debounce.500ms="tax_rate"
-                                           @disabled($tax_exempt)>
-                                </div>
-
-                                <div class="col-12">
-                                    <label class="form-label small">
-                                        Depósito aplicado ($)
-                                        <i class="bi bi-info-circle text-secondary"
-                                           title="El anticipo que el cliente ya entregó y se le descuenta del total."></i>
-                                    </label>
-                                    <input type="number" step="0.01" min="0"
-                                           class="form-control form-control-sm text-end"
-                                           wire:model.live.debounce.500ms="deposit_applied">
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox"
-                                               id="exento" wire:model.live="tax_exempt">
-                                        <label class="form-check-label small" for="exento">
-                                            Cliente exento de impuesto
-                                        </label>
-                                    </div>
                                 </div>
 
                             </div>
-
-                            <hr>
-
-                            <div class="d-flex justify-content-between mb-1">
-                                <span class="text-secondary">Subtotal</span>
-                                <span>${{ number_format($this->totales['subtotal'], 2) }}</span>
-                            </div>
-
-                            @if ($this->totales['discount_amount'] > 0)
-                                <div class="d-flex justify-content-between mb-1 text-danger">
-                                    <span>Descuento</span>
-                                    <span>−${{ number_format($this->totales['discount_amount'], 2) }}</span>
-                                </div>
-                            @endif
 
                             {{--
-                                El renglón que más preguntas evita: sobre qué
-                                monto se calculó el 7%, que casi nunca es el
-                                total.
+                                EL RECARGO DE TARJETA
+
+                                Aparece solo si se eligió tarjeta. Y con el aviso
+                                del formulario firmado, porque ese papel es el
+                                único que protege a la empresa si después el dueño
+                                de la tarjeta reclama el cargo al banco.
                             --}}
-                            <div class="d-flex justify-content-between mb-1 small text-secondary">
-                                <span>Base gravable</span>
-                                <span>${{ number_format($this->totales['taxable_base'], 2) }}</span>
-                            </div>
-
-                            @if ($this->totales['non_taxable_base'] > 0)
-                                <div class="d-flex justify-content-between mb-1 small text-secondary">
-                                    <span>No gravable (transporte)</span>
-                                    <span>${{ number_format($this->totales['non_taxable_base'], 2) }}</span>
+                            @if ($credit_card_fee_percent > 0)
+                                <div class="alert alert-warning py-2 small">
+                                    <i class="bi bi-credit-card me-1"></i>
+                                    <strong>Recargo de tarjeta del {{ rtrim(rtrim(number_format($credit_card_fee_percent, 2), '0'), '.') }}%.</strong>
+                                    No se cobra hasta tener el formulario de autorización
+                                    <strong>firmado</strong> por el cliente.
                                 </div>
                             @endif
 
-                            <div class="d-flex justify-content-between mb-1">
-                                <span class="text-secondary">
-                                    Sales tax ({{ number_format($tax_exempt ? 0 : $tax_rate, 2) }}%)
-                                </span>
-                                <span>${{ number_format($this->totales['tax_amount'], 2) }}</span>
-                            </div>
+                            {{-- ───── EL DESGLOSE ───── --}}
+                            <table class="table table-sm mb-0">
+                                <tbody>
+                                    <tr>
+                                        <td class="text-secondary">Subtotal</td>
+                                        <td class="text-end monto">${{ number_format($t['subtotal'], 2) }}</td>
+                                    </tr>
 
-                            @if ($this->totales['credit_card_fee'] > 0)
-                                <div class="d-flex justify-content-between mb-1">
-                                    <span class="text-secondary">
-                                        Credit card fee ({{ number_format($credit_card_fee_percent, 2) }}%)
-                                    </span>
-                                    <span>${{ number_format($this->totales['credit_card_fee'], 2) }}</span>
-                                </div>
-                            @endif
+                                    @if ($t['discount_amount'] > 0)
+                                        <tr>
+                                            <td class="text-secondary">Descuento</td>
+                                            <td class="text-end monto text-danger">
+                                                −${{ number_format($t['discount_amount'], 2) }}
+                                            </td>
+                                        </tr>
+                                    @endif
 
-                            @if ($this->totales['deposit_applied'] > 0)
-                                <div class="d-flex justify-content-between mb-1 text-success">
-                                    <span>Depósito aplicado</span>
-                                    <span>−${{ number_format($this->totales['deposit_applied'], 2) }}</span>
-                                </div>
-                            @endif
+                                    <tr>
+                                        <td class="text-secondary">
+                                            Impuesto
+                                            @if ($t['taxable_base'] > 0)
+                                                <div class="small">
+                                                    sobre ${{ number_format($t['taxable_base'], 2) }}
+                                                    @if ($t['non_taxable_base'] > 0)
+                                                        · ${{ number_format($t['non_taxable_base'], 2) }} no paga
+                                                    @endif
+                                                </div>
+                                            @endif
+                                        </td>
+                                        <td class="text-end monto">${{ number_format($t['tax_amount'], 2) }}</td>
+                                    </tr>
 
-                            <hr>
+                                    @if ($t['credit_card_fee'] > 0)
+                                        <tr>
+                                            <td class="text-secondary">Recargo de tarjeta</td>
+                                            <td class="text-end monto">${{ number_format($t['credit_card_fee'], 2) }}</td>
+                                        </tr>
+                                    @endif
 
-                            <div class="d-flex justify-content-between fs-5 fw-semibold">
-                                <span>Total</span>
-                                <span>${{ number_format($this->totales['total'], 2) }}</span>
-                            </div>
+                                    @if ($t['deposit_applied'] > 0)
+                                        <tr>
+                                            <td class="text-secondary">Anticipo</td>
+                                            <td class="text-end monto text-danger">
+                                                −${{ number_format($t['deposit_applied'], 2) }}
+                                            </td>
+                                        </tr>
+                                    @endif
 
-                            @if ($tax_exempt)
-                                <div class="alert alert-info small mt-3 mb-0">
-                                    <i class="bi bi-patch-check me-1"></i>
-                                    Al guardar se buscará el certificado de exención vigente del
-                                    cliente y quedará adjunto como respaldo ante el estado.
-                                </div>
-                            @endif
-
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-body d-grid gap-2">
-
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-save me-1"></i>
-                                @if ($invoiceId) Guardar cambios @else Emitir factura @endif
-                            </button>
-
-                             <x-ui.errores class="small mb-1 py-2" />
-
-                            <div class="leyenda-obligatorio align-self-start mb-1">
-                                <strong>*</strong> Campo obligatorio
-                            </div>
-
-                            <button type="button" class="btn btn-success" wire:click="guardar(true)">
-                                <i class="bi bi-send me-1"></i>
-                                Guardar y marcar como enviada
-                            </button>
-
-                            <a href="{{ route('finanzas.facturacion.index') }}"
-                               class="btn btn-outline-secondary">
-                                Cancelar
-                            </a>
-
-                            @unless ($invoiceId)
-                                <div class="text-secondary small text-center pt-1">
-                                    Al guardar se consume un número de la secuencia,
-                                    aunque después la factura se anule.
-                                </div>
-                            @endunless
-
-                            {{--
-                                wire:loading muestra esto SOLO mientras el
-                                servidor trabaja. Es la diferencia entre "no
-                                pasó nada" y "está guardando": sin esto el
-                                usuario vuelve a darle al botón, y en una
-                                factura eso puede significar dos números
-                                consumidos.
-                            --}}
-                            <div wire:loading class="text-center text-secondary small pt-2">
-                                <span class="spinner-border spinner-border-sm me-1"></span>
-                                Guardando…
-                            </div>
+                                    <tr class="fw-bold border-top fs-5">
+                                        <td>TOTAL</td>
+                                        <td class="text-end monto">${{ number_format($t['total'], 2) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
 
                         </div>
                     </div>
 
                 </div>
+
+            </div>
+
+        @endif
+
+        {{-- ───── EL PIE ───── --}}
+        <div class="ps-pie">
+
+            <div>
+                @if ($paso > 1)
+                    <button type="button" class="btn btn-outline-secondary" wire:click="pasoAnterior">
+                        <i class="bi bi-arrow-left me-1"></i> Atrás
+                    </button>
+                @else
+                    <a href="{{ $invoiceId
+                                ? route('finanzas.facturacion.show', $invoiceId)
+                                : route('finanzas.facturacion.index') }}"
+                       class="btn btn-outline-secondary">Cancelar</a>
+                @endif
+            </div>
+
+            <div class="ps-pie-medio">
+                @if ($errors->any())
+                    <span class="text-danger fw-semibold">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        {{ $errors->count() === 1 ? 'Falta 1 dato' : 'Faltan '.$errors->count().' datos' }}
+                    </span>
+                @else
+                    Paso {{ $paso }} de {{ \App\Livewire\Invoices\Form::PASOS }}
+                @endif
+
+                <div wire:loading wire:target="guardar">
+                    <span class="spinner-border spinner-border-sm me-1"></span> Guardando...
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+
+                @if ($paso < \App\Livewire\Invoices\Form::PASOS)
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="bi bi-save me-1"></i> Guardar borrador
+                    </button>
+
+                    <button type="button" class="btn btn-primary" wire:click="siguientePaso">
+                        Siguiente <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                @else
+                    <button type="submit" class="btn btn-outline-success" wire:loading.attr="disabled">
+                        <i class="bi bi-save me-1"></i> Guardar sin enviar
+                    </button>
+
+                    <button type="button" class="btn btn-success"
+                            wire:click="guardar(true)" wire:loading.attr="disabled">
+                        <i class="bi bi-send me-1"></i> Guardar y marcar enviada
+                    </button>
+                @endif
+
             </div>
 
         </div>
+
     </form>
+
+    {{-- ═════════════════════════════════════════════════════════════
+         EL EDITOR DE RENGLONES
+
+         Dibujado a mano y no con el JavaScript de Bootstrap. Livewire
+         repinta este pedazo cada vez que algo cambia, y un modal abierto
+         por JavaScript se queda colgado: el fondo gris pegado y los
+         clics bloqueados.
+    ═════════════════════════════════════════════════════════════ --}}
+    @if ($lineaEditando !== null)
+        <div class="modal fade show d-block" tabindex="-1" style="background: rgba(15,23,42,.55);">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            {{ $borradorEsNuevo ? 'Agregar concepto' : 'Editar concepto' }}
+                        </h5>
+                        <button type="button" class="btn-close" wire:click="cancelarLinea"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div class="row g-3">
+
+                            {{--
+                                EL CONCEPTO VA PRIMERO
+
+                                Elegirlo precarga el precio, si lleva impuesto y
+                                el texto que lee el cliente. Todo lo de abajo
+                                queda ya relleno y solo hay que ajustar.
+                            --}}
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Concepto</label>
+                                <select class="form-select" wire:model.live="borrador.product_id">
+                                    <option value="">— Escribir uno libre —</option>
+                                    @foreach ($productos as $p)
+                                        <option value="{{ $p->id }}">{{ $p->name }}</option>
+                                    @endforeach
+                                </select>
+                                <div class="form-text">
+                                    Al elegirlo se precargan precio, impuesto y descripción.
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Unidad</label>
+                                <select class="form-select" wire:model="borrador.container_id">
+                                    <option value="">— Ninguna —</option>
+                                    @foreach ($contenedores as $c)
+                                        <option value="{{ $c->id }}">
+                                            {{ $c->full_identifier }} · {{ $c->size?->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <div class="form-text">
+                                    Solo las disponibles: no se factura lo que no está en yarda.
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label">
+                                    Qué se le cobra <span class="text-danger">*</span>
+                                </label>
+                                <textarea class="form-control @error('borrador.description') is-invalid @enderror"
+                                          rows="2"
+                                          placeholder="El texto que el cliente va a leer en la factura"
+                                          wire:model="borrador.description"></textarea>
+                                @error('borrador.description')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label">Cantidad <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01"
+                                       class="form-control @error('borrador.quantity') is-invalid @enderror"
+                                       wire:model.live.debounce.400ms="borrador.quantity">
+                                @error('borrador.quantity')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label">Precio <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" step="0.01"
+                                           class="form-control @error('borrador.unit_price') is-invalid @enderror"
+                                           wire:model.live.debounce.400ms="borrador.unit_price">
+                                </div>
+                                @error('borrador.unit_price')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                                <div class="form-text">
+                                    Sale solo de la unidad elegida. Cámbielo si se negoció otro.
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-md-4">
+                                <label class="form-label">Fecha del servicio</label>
+                                <input type="date" class="form-control" wire:model="borrador.service_date">
+                                <div class="form-text">
+                                    Para el transporte: cada viaje es un día.
+                                </div>
+                            </div>
+
+
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox"
+                                           id="borradorTaxable" wire:model="borrador.taxable">
+                                    <label class="form-check-label" for="borradorTaxable">
+                                        Este renglón paga impuesto
+                                    </label>
+                                </div>
+                                <div class="form-text">
+                                    El contenedor sí. El transporte <strong>nunca</strong>: en Florida
+                                    el flete no paga sales tax.
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="rn-desglose">
+                                    <div class="rn-dg">
+                                        <span class="rn-dg-k">Importe de este renglón</span>
+                                        <span class="rn-dg-v">${{ number_format($this->importeBorrador, 2) }}</span>
+                                        <span class="rn-dg-n">Cantidad × precio</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" wire:click="cancelarLinea">
+                            Cancelar
+                        </button>
+                        <button type="button" class="btn btn-primary" wire:click="guardarLinea">
+                            <i class="bi bi-check-lg me-1"></i>
+                            {{ $borradorEsNuevo ? 'Agregar' : 'Guardar cambios' }}
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    @endif
 
 </div>

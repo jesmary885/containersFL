@@ -1,0 +1,349 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   AJUSTES
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Dos cosas que no caben ni en sistema.css ni en sidebar.css:
+
+     1 · LA BARRA DE ARRIBA
+     2 · EL ARREGLO DEL HOVER DE LOS BOTONES DE PASO
+
+   Se importa DESPUÉS de sistema.css a propósito. El punto 2 corrige una
+   regla que vive allá, y en CSS gana la última que se lee cuando las dos
+   pesan lo mismo. Poner esto antes no arreglaría nada.
+
+   ── POR QUÉ NO SE EDITÓ sistema.css DIRECTAMENTE ──
+
+   Porque son 2.058 líneas donde vive el diseño de todas las pantallas,
+   incluido todo el módulo de presupuestos, que está terminado y no se
+   toca. Mandar ese archivo entero para cambiar cuatro reglas es la clase
+   de cosa que pisa un ajuste que hiciste tú y nadie se entera hasta
+   dentro de dos semanas.
+
+   Un archivo nuevo no puede pisar nada.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1 · LA BARRA DE ARRIBA
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Estaba en el gris de fábrica: tres enlaces apagados en una barra
+   blanca, todos con el mismo peso. No se sabía cuál miraba uno.
+
+   Ahora hay una jerarquía, y no es estética: es de riesgo.
+
+     EMPRESA   lo más llamativo de la barra. Desde que el login dejó de
+               preguntarla, esta pastilla es lo único que dice en cuál
+               estás, y facturar desde la empresa equivocada es el error
+               más caro del sistema.
+
+     USUARIO   un círculo con la inicial. Poco peso, se lee sin leer.
+
+     IDIOMA    lo más apagado. Se toca una vez cada tres meses.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.barra-superior {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+/* El botón de abrir y cerrar el menú */
+.bs-hamburguesa {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: .55rem;
+    color: var(--sys-mute);
+    font-size: 1.2rem;
+    transition: background-color .14s ease, color .14s ease;
+}
+
+.bs-hamburguesa:hover {
+    background: var(--sys-mute-soft);
+    color: var(--sys-ink);
+}
+
+
+/* ── LA PASTILLA DE LA EMPRESA ───────────────────────────────────────────
+   El color entra por una variable que pone el Blade desde
+   companies.brand_color. Cambiar el color de una empresa en la base
+   cambia esta pastilla sin tocar una línea de CSS.
+   ────────────────────────────────────────────────────────────────────── */
+
+.bs-empresa {
+    --bs-empresa-color: #334155;
+
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .3rem .35rem .3rem .3rem;
+    border-radius: 999px;
+    background: var(--bs-empresa-color);
+    color: #fff !important;
+    text-decoration: none;
+    font-size: .84rem;
+    line-height: 1;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .12);
+    transition: filter .14s ease, transform .14s ease;
+}
+
+a.bs-empresa:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+}
+
+/* La que no se puede cambiar no se comporta como un botón */
+.bs-empresa-fija { cursor: default; }
+
+.bs-empresa-codigo {
+    display: inline-flex;
+    align-items: center;
+    padding: .28rem .6rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .22);
+    font-weight: 700;
+    letter-spacing: .03em;
+    font-size: .78rem;
+}
+
+.bs-empresa-nombre {
+    font-weight: 600;
+    white-space: nowrap;
+    padding-right: .25rem;
+}
+
+.bs-chevron {
+    font-size: .7rem;
+    opacity: .8;
+    padding-right: .4rem;
+}
+
+
+/* ── EL DESPLEGABLE DE EMPRESAS ── */
+
+.bs-opcion-empresa {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .6rem .9rem;
+}
+
+.bs-opcion-empresa.activa,
+.bs-opcion-empresa:disabled {
+    background: var(--sys-mute-soft);
+    opacity: 1;
+}
+
+.bs-opcion-chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    padding: .3rem .5rem;
+    border-radius: .45rem;
+    color: #fff;
+    font-size: .72rem;
+    font-weight: 700;
+}
+
+.bs-opcion-texto { flex: 1 1 auto; min-width: 0; text-align: left; }
+
+.bs-opcion-nombre {
+    display: block;
+    font-size: .86rem;
+    font-weight: 600;
+    color: var(--sys-ink);
+}
+
+.bs-opcion-legal {
+    display: block;
+    font-size: .74rem;
+    color: var(--sys-mute);
+}
+
+
+/* ── LA PASTILLA DEL IDIOMA ── */
+
+.bs-idioma {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .42rem .7rem;
+    border: 1px solid var(--sys-line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--sys-mute) !important;
+    text-decoration: none;
+    font-size: .8rem;
+    font-weight: 600;
+    line-height: 1;
+    transition: border-color .14s ease, color .14s ease;
+}
+
+.bs-idioma:hover {
+    border-color: var(--sys-info);
+    color: var(--sys-info) !important;
+}
+
+.bs-idioma-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    padding: .15rem .35rem;
+    border-radius: .35rem;
+    background: var(--sys-mute-soft);
+    font-size: .7rem;
+    font-weight: 700;
+    color: var(--sys-ink);
+}
+
+
+/* ── LA PASTILLA DEL USUARIO ── */
+
+.bs-usuario {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .25rem .6rem .25rem .25rem;
+    border: 1px solid var(--sys-line);
+    border-radius: 999px;
+    background: #fff;
+    text-decoration: none;
+    line-height: 1;
+    transition: border-color .14s ease, box-shadow .14s ease;
+}
+
+.bs-usuario:hover {
+    border-color: var(--sys-info);
+    box-shadow: var(--sys-shadow);
+}
+
+.bs-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+    font-size: .82rem;
+    font-weight: 700;
+}
+
+.bs-usuario-texto {
+    font-size: .84rem;
+    font-weight: 600;
+    color: var(--sys-ink);
+    white-space: nowrap;
+}
+
+.bs-usuario .bs-chevron { color: var(--sys-mute); padding-right: 0; }
+
+@media (max-width: 575.98px) {
+    .bs-empresa-nombre, .bs-usuario-texto { display: none !important; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2 · EL BOTÓN DE PASO ACTIVO YA NO SE APAGA AL PASARLE EL MOUSE
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ── EL ERROR ──
+
+   En sistema.css hay dos reglas para el mismo botón:
+
+       .ps-paso:hover:not(:disabled) { background: var(--sys-mute-soft); }
+       .ps-paso.ps-activo            { background: var(--sys-info); }
+
+   La de arriba pinta gris al pasar el mouse. La de abajo pinta azul el
+   paso donde estás.
+
+   Cuando le pasas el mouse al paso activo, las dos aplican, y el
+   navegador tiene que elegir. Elige por peso: la primera tiene tres
+   piezas —.ps-paso, :hover y :not(:disabled)—, la segunda tiene dos.
+   Gana la de tres.
+
+   Resultado: el paso azul se vuelve gris justo cuando lo apuntas. El
+   texto queda blanco sobre gris claro, casi ilegible, y por medio
+   segundo parece que se deseleccionó.
+
+   ── EL ARREGLO ──
+
+   Una regla con el mismo peso o más que diga qué tiene que pasar al
+   pasar el mouse por encima del activo: que se ponga un punto MÁS
+   OSCURO, no gris.
+
+   Es lo que uno espera de un botón ya seleccionado: que reaccione, pero
+   sin dejar de estar seleccionado.
+
+   Aplica al formulario de cliente y al de presupuesto, porque los dos
+   usan las mismas clases. No hizo falta tocar ninguno de los dos
+   archivos.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* El paso donde estás: al pasar el mouse se oscurece, no se apaga */
+.ps-paso.ps-activo:hover:not(:disabled),
+.ps-paso.ps-activo:focus-visible {
+    background: #1d4ed8;          /* el azul del sistema, un punto más oscuro */
+    color: #fff;
+}
+
+.ps-paso.ps-activo:hover:not(:disabled) .ps-bolita {
+    background: #fff;
+    color: #1d4ed8;
+    border-color: #fff;
+}
+
+/* Los pasos ya hechos: el verde tampoco desaparece */
+.ps-paso.ps-hecho:hover:not(:disabled) {
+    background: var(--sys-ok-soft);
+    color: #065f46;
+}
+
+/*
+   Un botón tiene que decir que se puede pulsar. Los pasos son botones y
+   no lo decían.
+*/
+.ps-paso:not(:disabled) { cursor: pointer; }
+
+/*
+   El foco del teclado.
+
+   Quien se mueve con el tabulador no ve el hover: no hay mouse. Sin un
+   contorno visible, el foco existe pero es invisible, y se navega a
+   ciegas.
+*/
+.ps-paso:focus-visible {
+    outline: 2px solid var(--sys-info);
+    outline-offset: 2px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3 · EL CAMPO DE TELÉFONO Y EL DE CORREO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Los dos son un input-group con un desplegable pegado. Lo único que
+   hace falta es que el desplegable no crezca ni encoja mientras se
+   escribe: un campo que cambia de ancho solo es de las cosas que
+   molestan sin que sepas por qué.
+
+   El ancho fijo va en el Blade, en el style de cada uno. Acá solo se
+   arregla el redondeo de las esquinas, que Bootstrap pierde cuando el
+   grupo lleva un select en un extremo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.input-group > select.form-select:first-child {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.input-group > select.form-select:last-child {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}

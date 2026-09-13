@@ -347,3 +347,29 @@ a.bs-empresa:hover {
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4 · EL ICONO DE REGISTRAR PAGO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Era un botón verde grande que decía "Cobrar", en cada una de quince
+   filas. Dos problemas:
+
+     1. El listado se convertía en una pared verde. Lo que tiene que
+        resaltar es la fila que necesita atención, no la acción que está
+        en todas.
+
+     2. "Cobrar" suena a que el sistema le cobra al cliente. No hace eso:
+        el cliente ya pagó, esto solo lo anota.
+
+   Ahora es un icono del mismo tamaño que ver y editar. Gris en reposo,
+   verde al pasar el mouse — el mismo criterio que el resto de acciones:
+   el color aparece cuando apuntas, no antes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.acc-cobrar:hover {
+    background: var(--sys-ok-soft);
+    color: var(--sys-ok);
+    border-color: var(--sys-ok);
+}

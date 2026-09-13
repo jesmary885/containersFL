@@ -76,6 +76,79 @@ class Form extends Component
     public bool $yaEnviada = false;
 
     /* =====================================================================
+     | EL PASO EN EL QUE ESTA
+     |
+     | Mismo asistente que el presupuesto, y por la misma razon: la
+     | factura tiene cabecera, dos direcciones, lineas, impuestos,
+     | descuento, deposito y recargo de tarjeta. Todo junto en una
+     | pantalla es un metro de scroll con el boton de guardar a ciegas al
+     | final.
+     |
+     |   1 · A QUIEN Y CUANDO   cliente, fechas, terminos, direcciones
+     |   2 · QUE SE LE COBRA    los renglones
+     |   3 · REVISAR Y EMITIR   el documento armado, como lo vera el cliente
+     |
+     | Y hay una razon mas fuerte que la comodidad: quien convierte un
+     | presupuesto aterriza directo en el paso 3, con todo cargado. Si
+     | algo esta mal, retrocede al paso que toca en vez de buscar el
+     | campo en una pantalla larga.
+     * ================================================================== */
+
+    public int $paso = 1;
+
+    public const PASOS = 3;
+
+    /* =====================================================================
+     | EL EDITOR DE RENGLONES
+     |
+     | ── POR QUE UN MODAL Y NO LA TABLA ──
+     |
+     | La tabla editable obligaba a ensenarle las mismas ocho columnas a
+     | todos los conceptos. Una renta no tiene "Cant." —un renglon es un
+     | contenedor— y ahi estaba el campo pidiendo un numero que no
+     | significaba nada. Al mismo tiempo, un viaje de transporte necesita
+     | su fecha de servicio y no tenia donde.
+     |
+     | Cada concepto pide lo suyo. El modal ensena solo eso.
+     |
+     | ── EL BORRADOR ──
+     |
+     | Lo que se edita es una COPIA. Solo al guardar se escribe sobre
+     | $lineas. Asi "Cancelar" cancela de verdad: sin la copia, cada
+     | tecla ya habria modificado el renglon.
+     * ================================================================== */
+
+    /* =====================================================================
+     | AGRUPAR RENGLONES
+     |
+     | ── POR QUE NO ES UN CAMPO DENTRO DEL MODAL ──
+     |
+     | Agrupar es una decision sobre VARIOS renglones a la vez: "estos
+     | tres se imprimen como uno". Pedirlo renglon por renglon, dentro
+     | de una ventana que solo ve uno, obliga a acordarse de la etiqueta
+     | que se puso en el anterior y a escribirla igual. Un error de
+     | tecleo y el grupo se parte en dos.
+     |
+     | Se marcan las casillas en la lista y se pulsa "Agrupar". La letra
+     | la pone el sistema.
+     |
+     | $seleccionadas guarda POSICIONES, no identificadores. Por eso
+     | quitarLinea() la vacia: despues de renumerar, la posicion 3 ya no
+     | es la misma linea.
+     * ================================================================== */
+
+    public array $seleccionadas = [];
+
+    public ?string $avisoAgrupar = null;
+
+    public ?int $lineaEditando = null;
+
+    public array $borrador = [];
+
+    /** Si el renglon se acaba de crear: cancelar lo borra. */
+    public bool $borradorEsNuevo = false;
+
+    /* =====================================================================
      | EL CLIENTE
      * ================================================================== */
 
@@ -185,7 +258,14 @@ class Form extends Component
             $this->tax_rate = $calc->defaultTaxRate($empresa);
         }
 
-        $this->agregarLinea();
+        /*
+         | Se siembra el primer renglon SIN abrir el editor.
+         |
+         | agregarLinea() ahora abre el modal, y llamarlo aqui hacia que
+         | "Nueva factura" apareciera con la ventana de concepto encima
+         | antes de haber elegido siquiera el cliente.
+         */
+        $this->lineas[] = $this->lineaVacia();
 
         return null;
     }
@@ -266,7 +346,14 @@ class Form extends Component
         }
 
         if (empty($this->lineas)) {
-            $this->agregarLinea();
+            /*
+         | Se siembra el primer renglon SIN abrir el editor.
+         |
+         | agregarLinea() ahora abre el modal, y llamarlo aqui hacia que
+         | "Nueva factura" apareciera con la ventana de concepto encima
+         | antes de haber elegido siquiera el cliente.
+         */
+        $this->lineas[] = $this->lineaVacia();
         }
     }
 
@@ -362,9 +449,16 @@ class Form extends Component
      | LAS LÍNEAS
      * ================================================================== */
 
-    public function agregarLinea(): void
+    /**
+     * La forma de un renglon, en un solo sitio.
+     *
+     * Existe como metodo aparte porque la estructura se arma en tres
+     * lugares. Con el arreglo escrito tres veces, agregar un campo
+     * significa acordarse de los tres, y alguna se olvida.
+     */
+    protected function lineaVacia(): array
     {
-        $this->lineas[] = [
+        return [
             'id'           => null,
             'product_id'   => null,
             'container_id' => null,
@@ -375,6 +469,344 @@ class Form extends Component
             'grupo'        => '',
             'service_date' => null,
         ];
+    }
+
+    /**
+     * Abre el modal sobre un renglon nuevo.
+     *
+     * El renglon se crea YA y el modal trabaja sobre el. Si se cancela,
+     * se borra. Es mas simple que sostener un renglon "en el aire" que
+     * todavia no existe en $lineas: aplicarProducto() necesita un indice
+     * real al que escribirle.
+     */
+    public function agregarLinea(): void
+    {
+        $this->lineas[] = $this->lineaVacia();
+
+        $this->abrirLinea(array_key_last($this->lineas), esNuevo: true);
+    }
+
+    /** Abre el modal sobre un renglon que ya existe. */
+    public function abrirLinea(int $indice, bool $esNuevo = false): void
+    {
+        if (! isset($this->lineas[$indice])) {
+            return;
+        }
+
+        $this->lineaEditando   = $indice;
+        $this->borrador        = $this->lineas[$indice];
+        $this->borradorEsNuevo = $esNuevo;
+
+        $this->resetValidation();
+    }
+
+    /**
+     * Cierra sin guardar.
+     *
+     * Un renglon recien creado se va con el modal. Dejarlo vacio en la
+     * lista seria dejar basura que despues hay que borrar a mano.
+     */
+    public function cancelarLinea(): void
+    {
+        if ($this->borradorEsNuevo && $this->lineaEditando !== null) {
+            unset($this->lineas[$this->lineaEditando]);
+            $this->lineas = array_values($this->lineas);
+        }
+
+        $this->cerrarEditor();
+    }
+
+    protected function cerrarEditor(): void
+    {
+        $this->lineaEditando   = null;
+        $this->borrador        = [];
+        $this->borradorEsNuevo = false;
+
+        $this->resetValidation();
+    }
+
+    /**
+     * Vuelca el borrador sobre el renglon.
+     *
+     * Se valida SOLO este renglon. Validar la factura entera aqui
+     * sacaria errores del cliente o de la direccion mientras la persona
+     * esta en un modal que no habla de eso.
+     */
+    public function guardarLinea(): void
+    {
+        if ($this->lineaEditando === null) {
+            return;
+        }
+
+        $this->validate([
+            'borrador.description' => ['required', 'string', 'max:1000'],
+            'borrador.quantity'    => ['required', 'numeric', 'min:0.01'],
+            'borrador.unit_price'  => ['required', 'numeric', 'min:0'],
+        ], [
+            'borrador.description.required' => 'Escriba que se le esta cobrando. '
+                                              .'Es el texto que el cliente va a leer.',
+            'borrador.quantity.min'   => 'La cantidad tiene que ser mayor que cero.',
+            'borrador.unit_price.min' => 'El precio no puede ser negativo.',
+        ]);
+
+        $this->lineas[$this->lineaEditando] = $this->borrador;
+
+        $this->limpiarGruposHuerfanos();
+
+        $this->cerrarEditor();
+    }
+
+    /**
+     * Junta los renglones marcados bajo una misma letra.
+     *
+     * La descripcion del grupo se toma del renglon MAS CARO, que es el
+     * que describe mejor de que va el paquete: si se agrupan un
+     * contenedor de $2.400 y su entrega de $150, el cliente tiene que
+     * leer "contenedor", no "entrega".
+     */
+    public function agruparSeleccionadas(): void
+    {
+        $this->avisoAgrupar = null;
+
+        $indices = collect($this->seleccionadas)
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($i) => isset($this->lineas[$i]))
+            ->unique()
+            ->values();
+
+        if ($indices->count() < 2) {
+            $this->avisoAgrupar = 'Marque al menos dos renglones. '
+                                 .'Agrupar uno solo no cambia nada al imprimir.';
+
+            return;
+        }
+
+        $letra = $this->siguienteLetraDeGrupo();
+
+        foreach ($indices as $i) {
+            $this->lineas[$i]['grupo'] = $letra;
+        }
+
+        $masCaro = $indices
+            ->sortByDesc(fn ($i) => $this->importeLinea($i))
+            ->first();
+
+        $this->gruposDescripcion[$letra] = trim((string) ($this->lineas[$masCaro]['description'] ?? ''));
+
+        $this->seleccionadas = [];
+
+        $this->limpiarGruposHuerfanos();
+    }
+
+    /** La siguiente letra libre: A, B, C... */
+    protected function siguienteLetraDeGrupo(): string
+    {
+        $usadas = collect($this->lineas)
+            ->pluck('grupo')
+            ->filter()
+            ->unique()
+            ->all();
+
+        foreach (range('A', 'Z') as $letra) {
+            if (! in_array($letra, $usadas, true)) {
+                return $letra;
+            }
+        }
+
+        return 'A';
+    }
+
+    /** Deshace un grupo: los renglones vuelven a imprimirse por separado. */
+    public function desagrupar(string $letra): void
+    {
+        foreach ($this->lineas as $i => $linea) {
+            if (trim((string) ($linea['grupo'] ?? '')) === $letra) {
+                $this->lineas[$i]['grupo'] = '';
+            }
+        }
+
+        unset($this->gruposDescripcion[$letra]);
+
+        $this->avisoAgrupar = null;
+
+        $this->limpiarGruposHuerfanos();
+    }
+
+    /* =====================================================================
+     | MOVERSE ENTRE PASOS
+     |
+     | Hacia atras es libre. Hacia adelante valida lo que queda en medio:
+     | llegar a los renglones sin cliente no significa nada, porque el
+     | cliente decide si lleva impuesto y a que direccion se factura.
+     * ================================================================== */
+
+    public function siguientePaso(): void
+    {
+        $this->validate($this->reglasDelPaso($this->paso));
+
+        $this->paso = min($this->paso + 1, self::PASOS);
+
+        $this->dispatch('subir-al-inicio');
+    }
+
+    public function pasoAnterior(): void
+    {
+        $this->paso = max($this->paso - 1, 1);
+
+        $this->resetValidation();
+
+        $this->dispatch('subir-al-inicio');
+    }
+
+    public function irAlPaso(int $destino): void
+    {
+        $destino = max(1, min($destino, self::PASOS));
+
+        if ($destino <= $this->paso) {
+            $this->paso = $destino;
+            $this->resetValidation();
+            $this->dispatch('subir-al-inicio');
+
+            return;
+        }
+
+        while ($this->paso < $destino) {
+            $antes = $this->paso;
+
+            $this->siguientePaso();
+
+            // La validacion no dejo pasar: se queda donde esta, con los
+            // errores en pantalla.
+            if ($this->paso === $antes) {
+                return;
+            }
+        }
+    }
+
+    /**
+     * Que se exige en cada paso.
+     *
+     * Se parte en tres para que el error salga en la pantalla donde esta
+     * el campo. Validar todo de golpe en el paso 1 pondria un mensaje
+     * rojo sobre un campo que la persona todavia no ha visto.
+     */
+    protected function reglasDelPaso(int $paso): array
+    {
+        $todas = $this->rules();
+
+        $porPaso = [
+            1 => ['customer_id', 'type', 'issue_date', 'due_date', 'terms',
+                  'service_period_start', 'service_period_end',
+                  'bill_to.line1', 'bill_to.city', 'bill_to.state', 'bill_to.zip',
+                  'ship_to.line1', 'ship_to.city', 'ship_to.state', 'ship_to.zip'],
+
+            2 => ['lineas', 'lineas.*.description', 'lineas.*.quantity',
+                  'lineas.*.unit_price', 'lineas.*.product_id',
+                  'lineas.*.container_id', 'lineas.*.grupo', 'lineas.*.service_date'],
+
+            3 => ['tax_rate', 'discount_amount', 'deposit_applied',
+                  'expected_payment_method', 'notes', 'footer_terms'],
+        ];
+
+        return collect($porPaso[$paso] ?? [])
+            ->mapWithKeys(fn ($campo) => [$campo => $todas[$campo] ?? []])
+            ->filter(fn ($reglas) => ! empty($reglas))
+            ->all();
+    }
+
+    /**
+     * La tira de contexto que se queda arriba en los pasos 2 y 3.
+     *
+     * Va en texto y no en cajitas: un dato que se lee se revisa, un dato
+     * dentro de un input se ignora. Ahi es donde se cazan los errores.
+     */
+    public function getResumenProperty(): array
+    {
+        $ciudad = collect([$this->bill_to['city'] ?? null, $this->bill_to['state'] ?? null])
+            ->filter()->implode(', ');
+
+        return [
+            'cliente'   => $this->clienteNombre ?: null,
+            'emision'   => $this->issue_date
+                ? \Carbon\Carbon::parse($this->issue_date)->format('d/m/Y')
+                : null,
+            'vence'     => $this->due_date
+                ? \Carbon\Carbon::parse($this->due_date)->format('d/m/Y')
+                : null,
+            'direccion' => trim($ciudad.' '.($this->bill_to['zip'] ?? '')) ?: null,
+            'renglones' => count($this->lineas),
+        ];
+    }
+
+    /**
+     * Copia al borrador el precio que esa unidad tiene en el inventario.
+     *
+     *   Venta  ->  containers.list_price
+     *   Renta  ->  containers.monthly_rate
+     *
+     * ── POR QUE NO PISA UN PRECIO YA NEGOCIADO ──
+     *
+     * Si alguien tecleo 2.250 porque lo negocio asi y despues corrige la
+     * unidad elegida, seria muy molesto que el sistema le devolviera los
+     * 2.400 de lista. Sin $forzar solo escribe si el campo estaba vacio.
+     *
+     * Con $forzar si pisa, y se usa cuando cambia la unidad o el
+     * concepto: ahi el numero anterior corresponde a otra cosa.
+     *
+     * ── SIGUE SIENDO EDITABLE ──
+     *
+     * El precio varia por temporada y por volumen. Esto solo ahorra
+     * teclear el caso normal.
+     */
+    protected function aplicarPrecioDeContenedor(int $contenedorId, bool $forzar = false): void
+    {
+        $contenedor = \App\Models\Container::with(['size:id,name', 'condition:id,name', 'grade:id,name'])
+            ->find($contenedorId);
+
+        if (! $contenedor) {
+            return;
+        }
+
+        $producto = ! empty($this->borrador['product_id'])
+            ? Product::find($this->borrador['product_id'])
+            : null;
+
+        $esRenta = $producto?->isRental() ?? ($this->type === 'rental');
+
+        $precio = $contenedor->suggestedPrice($esRenta);
+
+        /*
+         | null = esa unidad no tiene precio cargado para eso. Se deja el
+         | campo como esta para que la persona escriba, en vez de meter
+         | un cero que se puede guardar por distraccion.
+         */
+        if ($precio !== null && ($forzar || empty($this->borrador['unit_price']))) {
+            $this->borrador['unit_price'] = $precio;
+        }
+
+        /*
+         | LA DESCRIPCION
+         |
+         | La arma el concepto si hay uno; si no, la propia unidad. Asi el
+         | presupuesto y la factura escriben exactamente el mismo texto.
+         |
+         | Solo se escribe si el campo esta vacio: lo que teclee una
+         | persona no se pisa nunca.
+         */
+        if (blank($this->borrador['description'] ?? null)) {
+            $this->borrador['description'] = $producto
+                ? $producto->autoDescription($contenedor)
+                : $contenedor->lineDescription();
+        }
+    }
+
+    /** El importe del borrador, para ensenarlo en vivo dentro del modal. */
+    public function getImporteBorradorProperty(): float
+    {
+        return round(
+            (float) ($this->borrador['quantity'] ?? 1) * (float) ($this->borrador['unit_price'] ?? 0),
+            2,
+        );
     }
 
     /**
@@ -391,11 +823,31 @@ class Form extends Component
 
         $this->lineas = array_values($this->lineas);
 
+        /*
+         | Se repone un renglon en blanco SIN abrir el modal: agregarLinea()
+         | ahora lo abre, y abrirlo justo despues de borrar seria una
+         | ventana que nadie pidio.
+         */
         if (empty($this->lineas)) {
-            $this->agregarLinea();
+            $this->lineas[] = $this->lineaVacia();
         }
 
+        /*
+         | Se vacia la seleccion: guarda posiciones, y acabamos de
+         | renumerar. Sin esto, borrar una fila del medio agrupa las que
+         | no eran.
+         */
+        $this->seleccionadas = [];
+        $this->avisoAgrupar  = null;
+
         $this->limpiarGruposHuerfanos();
+
+        /*
+         | Se puede llamar desde dentro del modal. Si quedara abierto
+         | apuntando a un indice que ya se renumero, editaria el renglon
+         | equivocado.
+         */
+        $this->cerrarEditor();
     }
 
     /**
@@ -409,6 +861,48 @@ class Form extends Component
         // Cambió el producto de una línea.
         if (preg_match('/^lineas\.(\d+)\.product_id$/', $campo, $partes)) {
             $this->aplicarProducto((int) $partes[1]);
+        }
+
+        /* -----------------------------------------------------------------
+         | CAMBIO EL PRODUCTO DENTRO DEL MODAL
+         |
+         | aplicarProducto() trabaja sobre $lineas, no sobre el borrador.
+         | En vez de duplicar esa logica —que es donde se decide el
+         | precio, si lleva impuesto y el texto que lee el cliente— se
+         | vuelca el borrador, se aplica, y se recoge el resultado.
+         |
+         | Duplicarla significaria que el dia que cambie una regla de
+         | precios haya que acordarse de cambiarla en dos sitios. Nunca se
+         | acuerda uno de los dos.
+         * -------------------------------------------------------------- */
+        if ($campo === 'borrador.product_id' && $this->lineaEditando !== null) {
+            $this->lineas[$this->lineaEditando] = $this->borrador;
+
+            $this->aplicarProducto($this->lineaEditando);
+
+            $this->borrador = $this->lineas[$this->lineaEditando];
+
+            // Si ya habia una unidad elegida, su precio manda sobre el
+            // del concepto: es el precio de ESE contenedor.
+            if (! empty($this->borrador['container_id'])) {
+                $this->aplicarPrecioDeContenedor((int) $this->borrador['container_id'], forzar: true);
+            }
+        }
+
+        /* -----------------------------------------------------------------
+         | CAMBIO LA UNIDAD DENTRO DEL MODAL
+         |
+         | El precio no se teclea: sale de la ficha del contenedor. Es el
+         | mismo comportamiento del presupuesto, y por la misma razon —
+         | nadie recuerda de memoria el precio de cada unidad.
+         * -------------------------------------------------------------- */
+        if ($campo === 'borrador.container_id' && $this->lineaEditando !== null) {
+
+            if (empty($this->borrador['container_id'])) {
+                return;
+            }
+
+            $this->aplicarPrecioDeContenedor((int) $this->borrador['container_id'], forzar: true);
         }
 
         // Cambió la etiqueta de grupo.

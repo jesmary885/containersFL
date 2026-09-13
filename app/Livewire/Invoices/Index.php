@@ -77,6 +77,25 @@ class Index extends Component
     #[Url(as: 'pendientes', except: true)]
     public bool $soloPendientes = true;
 
+    /* ---------------------------------------------------------------
+     | EL AVISO TEMPRANO
+     |
+     | Una factura no pasa de verde a rojo de un dia para otro. Hay una
+     | franja amarilla antes: "vence dentro de poco, es el momento de
+     | llamar".
+     |
+     | Llamar el dia 3 antes es una gestion de cobranza. Llamar el dia 10
+     | despues es un reclamo, y el cliente ya se acostumbro a no pagar.
+     |
+     | Cinco dias porque es el mismo numero que los dias de gracia de las
+     | rentas (RB-025): el cliente que va a pagar tarde entra en amarillo
+     | justo cuando todavia se puede evitar.
+     * ------------------------------------------------------------ */
+    public const DIAS_DE_AVISO = 5;
+
+    /** Filtro de un clic desde el contador de "por vencer". */
+    public bool $soloPorVencer = false;
+
     #[Url(as: 'orden', except: 'issue_date')]
     public string $ordenarPor = 'issue_date';
 
@@ -126,10 +145,29 @@ class Index extends Component
         $this->resetPage();
     }
 
+    /**
+     * Solo las que estan a punto de vencer.
+     *
+     | Apaga el filtro de vencidas si estaba: son dos preguntas
+     | distintas y ensenarlas juntas mezcla "a quien llamo hoy" con "a
+     | quien ya se le paso".
+     */
+    public function verPorVencer(): void
+    {
+        $this->soloPorVencer  = ! $this->soloPorVencer;
+        $this->estado         = '';
+        $this->soloPendientes = true;
+
+        $this->resetPage();
+    }
+
     public function limpiarFiltros(): void
     {
         $this->reset(['buscar', 'estado', 'tipo']);
+
         $this->soloPendientes = false;
+        $this->soloPorVencer  = false;
+
         $this->resetPage();
     }
 
@@ -184,6 +222,19 @@ class Index extends Component
             ->statusIs($this->estado)
             ->when($this->tipo, fn ($q) => $q->where('type', $this->tipo))
             ->when($this->soloPendientes, fn ($q) => $q->unpaid())
+
+            /*
+             | Por vencer: debe algo, todavia no se paso, y la fecha cae
+             | dentro de los proximos cinco dias.
+             |
+             | El `>=` de hoy es lo que la separa de las vencidas: sin el,
+             | este filtro traeria tambien las que ya se pasaron y los dos
+             | contadores dirian lo mismo.
+             */
+            ->when($this->soloPorVencer, fn ($q) => $q
+                ->where('balance_due', '>', 0)
+                ->whereDate('due_date', '>=', now()->toDateString())
+                ->whereDate('due_date', '<=', now()->addDays(self::DIAS_DE_AVISO)->toDateString()))
             ->orderBy($columna, $sentido)
             ->orderBy('id', 'desc')   // desempate estable
             ->paginate($this->porPagina);
@@ -206,8 +257,20 @@ class Index extends Component
          | $40,000 repartidos en treinta facturas de veinte clientes son
          | un problema de cobranza.
          * -------------------------------------------------------------- */
+        /*
+         | La consulta de "por vencer", escrita una vez y usada dos: para
+         | el monto y para el conteo. Si fueran dos consultas distintas,
+         | tarde o temprano una diria una cosa y la otra otra.
+         */
+        $porVencer = fn () => Invoice::query()
+            ->where('balance_due', '>', 0)
+            ->whereDate('due_date', '>=', now()->toDateString())
+            ->whereDate('due_date', '<=', now()->addDays(self::DIAS_DE_AVISO)->toDateString());
+
         $resumen = [
-            'porCobrar' => (float) Invoice::query()->unpaid()->sum('balance_due'),
+            'porCobrar'      => (float) Invoice::query()->unpaid()->sum('balance_due'),
+            'porVencer'      => (float) $porVencer()->sum('balance_due'),
+            'porVencerCount' => $porVencer()->count(),
             'vencido'   => (float) Invoice::query()->overdue()->sum('balance_due'),
             'vencidas'  => Invoice::query()->overdue()->count(),
             'delMes'    => (float) Invoice::query()

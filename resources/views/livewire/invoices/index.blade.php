@@ -1,31 +1,38 @@
 {{--
     ═══════════════════════════════════════════════════════════════════════
-    LISTADO DE FACTURAS
+    LISTADO DE FACTURAS — con las dos formas de ver la tabla
     ═══════════════════════════════════════════════════════════════════════
 
-    Esta pantalla no es una lista de documentos: es una herramienta de
-    cobranza. Un vendedor abre presupuestos para ver qué ofreció; alguien
-    abre facturas para ver QUIÉN LE DEBE.
+    Mismo diseño que Presupuestos, Clientes y Contenedores: contadores con
+    chip de color, selector de vista, filtros en la cabecera, acciones y
+    estado vacío en partials compartidos.
 
-    Por eso los contadores de arriba son dinero y no cantidades, y por eso
-    el filtro por defecto es "con saldo".
+    ── LOS CUATRO CONTADORES RESPONDEN PREGUNTAS DISTINTAS ──
 
-    ── QUÉ CAMBIÓ EN ESTA VERSIÓN ──
+    POR COBRAR   ¿cuánto me deben en total?
+    VENCIDO      ¿cuánto de eso ya se pasó de fecha?
+    FACTURAS     ¿en cuántas está repartido?
+    DEL MES      ¿cuánto facturé este mes?
 
-      · Los contadores tienen color, icono y pie explicativo, y los
-        cuatro se pueden pulsar para filtrar.
+    El tercero importa más de lo que parece: $40,000 en una sola factura
+    de un cliente bueno es una conversación. Los mismos $40,000 repartidos
+    en treinta facturas de veinte clientes son un problema de cobranza.
 
-      · Los botones de acción dejaron de ser cuadritos grises idénticos.
+    ── EL FILTRO DE PENDIENTES NACE ENCENDIDO ──
 
-      · Cada fila lleva una franja de color según su estado real: si la
-        fecha ya pasó y queda saldo, la franja es roja aunque en la base
-        siga diciendo "Enviada".
-
-      · ⚠️ AVISO NUEVO: cuando el filtro "Con saldo" está encendido y hay
-        facturas escondidas por él, la pantalla lo dice. Antes una factura
-        recién emitida en cero podía desaparecer sin explicación.
+    Quien abre esta pantalla casi siempre viene a cobrar, no a repasar
+    historia. Las pagadas están a un clic, pero no estorban de entrada.
 --}}
-<div>
+<div x-data="{
+        vista: (() => {
+            try { return localStorage.getItem('vistaFacturas') || 'compacta' }
+            catch (e) { return 'compacta' }
+        })(),
+        recordar(v) {
+            this.vista = v;
+            try { localStorage.setItem('vistaFacturas', v) } catch (e) {}
+        },
+     }">
 
     {{-- ─────────────────────────────────────────────────────────────
          ENCABEZADO
@@ -35,27 +42,42 @@
         <div>
             <h4 class="mb-0 fw-semibold">Facturación</h4>
             <small class="text-secondary">
-                Documentos fiscales emitidos. No se borran: se anulan.
+                Lo que se le cobró al cliente. La fecha de «pagar antes de» sale de los términos: «Due on receipt» vence el mismo día, «Net 30» a los treinta.
             </small>
         </div>
 
-        @can('invoices.create')
-        <a href="{{ route('finanzas.facturacion.create') }}" class="btn btn-primary">
-            <i class="bi bi-plus-lg me-1"></i> Nueva factura
-        </a>
-        @endcan
+        <div class="d-flex align-items-center gap-2">
+
+            <div class="selector-vista" title="Cómo ver la lista">
+                <button type="button" x-on:click="recordar('compacta')"
+                        :class="vista === 'compacta' && 'activo'">
+                    <i class="bi bi-list"></i> Lista
+                </button>
+                <button type="button" x-on:click="recordar('tarjetas')"
+                        :class="vista === 'tarjetas' && 'activo'">
+                    <i class="bi bi-grid-1x2"></i> Tarjetas
+                </button>
+            </div>
+
+            @can('invoices.create')
+                <a href="{{ route('finanzas.facturacion.create') }}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i> Nueva factura
+                </a>
+            @endcan
+
+        </div>
 
     </div>
 
     @if (session('exito'))
-        <div class="alert alert-success alert-dismissible fade show">
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
             <i class="bi bi-check-circle-fill me-1"></i> {{ session('exito') }}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     @endif
 
     @if (session('error'))
-        <div class="alert alert-danger alert-dismissible fade show">
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
             <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ session('error') }}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
@@ -63,30 +85,43 @@
 
     {{-- ─────────────────────────────────────────────────────────────
          LOS CONTADORES
-
-         Los cuatro responden preguntas distintas:
-
-           Por cobrar   ¿cuánto me deben en total?
-           Vencido      ¿cuánto de eso ya se pasó de fecha?
-           Vencidas     ¿en cuántas facturas está repartido?
-           Del mes      ¿cuánto facturé este mes?
-
-         El tercero importa más de lo que parece: $40,000 en una sola
-         factura de un cliente bueno es una conversación; los mismos
-         $40,000 repartidos en treinta facturas de veinte clientes son
-         un problema de cobranza.
     ───────────────────────────────────────────────────────────── --}}
     <div class="row g-3 mb-3">
 
         <div class="col-6 col-lg-3">
             <button type="button" class="kpi kpi-info" wire:click="limpiarFiltros">
-                <div class="kpi-label">
-                    <i class="bi bi-cash-stack"></i> Por cobrar
-                </div>
-                <div class="kpi-valor monto">
-                    ${{ number_format($resumen['porCobrar'], 2) }}
-                </div>
-                <div class="kpi-pie">Todo lo que tiene saldo</div>
+                <span class="kpi-icono"><i class="bi bi-hourglass-split"></i></span>
+                <span class="kpi-cuerpo">
+                    <span class="kpi-label d-block">Por cobrar</span>
+                    <span class="kpi-valor d-block">${{ number_format($resumen['porCobrar'], 2) }}</span>
+                    <span class="kpi-pie d-block">Saldo de todo lo abierto</span>
+                </span>
+            </button>
+        </div>
+
+        {{--
+            EL AVISO TEMPRANO
+
+            Entre el verde y el rojo hay una franja amarilla: vence dentro
+            de poco. Llamar tres días antes es cobranza; llamar diez días
+            después es un reclamo, y para entonces el cliente ya se
+            acostumbró a no pagar.
+        --}}
+        <div class="col-6 col-lg-3">
+            <button type="button"
+                    class="kpi {{ $resumen['porVencerCount'] > 0 ? 'kpi-warn' : 'kpi-apagado' }} {{ $soloPorVencer ? 'border-2' : '' }}"
+                    wire:click="verPorVencer"
+                    title="Vencen dentro de los próximos {{ \App\Livewire\Invoices\Index::DIAS_DE_AVISO }} días">
+                <span class="kpi-icono"><i class="bi bi-bell"></i></span>
+                <span class="kpi-cuerpo">
+                    <span class="kpi-label d-block">Por vencer</span>
+                    <span class="kpi-valor d-block">${{ number_format($resumen['porVencer'], 2) }}</span>
+                    <span class="kpi-pie d-block">
+                        {{ $resumen['porVencerCount'] > 0
+                            ? $resumen['porVencerCount'].' facturas · llamar ahora'
+                            : 'Nada a punto de vencer' }}
+                    </span>
+                </span>
             </button>
         </div>
 
@@ -94,47 +129,27 @@
             <button type="button"
                     class="kpi {{ $resumen['vencido'] > 0 ? 'kpi-bad' : 'kpi-apagado' }}"
                     wire:click="verVencidas">
-                <div class="kpi-label">
-                    <i class="bi bi-exclamation-octagon"></i> Vencido
-                </div>
-                <div class="kpi-valor monto">
-                    ${{ number_format($resumen['vencido'], 2) }}
-                </div>
-                <div class="kpi-pie">
-                    {{ $resumen['vencido'] > 0 ? 'Ya pasó la fecha de pago' : 'Nada atrasado' }}
-                </div>
-            </button>
-        </div>
-
-        <div class="col-6 col-lg-3">
-            <button type="button"
-                    class="kpi {{ $resumen['vencidas'] > 0 ? 'kpi-warn' : 'kpi-apagado' }}"
-                    wire:click="verVencidas">
-                <div class="kpi-label">
-                    <i class="bi bi-files"></i> Facturas vencidas
-                </div>
-                <div class="kpi-valor">{{ $resumen['vencidas'] }}</div>
-                <div class="kpi-pie">
-                    @if ($resumen['vencidas'] > 0)
-                        En {{ $resumen['vencidas'] }}
-                        {{ $resumen['vencidas'] === 1 ? 'documento' : 'documentos' }}
-                    @else
-                        Ninguna
-                    @endif
-                </div>
+                <span class="kpi-icono"><i class="bi bi-exclamation-octagon"></i></span>
+                <span class="kpi-cuerpo">
+                    <span class="kpi-label d-block">Vencido</span>
+                    <span class="kpi-valor d-block">${{ number_format($resumen['vencido'], 2) }}</span>
+                    <span class="kpi-pie d-block">
+                        {{ $resumen['vencido'] > 0
+                            ? $resumen['vencidas'].' facturas · ya se pasó la fecha'
+                            : 'Nada atrasado' }}
+                    </span>
+                </span>
             </button>
         </div>
 
         <div class="col-6 col-lg-3">
             <div class="kpi kpi-ok">
-                <div class="kpi-label">
-                    <i class="bi bi-graph-up-arrow"></i>
-                    Facturado en {{ now()->translatedFormat('F') }}
-                </div>
-                <div class="kpi-valor monto">
-                    ${{ number_format($resumen['delMes'], 2) }}
-                </div>
-                <div class="kpi-pie">Emitido este mes, sin las anuladas</div>
+                <span class="kpi-icono"><i class="bi bi-graph-up-arrow"></i></span>
+                <span class="kpi-cuerpo">
+                    <span class="kpi-label d-block">Facturado del mes</span>
+                    <span class="kpi-valor d-block">${{ number_format($resumen['delMes'], 2) }}</span>
+                    <span class="kpi-pie d-block">{{ now()->translatedFormat('F Y') }}</span>
+                </span>
             </div>
         </div>
 
@@ -145,6 +160,7 @@
     ───────────────────────────────────────────────────────────── --}}
     <div class="card">
 
+        {{-- FILTROS --}}
         <div class="card-header">
             <div class="row g-2 align-items-center">
 
@@ -153,22 +169,13 @@
                         <span class="input-group-text bg-body">
                             <i class="bi bi-search text-secondary"></i>
                         </span>
-
-                        {{--
-                            .live.debounce.400ms: manda lo que escribo al
-                            servidor, pero espera 400 milisegundos a que
-                            deje de teclear.
-
-                            Sin el debounce, escribir "Homestead" son
-                            nueve consultas. Con él, una.
-                        --}}
                         <input type="search" class="form-control"
                                placeholder="Número, cliente o descripción de una línea…"
                                wire:model.live.debounce.400ms="buscar">
                     </div>
                 </div>
 
-                <div class="col-6 col-md-3">
+                <div class="col-6 col-md-2">
                     <select class="form-select" wire:model.live="estado">
                         <option value="">Todos los estados</option>
                         @foreach ($estados as $valor => $etiqueta)
@@ -179,26 +186,34 @@
 
                 <div class="col-6 col-md-2">
                     <select class="form-select" wire:model.live="tipo">
-                        <option value="">Todos los tipos</option>
+                        <option value="">Todo tipo</option>
                         @foreach ($tipos as $valor => $etiqueta)
                             <option value="{{ $valor }}">{{ $etiqueta }}</option>
                         @endforeach
                     </select>
                 </div>
 
-                <div class="col-12 col-md-2 d-flex align-items-center gap-2">
+                <div class="col-6 col-md-2">
+                    {{--
+                        El interruptor de pendientes.
+
+                        Va en la barra de filtros y no escondido, porque
+                        apagarlo cambia lo que la pantalla significa: de
+                        "lo que hay que cobrar" a "todo lo que se facturó".
+                    --}}
                     <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox"
-                               id="solo-pendientes"
-                               wire:model.live="soloPendientes">
-                        <label class="form-check-label small" for="solo-pendientes">
-                            Con saldo
+                               id="soloPendientes" wire:model.live="soloPendientes">
+                        <label class="form-check-label small" for="soloPendientes">
+                            Solo con saldo
                         </label>
                     </div>
+                </div>
 
-                    @if ($buscar || $estado || $tipo)
-                        <button class="btn btn-sm btn-outline-secondary" wire:click="limpiarFiltros"
-                                title="Quitar los filtros">
+                <div class="col-6 col-md-1 text-end">
+                    @if ($buscar || $estado || $tipo || ! $soloPendientes || $soloPorVencer)
+                        <button class="btn btn-outline-secondary w-100" wire:click="limpiarFiltros"
+                                title="Volver a lo pendiente">
                             <i class="bi bi-x-lg"></i>
                         </button>
                     @endif
@@ -207,113 +222,95 @@
             </div>
         </div>
 
-        {{--
-            ⚠️ EL AVISO DEL FILTRO ESCONDIDO
+        {{-- ═══════════════════════════════════════════════════
+             A · COMPACTA
+        ═══════════════════════════════════════════════════ --}}
+        <div x-show="vista === 'compacta'">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 tabla-compacta">
 
-            "Con saldo" viene encendido a propósito: una empresa con dos
-            años de operación tiene miles de facturas cobradas y ninguna
-            de ellas es lo que se viene a mirar aquí.
+                        <thead>
+                            <tr>
+                                <th role="button" wire:click="ordenar('invoice_number')">
+                                    Número
+                                    @if ($ordenarPor === 'invoice_number')
+                                        <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
+                                    @endif
+                                </th>
+                                <th>Cliente</th>
+                                <th role="button" wire:click="ordenar('issue_date')">
+                                    Emisión
+                                    @if ($ordenarPor === 'issue_date')
+                                        <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
+                                    @endif
+                                </th>
+                                {{--
+                                    "VENCE" ES LA FECHA LIMITE PARA PAGAR.
 
-            El problema es cuando ese filtro esconde algo que acabas de
-            crear. Una factura recién emitida que quedó en cero —o una que
-            se cobró completa hace un minuto— desaparece sin decir por
-            qué, y la conclusión natural es "no se guardó".
+                                    No vence la factura ni el servicio: vence el
+                                    plazo que se le dio al cliente. Sale de los
+                                    terminos —Net 30 son 30 dias desde la
+                                    emision— y "Due on receipt" la deja el mismo
+                                    dia, que es por lo que aparecen tantas
+                                    venciendo hoy.
 
-            Este aviso solo aparece cuando de verdad hay algo escondido, y
-            se apaga con un clic.
-        --}}
-        @if ($soloPendientes)
-            @php
-                $totalSinFiltro = \App\Models\Invoice::query()
-                    ->search($buscar)
-                    ->statusIs($estado)
-                    ->when($tipo, fn ($q) => $q->where('type', $tipo))
-                    ->count();
+                                    El encabezado lo dice para que nadie tenga
+                                    que adivinarlo.
+                                --}}
+                                <th role="button" wire:click="ordenar('due_date')"
+                                    title="La fecha límite para que el cliente pague">
+                                    Pagar antes de
+                                    @if ($ordenarPor === 'due_date')
+                                        <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
+                                    @endif
+                                </th>
+                                <th class="text-end" role="button" wire:click="ordenar('total')">
+                                    Total
+                                    @if ($ordenarPor === 'total')
+                                        <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
+                                    @endif
+                                </th>
+                                <th class="text-end" role="button" wire:click="ordenar('balance_due')">
+                                    Debe
+                                    @if ($ordenarPor === 'balance_due')
+                                        <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
+                                    @endif
+                                </th>
+                                <th>Estado</th>
+                                <th class="text-end" style="width: 170px;">Acciones</th>
+                            </tr>
+                        </thead>
 
-                $escondidas = $totalSinFiltro - $facturas->total();
-            @endphp
-
-            @if ($escondidas > 0)
-                <div class="card-body border-bottom py-2">
-                    <div class="d-flex flex-wrap align-items-center gap-2 small">
-                        <i class="bi bi-funnel-fill text-secondary"></i>
-                        <span class="text-secondary">
-                            Hay {{ $escondidas }}
-                            {{ $escondidas === 1 ? 'factura sin saldo que no se está mostrando' : 'facturas sin saldo que no se están mostrando' }}
-                            (cobradas, anuladas o en cero).
-                        </span>
-                        <button class="btn btn-sm btn-outline-secondary py-0"
-                                wire:click="$set('soloPendientes', false)">
-                            Mostrarlas
-                        </button>
-                    </div>
-                </div>
-            @endif
-        @endif
-
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-
-                    <thead>
-                        <tr>
-                            <th role="button" wire:click="ordenar('invoice_number')">
-                                Número
-                                @if ($ordenarPor === 'invoice_number')
-                                    <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
-                                @endif
-                            </th>
-
-                            <th>Cliente</th>
-                            <th>Tipo</th>
-
-                            <th role="button" wire:click="ordenar('issue_date')">
-                                Emisión
-                                @if ($ordenarPor === 'issue_date')
-                                    <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
-                                @endif
-                            </th>
-
-                            <th role="button" wire:click="ordenar('due_date')">
-                                Vence
-                                @if ($ordenarPor === 'due_date')
-                                    <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
-                                @endif
-                            </th>
-
-                            <th class="text-end" role="button" wire:click="ordenar('total')">
-                                Total
-                                @if ($ordenarPor === 'total')
-                                    <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
-                                @endif
-                            </th>
-
-                            <th class="text-end" role="button" wire:click="ordenar('balance_due')">
-                                Saldo
-                                @if ($ordenarPor === 'balance_due')
-                                    <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
-                                @endif
-                            </th>
-
-                            <th>Estado</th>
-                            <th class="text-end" style="width: 120px;">Acciones</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
+                        <tbody>
                         @forelse ($facturas as $f)
 
-                            {{--
-                                La franja usa display_status y no status.
-
-                                Si la fecha ya pasó y queda saldo, se pinta
-                                de rojo aunque en la base siga diciendo
-                                "Enviada". Así el listado dice la verdad sin
-                                necesidad de un proceso que ande cambiando
-                                estados de madrugada.
-                            --}}
                             @php
-                                $franja = match ($f->display_status->color()) {
+                                /*
+                                 | El estado que se enseña NO siempre es el
+                                 | guardado: una factura enviada cuya fecha
+                                 | ya pasó se lee como vencida aunque en la
+                                 | base siga diciendo "enviada".
+                                 |
+                                 | El accessor display_status del modelo lo resuelve en
+                                 | un solo sitio.
+                                 */
+                                $estadoVisible = $f->display_status;
+
+                                /*
+                                 | La franja amarilla del aviso temprano.
+                                 |
+                                 | Va ANTES del match del estado: una factura
+                                 | enviada que vence pasado manana sigue estando
+                                 | "enviada", y el estado por si solo la pintaria
+                                 | igual que una que vence dentro de un mes.
+                                 */
+                                $porVencer = (float) $f->balance_due > 0
+                                    && $f->due_date
+                                    && ! $f->isOverdue()
+                                    && $f->due_date->lte(now()->addDays(\App\Livewire\Invoices\Index::DIAS_DE_AVISO));
+
+                                $franja = $porVencer ? 'fila-warn' : match ($estadoVisible->color()) {
                                     'green'  => 'fila-ok',
                                     'yellow' => 'fila-warn',
                                     'red'    => 'fila-bad',
@@ -322,24 +319,17 @@
                                 };
                             @endphp
 
-                            <tr wire:key="factura-{{ $f->id }}"
-                                class="fila-estado {{ $franja }} {{ $f->status === \App\Enums\InvoiceStatus::Void ? 'opacity-50' : '' }}">
+                            <tr wire:key="comp-{{ $f->id }}" class="fila-estado {{ $franja }}">
 
                                 <td>
                                     <a href="{{ route('finanzas.facturacion.show', $f) }}"
-                                       class="doc-numero">
-                                        {{ $f->invoice_number }}
-                                    </a>
+                                       class="doc-numero">{{ $f->invoice_number }}</a>
                                 </td>
 
                                 <td>
                                     <div class="fw-medium">{{ $f->customer?->name ?? '—' }}</div>
-                                    <div class="small text-secondary">
-                                        {{ $f->customer?->customer_number }}
-                                    </div>
+                                    <div class="small text-secondary">{{ $f->customer?->customer_number }}</div>
                                 </td>
-
-                                <td class="small">{{ $f->type?->label() }}</td>
 
                                 <td class="small">{{ $f->issue_date?->format('d/m/Y') }}</td>
 
@@ -349,112 +339,170 @@
                                     @if ($f->isOverdue())
                                         <div class="text-danger fw-medium">
                                             <i class="bi bi-clock-history"></i>
-                                            {{ $f->days_overdue }}
-                                            {{ $f->days_overdue === 1 ? 'día' : 'días' }}
+                                            {{ $f->days_overdue }} días de atraso
+                                        </div>
+                                    @elseif ($porVencer)
+                                        @php
+                                            $dias = (int) now()->startOfDay()->diffInDays($f->due_date->startOfDay());
+                                        @endphp
+
+                                        <div class="text-warning-emphasis fw-medium">
+                                            <i class="bi bi-bell"></i>
+                                            {{--
+                                                "Vence en 0 dias" no significa nada.
+                                                Cuando el plazo termina hoy, se dice
+                                                hoy; manana, manana.
+                                            --}}
+                                            @if ($dias === 0)
+                                                Se paga hoy
+                                            @elseif ($dias === 1)
+                                                Se paga mañana
+                                            @else
+                                                Quedan {{ $dias }} días
+                                            @endif
                                         </div>
                                     @endif
                                 </td>
 
                                 <td class="text-end monto">${{ number_format((float) $f->total, 2) }}</td>
 
-                                <td class="text-end fw-semibold monto
-                                           {{ (float) $f->balance_due > 0 ? 'text-danger' : 'text-success' }}">
-                                    ${{ number_format((float) $f->balance_due, 2) }}
+                                <td class="text-end fw-semibold monto">
+                                    @if ((float) $f->balance_due > 0)
+                                        <span class="{{ $f->isOverdue() ? 'text-danger' : '' }}">
+                                            ${{ number_format((float) $f->balance_due, 2) }}
+                                        </span>
+                                    @else
+                                        <span class="text-success">Pagada</span>
+                                    @endif
                                 </td>
 
                                 <td>
-                                    <x-ui.badge
-                                        :color="$f->display_status->color()"
-                                        :label="$f->display_status->label()"
-                                    />
+                                    <x-ui.badge :color="$estadoVisible->color()"
+                                                :label="$estadoVisible->label()" />
                                 </td>
 
                                 <td class="text-end">
-                                    <div class="acciones">
-
-                                        <a href="{{ route('finanzas.facturacion.show', $f) }}"
-                                           class="acc acc-ver" title="Ver">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-
-                                        @if ($f->isEditable())
-                                            <a href="{{ route('finanzas.facturacion.edit', $f) }}"
-                                               class="acc acc-editar" title="Editar">
-                                                <i class="bi bi-pencil"></i>
-                                            </a>
-                                        @endif
-
-                                        {{--
-                                            El atajo a cobrar.
-
-                                            Es la acción que más se hace
-                                            desde esta pantalla: se mira
-                                            quién debe y se registra el
-                                            cobro. Sin este botón hay que
-                                            ir al menú de Pagos y volver a
-                                            buscar el cliente.
-
-                                            Solo aparece si queda saldo:
-                                            cobrar una factura pagada no
-                                            existe.
-                                        --}}
-                                        @if ((float) $f->balance_due > 0
-                                             && $f->status !== \App\Enums\InvoiceStatus::Void)
-                                            <a href="{{ route('finanzas.pagos.create') }}?factura={{ $f->id }}"
-                                               class="acc acc-copiar" title="Registrar un cobro de esta factura">
-                                                <i class="bi bi-cash-coin"></i>
-                                            </a>
-                                        @endif
-
-                                    </div>
+                                    @include('livewire.invoices.partials.acciones', ['f' => $f])
                                 </td>
 
                             </tr>
+
                         @empty
                             <tr>
-                                <td colspan="9">
-                                    <div class="vacio">
-                                        <i class="bi bi-receipt"></i>
-
-                                        @if ($buscar || $estado || $tipo)
-                                            No hay facturas que coincidan con el filtro.
-                                            <div class="mt-2">
-                                                <button class="btn btn-sm btn-outline-secondary"
-                                                        wire:click="limpiarFiltros">
-                                                    Quitar los filtros
-                                                </button>
-                                            </div>
-                                        @elseif ($soloPendientes)
-                                            No hay facturas con saldo pendiente.
-                                            <div class="small mt-1">
-                                                Puede que existan facturas cobradas, anuladas o en cero.
-                                            </div>
-                                            <div class="mt-2">
-                                                <button class="btn btn-sm btn-outline-secondary"
-                                                        wire:click="$set('soloPendientes', false)">
-                                                    Ver todas
-                                                </button>
-                                            </div>
-                                        @else
-                                            Todavía no hay facturas.
-                                            <div class="mt-2">
-                                                <a href="{{ route('finanzas.facturacion.create') }}"
-                                                   class="btn btn-sm btn-primary">
-                                                    <i class="bi bi-plus-lg me-1"></i> Emitir la primera
-                                                </a>
-                                            </div>
-                                            <div class="small mt-2">
-                                                O convertir un presupuesto desde
-                                                <a href="{{ route('comercial.presupuestos.index') }}">Presupuestos</a>.
-                                            </div>
-                                        @endif
-                                    </div>
+                                <td colspan="8">
+                                    @include('livewire.invoices.partials.vacio')
                                 </td>
                             </tr>
                         @endforelse
-                    </tbody>
+                        </tbody>
 
-                </table>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {{-- ═══════════════════════════════════════════════════
+             B · TARJETAS
+        ═══════════════════════════════════════════════════ --}}
+        <div x-show="vista === 'tarjetas'" x-cloak>
+
+            <div class="card-body border-bottom py-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap small">
+                    <span class="text-secondary">Ordenar por:</span>
+                    @foreach ([
+                        'issue_date'     => 'Emisión',
+                        'due_date'       => 'Vence',
+                        'balance_due'    => 'Debe',
+                        'total'          => 'Total',
+                        'invoice_number' => 'Número',
+                    ] as $col => $nombre)
+                        <button class="btn btn-sm {{ $ordenarPor === $col ? 'btn-primary' : 'btn-outline-secondary' }} py-0"
+                                wire:click="ordenar('{{ $col }}')">
+                            {{ $nombre }}
+                            @if ($ordenarPor === $col)
+                                <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill"></i>
+                            @endif
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+
+            <div class="lista-tarjetas">
+                @forelse ($facturas as $f)
+
+                    @php
+                        $estadoVisible = $f->display_status;
+
+                        $tf = match ($estadoVisible->color()) {
+                            'green'  => 'tf-ok',
+                            'yellow' => 'tf-warn',
+                            'red'    => 'tf-bad',
+                            'blue'   => 'tf-info',
+                            default  => '',
+                        };
+                    @endphp
+
+                    <div class="tarjeta-fila {{ $tf }}" wire:key="tarj-{{ $f->id }}">
+
+                        <div class="tf-barra"></div>
+
+                        <div class="tf-cuerpo">
+                            <div class="tf-titulo">
+                                <a href="{{ route('finanzas.facturacion.show', $f) }}"
+                                   class="doc-numero">{{ $f->invoice_number }}</a>
+
+                                <x-ui.badge :color="$estadoVisible->color()"
+                                            :label="$estadoVisible->label()" />
+
+                                @if ($f->isOverdue())
+                                    <span class="badge text-bg-danger">
+                                        <i class="bi bi-clock-history"></i>
+                                        {{ $f->days_overdue }} días de atraso
+                                    </span>
+                                @endif
+                            </div>
+
+                            <div class="tf-cliente">{{ $f->customer?->name ?? '—' }}</div>
+
+                            <div class="tf-meta mt-1">
+                                <span><i class="bi bi-person-badge"></i> {{ $f->customer?->customer_number }}</span>
+                                <span><i class="bi bi-calendar3"></i> {{ $f->issue_date?->format('d/m/Y') }}</span>
+                                <span>
+                                    <i class="bi bi-hourglass"></i>
+                                    Vence {{ $f->due_date?->format('d/m/Y') ?? 'sin fecha' }}
+                                </span>
+                                @if ((float) $f->amount_paid > 0)
+                                    <span>
+                                        <i class="bi bi-cash-coin"></i>
+                                        Pagado ${{ number_format((float) $f->amount_paid, 2) }}
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+
+                        <div class="tf-lado">
+                            <div class="tf-total {{ $f->isOverdue() ? 'text-danger' : '' }}">
+                                @if ((float) $f->balance_due > 0)
+                                    ${{ number_format((float) $f->balance_due, 2) }}
+                                @else
+                                    <span class="text-success">Pagada</span>
+                                @endif
+                            </div>
+
+                            <div class="small text-secondary">
+                                de ${{ number_format((float) $f->total, 2) }}
+                            </div>
+
+                            <div class="mt-2">
+                                @include('livewire.invoices.partials.acciones', ['f' => $f])
+                            </div>
+                        </div>
+
+                    </div>
+
+                @empty
+                    @include('livewire.invoices.partials.vacio')
+                @endforelse
             </div>
         </div>
 

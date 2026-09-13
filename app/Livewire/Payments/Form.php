@@ -297,6 +297,57 @@ class Form extends Component
             ->values();
     }
 
+    /* =====================================================================
+     | EL MONTO SE COMPLETA SOLO
+     * ================================================================== */
+
+    /**
+     * Cuando se reparte sin haber escrito el monto, el monto se pone solo.
+     *
+     * ── QUE PASABA ──
+     *
+     * La gente no llena esta pantalla de arriba a abajo. Llega con un
+     * cheque en la mano, mira la lista de facturas de la derecha y
+     * empieza a repartir: 1000 aqui, 200 alla. El campo "Monto" de la
+     * izquierda se queda en cero, porque todavia no lo miro nadie.
+     *
+     * Y entonces el cuadre daba -$1,200.00 y el boton se bloqueaba, con
+     * un cartel rojo diciendo que repartia de mas. Tecnicamente cierto y
+     * completamente inutil: el sistema sabia perfectamente cuanto sumaba
+     * lo repartido, y en vez de ponerlo, acusaba.
+     *
+     * ── QUE HACE AHORA ──
+     *
+     * Si el monto esta en cero y se reparte algo, el monto pasa a ser esa
+     * suma. Es lo unico que podia significar.
+     *
+     * En cuanto alguien escribe un monto a mano, esto deja de actuar: si
+     * el cheque es de $1,200 y solo se reparten $900, el resto queda como
+     * saldo a favor, y pisarlo seria inventar.
+     */
+    public function updated(string $campo): void
+    {
+        if (! str_starts_with($campo, 'aplicaciones.')) {
+            return;
+        }
+
+        if ((float) $this->amount <= 0.001) {
+            $this->amount = $this->totalAplicado;
+        }
+    }
+
+    /**
+     * El boton del cartel: "usar esta suma como monto".
+     *
+     * Para el otro caso, el de quien SI escribio un monto y despues
+     * repartio de mas. Ahi no se puede adivinar cual de los dos numeros
+     * esta bien, asi que se pregunta en vez de decidir.
+     */
+    public function usarSumaComoMonto(): void
+    {
+        $this->amount = $this->totalAplicado;
+    }
+
     public function updatedMethod(): void
     {
         if ($this->method !== PaymentMethod::CreditCard->value) {

@@ -1,0 +1,72 @@
+@import 'tailwindcss';
+@import 'admin-lte/dist/css/adminlte.css';
+@import './sistema.css';
+@import './sidebar.css';
+@import './ajustes.css';
+@import 'bootstrap-icons/font/bootstrap-icons.css';
+
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* =========================================================
+   SIDEBAR - LOGO NORMAL
+   ========================================================= */
+
+.sidebar-brand {
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.sidebar-brand .logo-container {
+    width: 100%;
+    height: 90px;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.sidebar-brand .logo-containers {
+    display: block;
+    width: auto;
+    height: 90px;
+    max-width: 180px;
+    object-fit: contain;
+    margin: 0;
+}
+
+
+/* =========================================================
+   SIDEBAR COLAPSADO - LOGO MINI
+   ========================================================= */
+
+body.sidebar-collapse .sidebar-brand {
+    height: 70px;
+}
+
+body.sidebar-collapse .sidebar-brand .logo-container {
+    width: 70px;
+    height: 70px;
+    padding: 0;
+}
+
+body.sidebar-collapse .sidebar-brand .logo-containers {
+    width: 46px;
+    height: 46px;
+    max-width: 46px;
+    object-fit: contain;
+}
+

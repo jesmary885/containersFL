@@ -22,6 +22,25 @@ class InvoiceItem extends Model
             'unit_price' => 'decimal:2',
             'amount'     => 'decimal:2',
             'taxable'    => 'boolean',
+
+            /*
+             | LA FECHA DEL SERVICIO FALTABA, Y REVENTABA LA FACTURA.
+             |
+             | Sin esta linea, `service_date` llega a la vista como el
+             | texto "2026-09-12". La vista hace ->format('d/m/Y'), que es
+             | un metodo de Carbon, y PHP corta con:
+             |
+             |     Call to a member function format() on string
+             |
+             | El ?-> no protege de esto: comprueba que no sea null, no
+             | que sea un objeto. Un texto pasa ese filtro y revienta en
+             | la linea siguiente.
+             |
+             | Salia justo al abrir una factura con un renglon fechado, o
+             | sea al convertir un presupuesto de transporte. La pantalla
+             | de la factura no llegaba a dibujarse.
+             */
+            'service_date' => 'date',
         ];
     }
 
