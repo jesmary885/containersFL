@@ -432,3 +432,88 @@ a.bs-empresa:hover {
     color: var(--sys-mute);
     font-weight: 600;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   7 · IMPRIMIR
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Al pulsar Imprimir en la factura se imprime SOLO el documento: se
+   esconden el menú, la barra de arriba, los pasos, los botones y todo lo
+   que es pantalla y no papel.
+
+   Es lo que permite que no haga falta una ventana aparte solo para
+   imprimir.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media print {
+
+    .app-sidebar,
+    .app-header,
+    .app-footer,
+    .ps-barra,
+    .ps-tira,
+    .ps-pie,
+    .alert,
+    .modal,
+    .card-header,
+    .selector-vista {
+        display: none !important;
+    }
+
+    /* El contenido ocupa la hoja entera */
+    .app-main,
+    .app-content,
+    .app-wrapper {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Solo el documento */
+    .doc-preview {
+        font-size: 11pt;
+    }
+
+    .card {
+        border: 0 !important;
+        box-shadow: none !important;
+    }
+
+    /* Todo lo que no sea la columna del documento se va */
+    .col-12.col-xl-5,
+    .seccion-datos,
+    .seccion-notas {
+        display: none !important;
+    }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   8 · EL SELECTOR DE IDIOMA
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Estaba gris y apagado. Le puse el degradado azul y la letra en blanco:
+   ahora se ve, sin llegar a competir con la pastilla de la empresa, que
+   sigue siendo lo más llamativo de la barra.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.bs-idioma {
+    border-color: transparent;
+    background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+    color: #fff !important;
+    box-shadow: 0 1px 2px rgba(37, 99, 235, .25);
+}
+
+.bs-idioma:hover {
+    border-color: transparent;
+    color: #fff !important;
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.bs-idioma i { opacity: .9; }
+
+.bs-idioma-chip {
+    background: rgba(255, 255, 255, .2);
+    color: #fff;
+}

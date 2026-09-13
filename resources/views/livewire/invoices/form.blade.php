@@ -55,6 +55,15 @@
 
     </div>
 
+    @if ($guardada)
+        <div class="alert alert-success">
+            <i class="bi bi-check-circle-fill me-1"></i>
+            <strong>Factura {{ $numero }} guardada.</strong>
+            Puede imprimirla, corregirla o anularla desde abajo. El documento de la izquierda
+            es el que quedó grabado.
+        </div>
+    @endif
+
     @if (session('error'))
         <div class="alert alert-danger">
             <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ session('error') }}
@@ -350,21 +359,18 @@
                 <div class="card-body">
                     <div class="row g-3">
 
-                        <div class="col-12 col-md-3">
-                            <label class="form-label">Tipo <span class="text-danger">*</span></label>
-                            <select class="form-select @error('type') is-invalid @enderror"
-                                    wire:model.live="type">
-                                @foreach ($tipos as $valor => $etiqueta)
-                                    <option value="{{ $valor }}">{{ $etiqueta }}</option>
-                                @endforeach
-                            </select>
-                            @error('type') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                            <div class="form-text">
-                                El transporte nunca lleva impuesto en Florida.
-                            </div>
-                        </div>
+                        {{--
+                            EL TIPO SE FUE DE AQUI.
 
-                        <div class="col-6 col-md-3">
+                            Una factura no es "de renta" o "de venta" en su
+                            cabecera: lo es por lo que lleva dentro, y puede
+                            llevar las dos cosas.
+
+                            La columna se sigue guardando; lo que ya no se hace
+                            es preguntarla antes de saber que se va a cobrar.
+                        --}}
+
+                        <div class="col-6 col-md-4">
                             <label class="form-label">Emisión <span class="text-danger">*</span></label>
                             <input type="date"
                                    class="form-control @error('issue_date') is-invalid @enderror"
@@ -373,13 +379,42 @@
                         </div>
 
                         <div class="col-6 col-md-3">
+                            {{--
+                                LOS TÉRMINOS, EN DESPLEGABLE.
+
+                                Como en presupuesto. Escribirlos a mano hacía
+                                que "Net 30", "NET 30" y "net 30" fueran tres
+                                términos distintos, y al reportar salen como
+                                tres cosas.
+
+                                Lo que se guarda es el término tal cual —"Net
+                                30"— en los dos idiomas: es texto de un
+                                documento legal, el cliente lo conoce así y su
+                                contador espera verlo así.
+
+                                Lo que cambia con el idioma es la explicación
+                                que se lee dentro del desplegable.
+                            --}}
                             <label class="form-label">Términos de pago</label>
-                            <input type="text"
-                                   class="form-control @error('terms') is-invalid @enderror"
-                                   placeholder="Net 30, Due on receipt..."
-                                   wire:model.live.debounce.600ms="terms">
-                            @error('terms') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                            <div class="form-text">Al escribirlos se recalcula el vencimiento.</div>
+
+                            <select class="form-select @error('terms') is-invalid @enderror"
+                                    wire:model.live="termsSeleccion">
+                                <option value="">— Sin especificar —</option>
+                                @foreach ($terminosDePago as $valor => $etiqueta)
+                                    <option value="{{ $valor }}">{{ $etiqueta }}</option>
+                                @endforeach
+                                <option value="{{ $terminoOtro }}">{{ __('invoices.terms_other') }}</option>
+                            </select>
+
+                            @error('terms')
+                                <div class="invalid-feedback d-block">{{ $message }}</div>
+                            @enderror
+
+                            @if ($termsSeleccion === $terminoOtro)
+                                <input type="text" maxlength="50" class="form-control mt-2"
+                                       placeholder="{{ __('invoices.terms_other_ph') }}"
+                                       wire:model.blur="termsOtro">
+                            @endif
                         </div>
 
                         <div class="col-6 col-md-3">
@@ -388,7 +423,6 @@
                                    class="form-control @error('due_date') is-invalid @enderror"
                                    wire:model="due_date">
                             @error('due_date') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                            <div class="form-text">Se propone según los términos.</div>
                         </div>
 
                         {{--
@@ -1206,14 +1240,47 @@
                         Siguiente <i class="bi bi-arrow-right ms-1"></i>
                     </button>
                 @else
-                    <button type="submit" class="btn btn-outline-success" wire:loading.attr="disabled">
-                        <i class="bi bi-save me-1"></i> Guardar sin enviar
-                    </button>
+                    {{--
+                        DESPUÉS DE GUARDAR SE QUEDA AQUÍ.
 
-                    <button type="button" class="btn btn-success"
-                            wire:click="guardar(true)" wire:loading.attr="disabled">
-                        <i class="bi bi-envelope-check me-1"></i> Guardar y enviar por correo
-                    </button>
+                        Antes saltaba a la ficha, y eso obligaba a mirar el
+                        documento en una pantalla y corregirlo en otra. Ahora
+                        la vista previa que ya se estaba mirando es el
+                        documento guardado, y las acciones salen debajo.
+                    --}}
+                    @if ($guardada)
+                        {{--
+                            IMPRIME ESTA MISMA PANTALLA.
+
+                            Antes llevaba a la ficha, que es justo la ventana
+                            que nos ahorramos. Ahora el navegador imprime el
+                            documento de arriba: el CSS de impresión esconde
+                            todo lo demás.
+                        --}}
+                        <button type="button" class="btn btn-outline-primary"
+                                onclick="window.print()">
+                            <i class="bi bi-printer me-1"></i> Imprimir
+                        </button>
+
+                        <button type="submit" class="btn btn-outline-secondary"
+                                wire:loading.attr="disabled">
+                            <i class="bi bi-pencil me-1"></i> Corregir
+                        </button>
+
+                        <a href="{{ route('finanzas.facturacion.show', $invoiceId) }}"
+                           class="btn btn-outline-danger">
+                            <i class="bi bi-x-octagon me-1"></i> Anular
+                        </a>
+                    @else
+                        <button type="submit" class="btn btn-outline-success" wire:loading.attr="disabled">
+                            <i class="bi bi-save me-1"></i> Guardar sin enviar
+                        </button>
+
+                        <button type="button" class="btn btn-success"
+                                wire:click="guardar(true)" wire:loading.attr="disabled">
+                            <i class="bi bi-envelope-check me-1"></i> Guardar y enviar por correo
+                        </button>
+                    @endif
                 @endif
 
             </div>
@@ -1286,16 +1353,108 @@
                                     : true;
                             @endphp
 
+                            {{--
+                                EL BUSCADOR DE UNIDADES, COMO EN PRESUPUESTO.
+
+                                Un desplegable con doscientos contenedores obliga
+                                a bajar con la rueda buscando un número que ya se
+                                sabe, y de cada unidad solo enseña lo que cabe en
+                                una línea.
+
+                                El buscador filtra escribiendo y muestra
+                                clasificación y precio, que es lo que decide cuál
+                                ofrecer.
+                            --}}
                             <div class="col-12 col-md-6" @if (! $llevaUnidad) style="display:none" @endif>
                                 <label class="form-label">Unidad</label>
-                                <select class="form-select" wire:model.live="borrador.container_id">
-                                    <option value="">— Ninguna —</option>
-                                    @foreach ($contenedores as $c)
-                                        <option value="{{ $c->id }}">
-                                            {{ $c->full_identifier }} · {{ $c->size?->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
+
+                                @if (! empty($borrador['container_id']))
+                                    @php
+                                        $unidadElegida = \App\Models\Container::find($borrador['container_id']);
+                                    @endphp
+
+                                    <div class="d-flex justify-content-between align-items-center border rounded p-2">
+                                        <span>
+                                            <span class="doc-numero">{{ $unidadElegida?->full_identifier }}</span>
+                                            <span class="small text-secondary d-block">
+                                                {{ $unidadElegida?->classification }}
+                                            </span>
+                                        </span>
+
+                                        <div class="d-flex gap-1">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                    wire:click="abrirBuscadorUnidad" title="Cambiar">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                                    wire:click="quitarUnidadDelRenglon" title="Quitar">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                @elseif ($buscadorUnidad)
+
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-body">
+                                            <i class="bi bi-search text-secondary"></i>
+                                        </span>
+                                        <input type="search" class="form-control"
+                                               placeholder="Número, código o medida…"
+                                               wire:model.live.debounce.350ms="buscarUnidad"
+                                               autofocus>
+                                        <button type="button" class="btn btn-outline-secondary"
+                                                wire:click="cerrarBuscadorUnidad">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </div>
+
+                                    <div class="list-group mt-2"
+                                         style="max-height: 220px; overflow-y: auto;">
+                                        @forelse ($this->resultadosUnidad as $u)
+                                            <button type="button"
+                                                    class="list-group-item list-group-item-action py-2"
+                                                    wire:key="uni-{{ $u->id }}"
+                                                    wire:click="seleccionarUnidad({{ $u->id }})">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span>
+                                                        <span class="fw-semibold font-monospace">
+                                                            {{ $u->full_identifier }}
+                                                        </span>
+                                                        <span class="small text-secondary d-block">
+                                                            {{ $u->classification }}
+                                                        </span>
+                                                    </span>
+
+                                                    <span class="text-end small">
+                                                        @if ($u->list_price !== null)
+                                                            <div class="monto">
+                                                                ${{ number_format((float) $u->list_price, 2) }}
+                                                            </div>
+                                                        @endif
+                                                        @if ($u->monthly_rate !== null)
+                                                            <div class="text-secondary">
+                                                                ${{ number_format((float) $u->monthly_rate, 2) }}/mes
+                                                            </div>
+                                                        @endif
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        @empty
+                                            <div class="list-group-item text-secondary small">
+                                                Ninguna unidad disponible coincide.
+                                            </div>
+                                        @endforelse
+                                    </div>
+
+                                @else
+
+                                    <button type="button" class="btn btn-outline-primary w-100"
+                                            wire:click="abrirBuscadorUnidad">
+                                        <i class="bi bi-search me-1"></i> Buscar unidad
+                                    </button>
+
+                                @endif
                             </div>
 
                             <div class="col-12">

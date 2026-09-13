@@ -714,14 +714,25 @@ class Form extends Component
      */
     public function agregarLinea(): void
     {
+        /*
+         | Este renglon lo borre por accidente al quitar el sembrado
+         | automatico del arranque, y con el se fue el unico sitio donde
+         | se creaba la fila.
+         |
+         | Resultado: array_key_last() sobre una lista vacia devuelve
+         | null, y abrirLinea(int) lo rechaza. De ahi el TypeError al
+         | pulsar "Agregar concepto".
+         */
+        $this->lineas[] = $this->lineaVacia();
 
         $this->abrirLinea(array_key_last($this->lineas), esNuevo: true);
     }
 
     /** Abre el modal sobre un renglón existente. */
-    public function abrirLinea(int $indice, bool $esNuevo = false): void
+    public function abrirLinea(?int $indice, bool $esNuevo = false): void
     {
-        if (! isset($this->lineas[$indice])) {
+        /* Sin indice no hay nada que abrir. Antes esto reventaba. */
+        if ($indice === null || ! isset($this->lineas[$indice])) {
             return;
         }
 

@@ -75,6 +75,48 @@ class Form extends Component
     /** Si la factura ya se le mandó al cliente. Cambia el aviso de arriba. */
     public bool $yaEnviada = false;
 
+    /**
+     * Si ya se guardo en esta misma pantalla.
+     *
+     * Sirve para enseñar los botones de imprimir, corregir y anular sin
+     * saltar a otra ventana.
+     */
+    public bool $guardada = false;
+
+    /* =====================================================================
+     | TERMINOS DE PAGO
+     |
+     | Mismo mecanismo que el presupuesto: un desplegable con los cuatro
+     | de siempre y una opcion "otro" para escribirlo a mano.
+     |
+     | ── LO QUE SE GUARDA ──
+     |
+     | El termino se guarda SIN TRADUCIR: "Net 30", "Due on receipt". Es
+     | texto que va impreso en un documento legal, y esos terminos son
+     | los que el cliente conoce y los que su contador espera ver. No se
+     | traducen por cambiar el idioma de la pantalla.
+     |
+     | Lo que si cambia con el idioma es la EXPLICACION que se lee en el
+     | desplegable: "Net 30 — 30 días" o "Net 30 — 30 days".
+     * ================================================================== */
+
+    public const TERMINO_OTRO = '__otro__';
+
+    public string $termsSeleccion = '';
+
+    public ?string $termsOtro = null;
+
+    /** Los cuatro de siempre. La clave es lo que se imprime. */
+    public function terminosDePago(): array
+    {
+        return [
+            'Due on receipt' => 'Due on receipt — '.__('invoices.terms_on_receipt'),
+            'Net 15'         => 'Net 15 — '.__('invoices.terms_days', ['n' => 15]),
+            'Net 30'         => 'Net 30 — '.__('invoices.terms_days', ['n' => 30]),
+            '50% deposit'    => __('invoices.terms_deposit'),
+        ];
+    }
+
     /* =====================================================================
      | EL PASO EN EL QUE ESTA
      |
@@ -163,6 +205,27 @@ class Form extends Component
     public array $seleccionadas = [];
 
     public ?string $avisoAgrupar = null;
+
+    /* =====================================================================
+     | EL BUSCADOR DE UNIDADES
+     |
+     | ── POR QUE UN BUSCADOR Y NO UN DESPLEGABLE ──
+     |
+     | Un desplegable con doscientos contenedores obliga a bajar con la
+     | rueda buscando un numero que ya se sabe. Y no ensena nada de cada
+     | unidad: solo el numero y la medida, que es lo unico que cabe en
+     | una linea de <option>.
+     |
+     | El buscador filtra escribiendo y ensena de cada unidad su
+     | clasificacion y su precio, que es lo que decide cual ofrecer.
+     |
+     | Es el mismo que el presupuesto, y a proposito: quien factura y
+     | quien cotiza son la misma persona.
+     * ================================================================== */
+
+    public bool $buscadorUnidad = false;
+
+    public string $buscarUnidad = '';
 
     public ?int $lineaEditando = null;
 
@@ -277,7 +340,10 @@ class Form extends Component
         $this->issue_date = now()->toDateString();
 
         if ($empresa) {
-            $this->terms    = $calc->defaultTerms($empresa);
+            $this->terms          = $calc->defaultTerms($empresa);
+            $this->termsSeleccion = array_key_exists((string) $this->terms, $this->terminosDePago())
+                ? (string) $this->terms
+                : '';
             $this->tax_rate = $calc->defaultTaxRate($empresa);
         }
 
@@ -520,9 +586,9 @@ class Form extends Component
     }
 
     /** Abre el modal sobre un renglon que ya existe. */
-    public function abrirLinea(int $indice, bool $esNuevo = false): void
+    public function abrirLinea(?int $indice, bool $esNuevo = false): void
     {
-        if (! isset($this->lineas[$indice])) {
+        if ($indice === null || ! isset($this->lineas[$indice])) {
             return;
         }
 
@@ -833,6 +899,55 @@ class Form extends Component
         }
     }
 
+    public function abrirBuscadorUnidad(): void
+    {
+        $this->buscarUnidad   = '';
+        $this->buscadorUnidad = true;
+    }
+
+    public function cerrarBuscadorUnidad(): void
+    {
+        $this->buscadorUnidad = false;
+        $this->buscarUnidad   = '';
+    }
+
+    /**
+     * Las unidades que se pueden facturar.
+     *
+     * Solo las disponibles de verdad: en yarda y sin venta ni renta
+     * encima. Ofrecer una que ya esta comprometida es prometerle al
+     * cliente algo que no se le puede dar.
+     */
+    public function getResultadosUnidadProperty()
+    {
+        return Container::query()
+            ->available()
+            ->forBillingCompany(app(\App\Support\CompanyContext::class)->get()?->id)
+            ->when($this->buscarUnidad, fn ($q) => $q->search($this->buscarUnidad))
+            ->with(['size:id,name', 'condition:id,name', 'grade:id,name'])
+            ->orderBy('container_number')
+            ->limit(25)
+            ->get();
+    }
+
+    public function seleccionarUnidad(int $contenedorId): void
+    {
+        if ($this->lineaEditando === null) {
+            return;
+        }
+
+        $this->borrador['container_id'] = $contenedorId;
+
+        $this->aplicarPrecioDeContenedor($contenedorId, forzar: true);
+
+        $this->cerrarBuscadorUnidad();
+    }
+
+    public function quitarUnidadDelRenglon(): void
+    {
+        $this->borrador['container_id'] = null;
+    }
+
     /** El importe del borrador, para ensenarlo en vivo dentro del modal. */
     public function getImporteBorradorProperty(): float
     {
@@ -884,6 +999,19 @@ class Form extends Component
      */
     public function updated(string $campo): void
     {
+        /* -----------------------------------------------------------------
+         | EL DESPLEGABLE DE TERMINOS
+         |
+         | Lo que se guarda es $terms, nunca el "__otro__" del
+         | desplegable: ese valor es una instruccion para la pantalla, no
+         | un termino de pago.
+         * -------------------------------------------------------------- */
+        if ($campo === 'termsSeleccion' || $campo === 'termsOtro') {
+            $this->terms = $this->termsSeleccion === self::TERMINO_OTRO
+                ? ($this->termsOtro ?: null)
+                : ($this->termsSeleccion ?: null);
+        }
+
         // Cambió el producto de una línea.
         if (preg_match('/^lineas\.(\d+)\.product_id$/', $campo, $partes)) {
             $this->aplicarProducto((int) $partes[1]);
@@ -1127,6 +1255,49 @@ class Form extends Component
      | VALIDACIÓN
      * ================================================================== */
 
+    /**
+     * El tipo que hereda la factura de sus renglones.
+     *
+     * Ya no se pregunta en la cabecera. Se mira lo que llevan los
+     * conceptos:
+     *
+     *   solo contenedores          venta
+     *   solo rentas                renta
+     *   solo transporte            transporte
+     *   mezcla                     mixta
+     *
+     * Es mas fiable que preguntarlo: la persona tendria que elegir antes
+     * de saber que va a cobrar, y despues nadie vuelve a corregirlo.
+     */
+    protected function tipoDelDocumento(): string
+    {
+        $tipos = collect($this->lineas)
+            ->pluck('product_id')
+            ->filter()
+            ->map(fn ($id) => Product::find($id)?->type?->value)
+            ->filter()
+            ->unique();
+
+        if ($tipos->isEmpty()) {
+            return $this->type ?: InvoiceType::Sale->value;
+        }
+
+        if ($tipos->count() > 1) {
+            /*
+             | No hay un tipo "mixta" en el enum, y Other es lo mas
+             | honesto: la factura lleva cosas de varias clases y
+             | forzarla a una seria decir algo que no es cierto.
+             */
+            return InvoiceType::Other->value;
+        }
+
+        return match ($tipos->first()) {
+            'rental'  => InvoiceType::Rental->value,
+            'service' => InvoiceType::Transport->value,
+            default   => InvoiceType::Sale->value,
+        };
+    }
+
     protected function rules(): array
     {
         return [
@@ -1284,7 +1455,8 @@ class Form extends Component
                 'company_id'  => $empresa->id,
                 'customer_id' => $this->customer_id,
                 'sold_by_employee_id' => $this->sold_by_employee_id ?: null,
-                'type'        => $this->type,
+                /* Lo decide el contenido, no una pregunta de cabecera. */
+                'type'        => $this->tipoDelDocumento(),
                 'issue_date'  => $this->issue_date,
                 'due_date'    => $this->due_date ?: null,
                 'terms'       => $this->terms ?: null,
@@ -1420,11 +1592,26 @@ class Form extends Component
             return $factura;
         });
 
+        /* -----------------------------------------------------------------
+         | NO SE REDIRIGE: SE QUEDA AQUI
+         |
+         | Antes saltaba a la ficha, y eso obligaba a mirar el documento
+         | en una pantalla y corregirlo en otra.
+         |
+         | Ahora la factura queda guardada, el numero aparece arriba, y
+         | los botones de imprimir, corregir y anular salen en esta misma
+         | pantalla, debajo de la vista previa que ya se estaba mirando.
+         * -------------------------------------------------------------- */
+        $this->invoiceId = $factura->id;
+        $this->numero    = $factura->invoice_number;
+        $this->yaEnviada = $yEnviar || $this->yaEnviada;
+        $this->guardada  = true;
+
         session()->flash('exito',
             'Factura '.$factura->invoice_number.' guardada'
             .($yEnviar ? ' y marcada como enviada.' : '.'));
 
-        return redirect()->route('finanzas.facturacion.show', $factura);
+        return null;
     }
 
     /**
@@ -1465,6 +1652,10 @@ class Form extends Component
         $empresa = app(CompanyContext::class)->get();
 
         return view('livewire.invoices.form', [
+
+            'terminosDePago' => $this->terminosDePago(),
+            'terminoOtro'    => self::TERMINO_OTRO,
+
 
             /*
              | Vendedores y administradores de la empresa activa,
