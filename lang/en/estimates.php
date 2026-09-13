@@ -60,7 +60,7 @@ return [
     'payment_method_hint'    => 'Tells the system whether to add the card surcharge. Copied to the invoice on conversion.',
     'payment_method_unknown' => '— Not known yet —',
 
-    'use_type'           => 'What will the container be used for?',
+    'use_type'           => 'Intended use',
     'export_notice'      => 'Export sale',
     'export_no_tax'      => 'No sales tax applies.',
     'export_needs_cert'  => 'The CSC certificate PDF is required before invoicing.',
@@ -166,7 +166,7 @@ return [
     'unit_picker_title'  => 'Choose a unit for line :line',
     /* ── The steps ── */
     'step_who'           => 'Who and when',
-    'step_what'          => 'What it includes',
+    'step_what'          => 'Line items',
     'step_review'        => 'Review and send',
     'step_review_locked' => 'Opens once you hit Process.',
     'step_review_go'     => 'Go to the document. No need to process again.',

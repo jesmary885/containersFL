@@ -42,7 +42,7 @@
         <div>
             <h4 class="mb-0 fw-semibold">Contenedores</h4>
             <small class="text-secondary">
-                El inventario sale de las unidades, una por una. Nunca de un contador a mano.
+                Cada unidad con su costo, su precio y su historial de movimientos.
             </small>
         </div>
 
@@ -92,12 +92,12 @@
             <button type="button"
                     class="kpi {{ $resumen['disponibles'] > 0 ? 'kpi-ok' : 'kpi-apagado' }} {{ $marca === 'disponibles' ? 'border-2' : '' }}"
                     wire:click="filtrarPor('disponibles')"
-                    title="En yarda y sin venta ni renta encima">
+                    title="En yarda y sin venta ni renta asociada">
                 <span class="kpi-icono"><i class="bi bi-box-seam"></i></span>
                 <span class="kpi-cuerpo">
                     <span class="kpi-label d-block">Disponibles</span>
                     <span class="kpi-valor d-block">{{ $resumen['disponibles'] }}</span>
-                    <span class="kpi-pie d-block">Se pueden vender hoy</span>
+                    <span class="kpi-pie d-block">Disponibles para venta</span>
                 </span>
             </button>
         </div>
@@ -106,9 +106,9 @@
             <div class="kpi kpi-info">
                 <span class="kpi-icono"><i class="bi bi-cash-stack"></i></span>
                 <span class="kpi-cuerpo">
-                    <span class="kpi-label d-block">Valor en yarda</span>
+                    <span class="kpi-label d-block">Valor del inventario</span>
                     <span class="kpi-valor d-block">${{ number_format($resumen['valor'], 2) }}</span>
-                    <span class="kpi-pie d-block">Compra + recogida + arreglos</span>
+                    <span class="kpi-pie d-block">Adquisición + traslado + reacondicionamiento</span>
                 </span>
             </div>
         </div>
@@ -121,7 +121,7 @@
                 <span class="kpi-cuerpo">
                     <span class="kpi-label d-block">Por llegar</span>
                     <span class="kpi-valor d-block">{{ $resumen['porLlegar'] }}</span>
-                    <span class="kpi-pie d-block">Compradas y no recibidas</span>
+                    <span class="kpi-pie d-block">Adquiridas, pendientes de recepción</span>
                 </span>
             </button>
         </div>
@@ -135,7 +135,7 @@
                 <span class="kpi-cuerpo">
                     <span class="kpi-label d-block">Exportables</span>
                     <span class="kpi-valor d-block">{{ $resumen['exportables'] }}</span>
-                    <span class="kpi-pie d-block">Aptas para exportación</span>
+                    <span class="kpi-pie d-block">Certificadas para exportación</span>
                 </span>
             </button>
         </div>
@@ -149,7 +149,7 @@
                     <span class="kpi-label d-block">Sin precio</span>
                     <span class="kpi-valor d-block">{{ $resumen['sinPrecio'] }}</span>
                     <span class="kpi-pie d-block">
-                        {{ $resumen['sinPrecio'] > 0 ? 'Hay que inventarlo al cotizar' : 'Todas con precio' }}
+                        {{ $resumen['sinPrecio'] > 0 ? 'Sin precio de lista' : 'Todas con precio' }}
                     </span>
                 </span>
             </button>
@@ -267,8 +267,8 @@
                                         <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
                                     @endif
                                 </th>
-                                <th>Qué es</th>
-                                <th>Dónde está</th>
+                                <th>Especificación</th>
+                                <th>Ubicación</th>
                                 <th role="button" wire:click="ordenar('status')">
                                     Estado
                                     @if ($ordenarPor === 'status')
@@ -281,7 +281,7 @@
                                         <i class="bi bi-caret-{{ $direccion === 'asc' ? 'up' : 'down' }}-fill small"></i>
                                     @endif
                                 </th>
-                                <th class="text-end">Costo</th>
+                                <th class="text-end">Costo total</th>
                                 <th class="text-end" style="width: 120px;">Acciones</th>
                             </tr>
                         </thead>

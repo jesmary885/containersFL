@@ -3,12 +3,11 @@
     PROVEEDORES
     ═══════════════════════════════════════════════════════════════════════
 
-    Mismo diseño que los demás listados. Los contadores son botones que
-    filtran, y dos de ellos son listas de trabajo, no estadísticas:
+    Mismo diseño que los demás listados.
 
-      1099        a quién hay que declararle en enero
-      SIN DATOS   proveedores sin teléfono ni correo: no hay cómo pedirles
-                  nada sin buscar en una libreta
+    SIN DATOS no es una estadística: son proveedores sin teléfono ni
+    correo, a los que no hay cómo pedirles nada sin buscar en una
+    libreta.
 --}}
 <div>
 
@@ -19,6 +18,23 @@
                 A quién le compramos contenedores, piezas y servicios.
             </small>
         </div>
+
+
+            {{--
+                IMPORTAR
+
+                Todavía no hace nada, y está a propósito: es para poder
+                enseñar en la reunión que el sistema va a poder tragarse el
+                Excel en vez de que alguien teclee cientos de fichas.
+
+                Se construye cuando se decida el formato exacto del archivo
+                de origen. Prometerlo en pantalla antes de eso sería
+                prometer algo que todavía no se sabe cómo va a ser.
+            --}}
+            <button type="button" class="btn btn-outline-secondary" disabled
+                    title="Disponible en la próxima fase">
+                <i class="bi bi-upload me-1"></i> Importar
+            </button>
 
         @can('suppliers.create')
             <a href="{{ route('compras.proveedores.create') }}" class="btn btn-primary">
@@ -44,20 +60,6 @@
                     <span class="kpi-label d-block">Activos</span>
                     <span class="kpi-valor d-block">{{ $resumen['activos'] }}</span>
                     <span class="kpi-pie d-block">Disponibles para comprar</span>
-                </span>
-            </button>
-        </div>
-
-        <div class="col-6 col-lg-3">
-            <button type="button"
-                    class="kpi {{ $resumen['mil99'] > 0 ? 'kpi-warn' : 'kpi-apagado' }} {{ $marca === 'mil99' ? 'border-2' : '' }}"
-                    wire:click="filtrarPor('mil99')"
-                    title="A quién hay que declararle el 1099 en enero">
-                <span class="kpi-icono"><i class="bi bi-file-earmark-ruled"></i></span>
-                <span class="kpi-cuerpo">
-                    <span class="kpi-label d-block">Declarables 1099</span>
-                    <span class="kpi-valor d-block">{{ $resumen['mil99'] }}</span>
-                    <span class="kpi-pie d-block">Hay que declararlos en enero</span>
                 </span>
             </button>
         </div>
@@ -193,10 +195,6 @@
                             <td class="text-center">{{ $p->purchases_count }}</td>
 
                             <td class="text-center">
-                                @if ($p->is_1099_reportable)
-                                    <span class="badge bg-warning-subtle text-warning-emphasis"
-                                          title="Hay que declararle el 1099">1099</span>
-                                @endif
                                 @unless ($p->is_active)
                                     <span class="badge bg-secondary-subtle text-secondary">Desactivado</span>
                                 @endunless

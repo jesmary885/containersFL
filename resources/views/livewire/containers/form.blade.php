@@ -69,7 +69,7 @@
                         <h6 class="seccion-titulo">
                             <span class="paso-num">1</span>
                             <i class="bi bi-upc-scan"></i>
-                            <span>Cómo se llama</span>
+                            <span>Identificación</span>
                         </h6>
                     </div>
 
@@ -77,7 +77,7 @@
                         <div class="row g-3">
 
                             <div class="col-12 col-md-5">
-                                <label class="form-label">Número de contenedor</label>
+                                <label class="form-label">Código de la unidad</label>
                                 <input type="text"
                                        class="form-control text-uppercase font-monospace @error('container_number') is-invalid @enderror"
                                        placeholder="MSCU1234567"
@@ -85,9 +85,6 @@
                                 @error('container_number')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
-                                <div class="form-text">
-                                    El que viene pintado en la unidad. Es único en todo el sistema.
-                                </div>
                             </div>
 
                             <div class="col-12 col-md-4">
@@ -99,9 +96,6 @@
                                 @error('internal_code')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
-                                <div class="form-text">
-                                    Con el que la yarda la pide. Para las que llegan sin número legible.
-                                </div>
                             </div>
 
                             <div class="col-6 col-md-3">
@@ -115,14 +109,6 @@
                                 @enderror
                             </div>
 
-                            <div class="col-12">
-                                <div class="alert alert-light border py-2 small mb-0">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    Hace falta <strong>uno de los dos</strong>. Sin ninguno, la unidad
-                                    no se puede buscar ni poner en un presupuesto.
-                                </div>
-                            </div>
-
                         </div>
                     </div>
                 </div>
@@ -133,7 +119,7 @@
                         <h6 class="seccion-titulo">
                             <span class="paso-num">2</span>
                             <i class="bi bi-box-seam"></i>
-                            <span>Qué es</span>
+                            <span>Especificaciones</span>
                         </h6>
                     </div>
 
@@ -152,7 +138,6 @@
                                 @error('container_size_id')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
-                                <div class="form-text">Al elegirla se proponen los pesos.</div>
                             </div>
 
                             <div class="col-12 col-md-4">
@@ -173,7 +158,6 @@
                                         <option value="{{ $c->id }}">{{ $c->name }}</option>
                                     @endforeach
                                 </select>
-                                <div class="form-text">Nuevo, usado, una sola travesía.</div>
                             </div>
 
                             <div class="col-12 col-md-4">
@@ -184,9 +168,6 @@
                                         <option value="{{ $g->id }}">{{ $g->name }}</option>
                                     @endforeach
                                 </select>
-                                <div class="form-text">
-                                    Cargo Worthy, WWT o AS-IS. Solo el primero exporta.
-                                </div>
                             </div>
 
                             <div class="col-6 col-md-2">
@@ -220,7 +201,7 @@
                         <h6 class="seccion-titulo">
                             <span class="paso-num">3</span>
                             <i class="bi bi-geo-alt"></i>
-                            <span>Dónde está</span>
+                            <span>Ubicación</span>
                         </h6>
                     </div>
 
@@ -236,9 +217,6 @@
                                     @endforeach
                                 </select>
                                 @error('status') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                                <div class="form-text">
-                                    Solo <strong>En yarda</strong> cuenta como disponible para vender.
-                                </div>
                             </div>
 
                             {{--
@@ -258,7 +236,6 @@
                                             <option value="{{ $u->id }}">{{ $u->name }}</option>
                                         @endforeach
                                     </select>
-                                    <div class="form-text">Dónde está parada dentro de la yarda.</div>
                                 </div>
                             @else
                                 <div class="col-12 col-md-4">
@@ -269,19 +246,17 @@
                                             <option value="{{ $d->id }}">{{ $d->name }}</option>
                                         @endforeach
                                     </select>
-                                    <div class="form-text">Dónde está esperando que la recojan.</div>
                                 </div>
                             @endif
 
                             <div class="col-12 col-md-4">
-                                <label class="form-label">Recibida el</label>
+                                <label class="form-label">Fecha de recepción</label>
                                 <input type="date" class="form-control"
                                        wire:model="received_at">
-                                <div class="form-text">El día que entró a la yarda.</div>
                             </div>
 
                             <div class="col-12">
-                                <label class="form-label">Notas de condición</label>
+                                <label class="form-label">Observaciones</label>
                                 <textarea class="form-control" rows="2"
                                           placeholder="Golpes, óxido, puertas duras... Lo que hay que saber antes de ofrecerla."
                                           wire:model.blur="condition_notes"></textarea>
@@ -309,11 +284,8 @@
                                     <input class="form-check-input" type="checkbox"
                                            id="exportable" wire:model.live="is_export_eligible">
                                     <label class="form-check-label" for="exportable">
-                                        Apta para exportar
+                                        Apta para exportación
                                     </label>
-                                </div>
-                                <div class="form-text">
-                                    Se propone sola según la calidad. Solo el Cargo Worthy califica.
                                 </div>
                             </div>
 
@@ -322,10 +294,6 @@
                                     <label class="form-label">CSC vigente hasta</label>
                                     <input type="date" class="form-control"
                                            wire:model="csc_valid_through">
-                                    <div class="form-text">
-                                        La inspección la hace un tercero y es un <strong>gasto</strong>,
-                                        no un ingreso. Va incluida en el precio de exportación.
-                                    </div>
                                 </div>
                             @endif
 
@@ -345,16 +313,16 @@
                         <h6 class="seccion-titulo">
                             <span class="paso-num">5</span>
                             <i class="bi bi-cash-coin"></i>
-                            <span>Lo que costó y lo que vale</span>
+                            <span>Costos y precios</span>
                         </h6>
                     </div>
 
                     <div class="card-body">
 
-                        <div class="fw-semibold small text-secondary mb-2">LO QUE NOS COSTÓ</div>
+                        <div class="fw-semibold small text-secondary mb-2">COSTOS</div>
 
                         <div class="mb-2">
-                            <label class="form-label small">Compra</label>
+                            <label class="form-label small">Adquisición</label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text">$</span>
                                 <input type="number" step="0.01"
@@ -367,14 +335,11 @@
                         </div>
 
                         <div class="mb-2">
-                            <label class="form-label small">Recogida del depósito</label>
+                            <label class="form-label small">Traslado desde el depósito</label>
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text">$</span>
                                 <input type="number" step="0.01" class="form-control"
                                        wire:model.live.debounce.500ms="pickup_cost">
-                            </div>
-                            <div class="form-text">
-                                Es costo nuestro. Nunca se le cotiza al cliente.
                             </div>
                         </div>
 
@@ -389,15 +354,15 @@
 
                         <div class="rn-desglose mb-3">
                             <div class="rn-dg">
-                                <span class="rn-dg-k">Costo puesto en yarda</span>
+                                <span class="rn-dg-k">Costo total</span>
                                 <span class="rn-dg-v">${{ number_format($this->costoTotal, 2) }}</span>
-                                <span class="rn-dg-n">Compra + recogida + arreglos</span>
+                                <span class="rn-dg-n">Adquisición + traslado + reacondicionamiento</span>
                             </div>
                         </div>
 
                         <hr>
 
-                        <div class="fw-semibold small text-secondary mb-2">LO QUE SE LE COBRA</div>
+                        <div class="fw-semibold small text-secondary mb-2">PRECIOS</div>
 
                         <div class="mb-2">
                             <label class="form-label small">Precio de venta</label>
@@ -410,9 +375,6 @@
                             @error('list_price')
                                 <div class="text-danger small">{{ $message }}</div>
                             @enderror
-                            <div class="form-text">
-                                Se precarga en el presupuesto. El vendedor lo puede cambiar.
-                            </div>
                         </div>
 
                         <div class="mb-3">
@@ -442,9 +404,6 @@
                                 ({{ $this->margen['porciento'] }}% sobre el costo)
                             </div>
                         @else
-                            <div class="form-text">
-                                El margen sale solo en cuanto haya costo y precio.
-                            </div>
                         @endif
 
                     </div>
@@ -455,33 +414,28 @@
                     <div class="card-header">
                         <h6 class="seccion-titulo">
                             <i class="bi bi-building"></i>
-                            <span>De quién es</span>
+                            <span>Titularidad</span>
                         </h6>
                     </div>
 
                     <div class="card-body">
 
                         <div class="mb-2">
-                            <label class="form-label small">Empresa dueña</label>
+                            <label class="form-label small">Empresa propietaria</label>
                             <select class="form-select form-select-sm" wire:model="owner_company_id">
                                 @foreach ($empresas as $e)
                                     <option value="{{ $e->id }}">{{ $e->name }}</option>
                                 @endforeach
                             </select>
-                            <div class="form-text">Quién puso el dinero.</div>
                         </div>
 
                         <div>
-                            <label class="form-label small">Empresa que la vende</label>
+                            <label class="form-label small">Empresa comercializadora</label>
                             <select class="form-select form-select-sm" wire:model="billing_company_id">
                                 @foreach ($empresas as $e)
                                     <option value="{{ $e->id }}">{{ $e->name }}</option>
                                 @endforeach
                             </select>
-                            <div class="form-text">
-                                Es la que decide en qué inventario aparece. Casi siempre es la misma
-                                que la dueña.
-                            </div>
                         </div>
 
                     </div>

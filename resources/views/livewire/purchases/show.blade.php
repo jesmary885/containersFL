@@ -47,6 +47,13 @@
 
     </div>
 
+    @if (session('error'))
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
     @if (session('exito'))
         <div class="alert alert-success alert-dismissible fade show">
             <i class="bi bi-check-circle-fill me-1"></i> {{ session('exito') }}
@@ -70,7 +77,7 @@
                 <strong>${{ number_format((float) $purchase->daily_late_fee * $purchase->overdue_days, 2) }}</strong>
                 de almacenaje.
             @else
-                Hay que ir a buscar lo que falta.
+                Quedan unidades pendientes de retirar.
             @endif
         </div>
     @elseif ($faltan > 0 && $purchase->pickup_deadline_at)
@@ -98,7 +105,7 @@
                 <span class="kpi-cuerpo">
                     <span class="kpi-label d-block">Compradas</span>
                     <span class="kpi-valor d-block">{{ $compradas }}</span>
-                    <span class="kpi-pie d-block">Lo que se pagó</span>
+                    <span class="kpi-pie d-block">Total adquirido</span>
                 </span>
             </div>
         </div>
@@ -107,9 +114,9 @@
             <div class="kpi kpi-ok">
                 <span class="kpi-icono"><i class="bi bi-box-seam"></i></span>
                 <span class="kpi-cuerpo">
-                    <span class="kpi-label d-block">En la yarda</span>
+                    <span class="kpi-label d-block">Recibidas</span>
                     <span class="kpi-valor d-block">{{ $recibidas }}</span>
-                    <span class="kpi-pie d-block">Ya llegaron de verdad</span>
+                    <span class="kpi-pie d-block">Dadas de alta en inventario</span>
                 </span>
             </div>
         </div>
@@ -121,7 +128,7 @@
                     <span class="kpi-label d-block">Por traer</span>
                     <span class="kpi-valor d-block">{{ $faltan }}</span>
                     <span class="kpi-pie d-block">
-                        {{ $faltan > 0 ? 'Siguen en el depósito' : 'Nada pendiente' }}
+                        {{ $faltan > 0 ? 'Pendientes en el depósito' : 'Sin pendientes' }}
                     </span>
                 </span>
             </div>
@@ -131,7 +138,7 @@
             <div class="kpi kpi-info">
                 <span class="kpi-icono"><i class="bi bi-cash-coin"></i></span>
                 <span class="kpi-cuerpo">
-                    <span class="kpi-label d-block">Total pagado</span>
+                    <span class="kpi-label d-block">Total de la compra</span>
                     <span class="kpi-valor d-block">${{ number_format((float) $purchase->total, 2) }}</span>
                     <span class="kpi-pie d-block">
                         Precio + pick up, como en el Excel
@@ -152,10 +159,10 @@
             <div class="card mb-3">
                 <div class="card-header bg-white">
                     <span class="fw-semibold">
-                        <i class="bi bi-list-ul me-1"></i> Qué se compró y qué ha llegado
+                        <i class="bi bi-list-ul me-1"></i> Detalle de la compra
                     </span>
                     <small class="text-secondary d-block">
-                        Recibir una unidad la da de alta en el inventario con su número real.
+                        Cada recepción da de alta las unidades en el inventario.
                     </small>
                 </div>
 
@@ -206,82 +213,14 @@
                                      style="width: {{ $pct }}%"></div>
                             </div>
 
-                            {{-- ───── RECIBIR ───── --}}
+                            {{-- ───── RETIRAR ───── --}}
                             @if ($pendientes > 0)
                                 @can('purchases.update')
-
-                                    @if ($itemRecibiendo === $item->id)
-
-                                        <div class="border-top mt-3 pt-3">
-
-                                            <div class="alert alert-light border py-2 small">
-                                                <i class="bi bi-info-circle me-1"></i>
-                                                Se registra <strong>una unidad</strong>. Lea el número pintado
-                                                en la puerta. Si no se lee, póngale un código interno con el
-                                                que la yarda pueda pedirla.
-                                            </div>
-
-                                            <div class="row g-2">
-
-                                                <div class="col-12 col-md-4">
-                                                    <label class="form-label small">Número del contenedor</label>
-                                                    <input type="text"
-                                                           class="form-control form-control-sm text-uppercase font-monospace @error('numeroUnidad') is-invalid @enderror"
-                                                           placeholder="MSCU1234567"
-                                                           wire:model.blur="numeroUnidad">
-                                                    @error('numeroUnidad')
-                                                        <div class="invalid-feedback">{{ $message }}</div>
-                                                    @enderror
-                                                </div>
-
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small">Código interno</label>
-                                                    <input type="text" class="form-control form-control-sm"
-                                                           placeholder="Unit #3"
-                                                           wire:model.blur="codigoUnidad">
-                                                </div>
-
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small">Dónde queda</label>
-                                                    <select class="form-select form-select-sm" wire:model="ubicacionId">
-                                                        <option value="">— Sin ubicación —</option>
-                                                        @foreach ($ubicaciones as $u)
-                                                            <option value="{{ $u->id }}">{{ $u->name }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-
-                                                <div class="col-12 col-md-2 d-flex align-items-end gap-2">
-                                                    <button type="button" class="btn btn-sm btn-success"
-                                                            wire:click="recibirUnidad">
-                                                        <i class="bi bi-check-lg"></i>
-                                                    </button>
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary"
-                                                            wire:click="cerrarRecibir">
-                                                        <i class="bi bi-x-lg"></i>
-                                                    </button>
-                                                </div>
-
-                                                <div class="col-12">
-                                                    <input type="text" class="form-control form-control-sm"
-                                                           placeholder="Estado en que llegó: golpes, óxido, puertas duras…"
-                                                           wire:model.blur="notaUnidad">
-                                                </div>
-
-                                            </div>
-
-                                        </div>
-
-                                    @else
-
-                                        <button type="button" class="btn btn-sm btn-outline-success mt-3"
-                                                wire:click="abrirRecibir({{ $item->id }})">
-                                            <i class="bi bi-box-arrow-in-down me-1"></i>
-                                            Recibir una unidad
-                                        </button>
-
-                                    @endif
-
+                                    <button type="button" class="btn btn-sm btn-outline-success mt-3"
+                                            wire:click="abrirRetiro({{ $item->id }})">
+                                        <i class="bi bi-truck me-1"></i>
+                                        Registrar recepción
+                                    </button>
                                 @endcan
                             @endif
 
@@ -296,10 +235,10 @@
             <div class="card mb-3">
                 <div class="card-header bg-white">
                     <span class="fw-semibold">
-                        <i class="bi bi-box-seam me-1"></i> Las unidades que entraron por esta compra
+                        <i class="bi bi-box-seam me-1"></i> Unidades recibidas
                     </span>
                     <small class="text-secondary d-block">
-                        Detrás del número de "recibidas" hay contenedores con nombre y apellido.
+                        Cada una con su código y su costo total.
                     </small>
                 </div>
 
@@ -319,9 +258,40 @@
                                 </div>
                             </div>
 
-                            <div class="text-end small">
-                                <div class="monto">${{ number_format($u->total_cost, 2) }}</div>
-                                <div class="text-secondary" style="font-size: .72rem;">costo puesta en yarda</div>
+                            <div class="text-end small d-flex align-items-center gap-3">
+
+                                <div>
+                                    <div class="monto">${{ number_format($u->total_cost, 2) }}</div>
+                                    <div class="text-secondary" style="font-size: .72rem;">costo total</div>
+                                </div>
+
+                                {{--
+                                    CORREGIR
+
+                                    Se teclea un número mal o se registran tres
+                                    cuando vinieron dos. Sin esta salida había
+                                    que editar el contenedor por un lado y el
+                                    contador de la compra por otro, y quedaban
+                                    diciendo cosas distintas.
+                                --}}
+                                @can('purchases.update')
+                                    @if ($unidadPorQuitar === $u->id)
+                                        <div class="d-inline-flex align-items-center gap-2">
+                                            <small class="text-secondary">¿Deshacer?</small>
+                                            <button class="btn btn-sm btn-danger"
+                                                    wire:click="quitarUnidad">Sí</button>
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    wire:click="cancelarQuitarUnidad">No</button>
+                                        </div>
+                                    @else
+                                        <button class="acc acc-borrar"
+                                                wire:click="pedirQuitarUnidad({{ $u->id }})"
+                                                title="Deshacer el alta de esta unidad">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    @endif
+                                @endcan
+
                             </div>
 
                         </div>
@@ -329,8 +299,7 @@
                         <div class="text-center py-3 text-secondary">
                             <i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>
                             <div class="small">
-                                Todavía no ha llegado ninguna. El inventario no las cuenta hasta
-                                que estén aquí.
+                                Sin unidades recibidas todavía.
                             </div>
                         </div>
                     @endforelse
@@ -360,7 +329,7 @@
                         <dd class="col-7">{{ $purchase->depot?->name ?? 'Entrega directa' }}</dd>
 
                         @if ($purchase->depot?->phone)
-                            <dt class="col-5 text-secondary fw-normal">Se llama al</dt>
+                            <dt class="col-5 text-secondary fw-normal">Contacto</dt>
                             <dd class="col-7">{{ $purchase->depot->phone }}</dd>
                         @endif
 
@@ -377,7 +346,7 @@
                             @endif
                         </dd>
 
-                        <dt class="col-5 text-secondary fw-normal">Registró</dt>
+                        <dt class="col-5 text-secondary fw-normal">Registrado por</dt>
                         <dd class="col-7">{{ $purchase->createdBy?->name ?? '—' }}</dd>
 
                     </dl>
@@ -406,7 +375,7 @@
                     <table class="table table-sm mb-0">
                         <tbody>
                             <tr>
-                                <td class="text-secondary">Precio</td>
+                                <td class="text-secondary">Mercancía</td>
                                 <td class="text-end monto">${{ number_format((float) $purchase->subtotal, 2) }}</td>
                             </tr>
                             <tr>
@@ -437,5 +406,184 @@
         </div>
 
     </div>
+
+
+    {{-- ═════════════════════════════════════════════════════════════
+         EL RETIRO
+
+         Un viaje al depósito: qué unidades vinieron, quién las trajo y
+         cuánto costó cada una.
+
+         Dibujado a mano y no con el JavaScript de Bootstrap, por lo de
+         siempre: Livewire repinta este pedazo y un modal abierto por JS
+         se queda colgado con el fondo gris pegado.
+    ═════════════════════════════════════════════════════════════ --}}
+    @if ($modalRetiro)
+        <div class="modal fade show d-block" tabindex="-1" style="background: rgba(15,23,42,.55);">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Registrar recepción</h5>
+                        <button type="button" class="btn-close" wire:click="cerrarRetiro"></button>
+                    </div>
+
+                    <div class="modal-body">
+
+                        <div class="alert alert-light border py-2 small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Se registra una recepción por viaje. Las unidades pendientes quedan
+                            disponibles para recepciones posteriores, con su propio costo de traslado.
+                        </div>
+
+                        {{-- ── CUÁNTAS VINIERON ── --}}
+                        <div class="row g-3 mb-3">
+
+                            <div class="col-6 col-md-2">
+                                <label class="form-label small">Cantidad</label>
+                                <input type="number" min="1"
+                                       class="form-control @error('cuantas') is-invalid @enderror"
+                                       wire:model.live="cuantas">
+                                @error('cuantas') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
+
+                            <div class="col-6 col-md-3">
+                                <label class="form-label small">Fecha de recepción</label>
+                                <input type="date"
+                                       class="form-control form-control-sm @error('fechaRetiro') is-invalid @enderror"
+                                       wire:model="fechaRetiro">
+                                @error('fechaRetiro') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
+
+                            <div class="col-12 col-md-3">
+                                <label class="form-label small">Ubicación</label>
+                                <select class="form-select form-select-sm" wire:model="ubicacionId">
+                                    <option value="">— Sin ubicación —</option>
+                                    @foreach ($ubicaciones as $u)
+                                        <option value="{{ $u->id }}">{{ $u->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            {{--
+                                QUIÉN LAS TRAJO
+
+                                Es la columna NOMBRE TRANS. del Excel, que tiene
+                                tres clases de valor: un transportista externo,
+                                un trabajador nuestro, o "directo a la yarda"
+                                cuando lo trajo el proveedor.
+
+                                Esas últimas son las que en el Excel llevan PICK
+                                UP en $0.00.
+                            --}}
+                            <div class="col-12 col-md-4">
+                                <label class="form-label small">Responsable del traslado</label>
+                                <select class="form-select form-select-sm" wire:model.live="quienTrajo">
+                                    <option value="proveedor">El proveedor (entrega directa)</option>
+                                    <option value="trabajador">Personal propio</option>
+                                    <option value="transportista">Transportista externo</option>
+                                </select>
+                            </div>
+
+                            @if ($quienTrajo === 'trabajador')
+                                <div class="col-12 col-md-5">
+                                    <label class="form-label small">Seleccionar</label>
+                                    <select class="form-select form-select-sm" wire:model="empleadoId">
+                                        <option value="">— Elegir —</option>
+                                        @foreach ($empleados as $e)
+                                            <option value="{{ $e->id }}">{{ $e->name }} · {{ $e->role_label }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            @elseif ($quienTrajo === 'transportista')
+                                <div class="col-12 col-md-5">
+                                    <label class="form-label small">Seleccionar</label>
+                                    <select class="form-select form-select-sm" wire:model="transportistaId">
+                                        <option value="">— Elegir —</option>
+                                        @foreach ($transportistas as $t)
+                                            <option value="{{ $t->id }}">{{ $t->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            @endif
+
+                        </div>
+
+                        {{-- ── LAS UNIDADES ── --}}
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 30px;"></th>
+                                        <th>Código de la unidad</th>
+                                        <th>Código interno</th>
+                                        <th class="text-end" style="width: 130px;">Traslado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                @foreach ($unidadesDelRetiro as $i => $u)
+                                    <tr wire:key="ret-{{ $i }}">
+                                        <td class="text-secondary small">{{ $i + 1 }}</td>
+
+                                        <td>
+                                            <input type="text"
+                                                   class="form-control form-control-sm text-uppercase font-monospace @error('unidadesDelRetiro.'.$i.'.numero') is-invalid @enderror"
+                                                   placeholder="MSCU1234567"
+                                                   wire:model.blur="unidadesDelRetiro.{{ $i }}.numero">
+                                            @error('unidadesDelRetiro.'.$i.'.numero')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </td>
+
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm"
+                                                   placeholder="Opcional"
+                                                   wire:model.blur="unidadesDelRetiro.{{ $i }}.codigo">
+                                        </td>
+
+                                        <td>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text">$</span>
+                                                <input type="number" step="0.01" class="form-control text-end"
+                                                       wire:model.live.debounce.500ms="unidadesDelRetiro.{{ $i }}.pickup">
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <span class="small text-secondary">
+                                El costo de traslado se propone desde el depósito y es editable por unidad.
+                            </span>
+                            <span class="fw-semibold">
+                                Traslado: ${{ number_format($this->pickupDelRetiro, 2) }}
+                            </span>
+                        </div>
+
+                        <div class="mt-3">
+                            <input type="text" class="form-control form-control-sm"
+                                   placeholder="Observaciones de la recepción"
+                                   wire:model.blur="notaRetiro">
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" wire:click="cerrarRetiro">
+                            Cancelar
+                        </button>
+                        <button type="button" class="btn btn-success" wire:click="registrarRetiro">
+                            <i class="bi bi-check-lg me-1"></i>
+                            Registrar recepción
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    @endif
 
 </div>

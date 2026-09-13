@@ -26,15 +26,8 @@ use Livewire\WithPagination;
  * ── NO ES UNA COPIA DE CLIENTES ──
  *
  * Se parecen y son cosas distintas. Un cliente necesita certificado de
- * exención, autorización de tarjeta y aviso de cobranza. Un proveedor
- * necesita otra cosa: el 1099.
- *
- * ── EL 1099 ──
- *
- * Es la declaración que Estados Unidos exige presentar por cada
- * proveedor al que se le pagaron más de $600 en el año. Marcar aquí
- * quién entra es lo que permite sacar esa lista en enero sin repasar
- * doce meses de gastos a mano.
+ * exención, autorización de tarjeta y aviso de cobranza. Un proveedor no
+ * necesita nada de eso.
  *
  * ── NO BORRA ──
  *
@@ -142,7 +135,6 @@ class Index extends Component
             ->when($this->estado === 'activos',   fn ($q) => $q->where('is_active', true))
             ->when($this->estado === 'inactivos', fn ($q) => $q->where('is_active', false))
 
-            ->when($this->marca === 'mil99',      fn ($q) => $q->where('is_1099_reportable', true))
             ->when($this->marca === 'sin_datos',  fn ($q) => $q
                 ->whereNull('phone')->whereNull('email'))
 
@@ -155,7 +147,6 @@ class Index extends Component
 
             'resumen' => [
                 'activos'   => Supplier::where('is_active', true)->count(),
-                'mil99'     => Supplier::where('is_1099_reportable', true)->count(),
                 'sinDatos'  => Supplier::where('is_active', true)
                                   ->whereNull('phone')->whereNull('email')->count(),
                 'depositos' => \App\Models\Depot::where('is_active', true)->count(),

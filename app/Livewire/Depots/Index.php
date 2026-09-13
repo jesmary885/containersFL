@@ -89,7 +89,9 @@ class Index extends Component
             ->when($this->estado === 'activos',   fn ($q) => $q->where('is_active', true))
             ->when($this->estado === 'inactivos', fn ($q) => $q->where('is_active', false))
 
-            ->orderBy('name')
+            /* El ultimo registrado, primero. */
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->paginate($this->porPagina);
 
         return view('livewire.depots.index', [

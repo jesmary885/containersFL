@@ -46,7 +46,6 @@ class Form extends Component
         'line1' => '', 'line2' => '', 'city' => '', 'state' => 'FL', 'zip' => '',
     ];
 
-    public bool $is_1099_reportable = false;
     public bool $is_active          = true;
 
     public ?string $notes = null;
@@ -67,7 +66,6 @@ class Form extends Component
             // El array_merge deja todas las claves aunque en la base esté null.
             $this->address = array_merge($this->address, $supplier->address ?: []);
 
-            $this->is_1099_reportable = (bool) $supplier->is_1099_reportable;
             $this->is_active          = (bool) $supplier->is_active;
             $this->notes              = $supplier->notes;
 
@@ -160,7 +158,6 @@ class Form extends Component
                 ? null
                 : array_map(fn ($v) => $v ?: null, $this->address),
 
-            'is_1099_reportable' => $this->is_1099_reportable,
             'is_active'          => $this->is_active,
             'notes'              => $this->notes ?: null,
         ])->save();

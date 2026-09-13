@@ -157,15 +157,17 @@
                                 @error('pickup_deadline_at') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
 
-                            <div class="col-6 col-md-2">
-                                <label class="form-label">Pick up por unidad</label>
-                                <div class="input-group">
-                                    <span class="input-group-text">$</span>
-                                    <input type="number" step="0.01" class="form-control"
-                                           wire:model.live.debounce.500ms="pickup_fee">
-                                </div>
-                                <div class="form-text">Lo que cuesta traer cada una.</div>
-                            </div>
+                            {{--
+                                Aquí estaba el pick up, y no va aquí.
+
+                                Al registrar la compra todavía no se sabe cuánto
+                                va a costar traerla: un release de siete se puede
+                                retirar en tres viajes, con tres costos distintos
+                                y tres transportistas distintos.
+
+                                Se pregunta en el retiro, que es cuando se sabe.
+                            --}}
+
 
                             <div class="col-6 col-md-2">
                                 <label class="form-label">Por día extra</label>
@@ -347,15 +349,15 @@
                     <div class="card-body">
 
                         {{--
-                            LAS TRES COLUMNAS SON LAS DEL EXCEL.
+                            Aquí va solo la mercancía.
 
-                            La hoja COMPRAS tiene PRECIO, PICK UP y TOTAL, y
-                            el total es la suma de los dos. Se replica igual
-                            para que el número cuadre con el que la empresa
-                            lleva calculando desde siempre.
+                            El pick up se suma después, retiro a retiro. En el
+                            Excel es una columna por contenedor —$50 un 20FT de
+                            Touax, $0 cuando vino directo— y eso es justo lo que
+                            no se puede saber el día que se firma el release.
 
-                            Por eso tampoco hay campo de impuesto: esa hoja no
-                            tiene columna de impuesto.
+                            Tampoco hay impuesto: la hoja COMPRAS no tiene esa
+                            columna.
                         --}}
                         <table class="table table-sm mb-0">
                             <tbody>
@@ -364,25 +366,12 @@
                                     <td class="text-end fw-semibold">{{ $this->unidades }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="text-secondary">Precio</td>
+                                    <td class="text-secondary">Mercancía</td>
                                     <td class="text-end monto">${{ number_format($this->subtotal, 2) }}</td>
                                 </tr>
-                                <tr>
-                                    <td class="text-secondary">
-                                        Pick up
-                                        @if ((float) ($pickup_fee ?: 0) > 0)
-                                            <div class="small">
-                                                ${{ number_format((float) $pickup_fee, 2) }}
-                                                × {{ $this->unidades }}
-                                            </div>
-                                        @endif
-                                    </td>
-                                    <td class="text-end monto">
-                                        ${{ number_format($this->pickupTotal, 2) }}
-                                    </td>
-                                </tr>
+
                                 <tr class="fw-bold border-top fs-5">
-                                    <td>TOTAL</td>
+                                    <td>SE LE PAGA</td>
                                     <td class="text-end monto">${{ number_format($this->total, 2) }}</td>
                                 </tr>
                             </tbody>

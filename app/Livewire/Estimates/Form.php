@@ -410,7 +410,17 @@ class Form extends Component
 
         // Un renglón en blanco esperando, pero SIN abrir el modal encima:
         // lo primero que hay que elegir es el cliente, no el concepto.
-        $this->lineas = [$this->lineaVacia()];
+        /*
+         | SIN NINGUN RENGLON.
+         |
+         | Antes arrancaba con uno en blanco esperando. Se quito por lo
+         | mismo que en la factura: un renglon que nadie pidio cuenta para
+         | la validacion y para el pie, y obliga a borrarlo si al final no
+         | hacia falta.
+         |
+         | Ahora el unico camino es el boton de agregar concepto, que es
+         | lo que el usuario espera al entrar a esa seccion.
+         */
 
         return null;
     }
@@ -476,6 +486,7 @@ class Form extends Component
             'unit_price'   => (float) $linea->unit_price,
             'taxable'      => (bool) $linea->taxable,
             'grupo'        => (string) ($linea->bundle_key ?? ''),
+            'use_type'     => $linea->use_type,
 
             'delivery_zip'  => $linea->delivery_zip,
             'miles'         => $linea->miles !== null ? (float) $linea->miles : null,
@@ -496,7 +507,7 @@ class Form extends Component
         }
 
         if (empty($this->lineas)) {
-            $this->lineas = [$this->lineaVacia()];
+
         }
     }
 
@@ -703,7 +714,6 @@ class Form extends Component
      */
     public function agregarLinea(): void
     {
-        $this->lineas[] = $this->lineaVacia();
 
         $this->abrirLinea(array_key_last($this->lineas), esNuevo: true);
     }
@@ -873,6 +883,14 @@ class Form extends Component
             'unit_price'   => 0,
             'taxable'      => false,
             'grupo'        => '',
+
+            /*
+             | El uso previsto de ESTA unidad.
+             |
+             | Se pregunta por renglon y no en la cabecera: un presupuesto
+             | puede llevar tres contenedores con tres destinos distintos.
+             */
+            'use_type'     => null,
 
             // RB-049 · el cálculo del transporte vive acá, no en la cabecera
             'delivery_zip'  => null,
@@ -1847,13 +1865,31 @@ class Form extends Component
         ];
     }
 
+    /**
+     * El uso que hereda el documento de sus renglones.
+     *
+     * Gana exportacion sobre cualquier otro: es la que cambia las reglas
+     * —sin impuesto, sin delivery, solo Cargo Worthy— y equivocarse hacia
+     * el lado permisivo sale caro.
+     */
+    protected function usoDelDocumento(): ?string
+    {
+        $usos = collect($this->lineas)->pluck('use_type')->filter()->unique();
+
+        if ($usos->contains(UseType::Export->value)) {
+            return UseType::Export->value;
+        }
+
+        return $usos->first();
+    }
+
     protected function rules(): array
     {
         return [
             'customer_id' => ['required', 'exists:customers,id'],
             'issue_date'  => ['required', 'date'],
             'valid_until' => ['nullable', 'date', 'after_or_equal:issue_date'],
-            'use_type'    => ['required', Rule::in(UseType::values())],
+            'use_type' => ['nullable', Rule::in(UseType::values())],
 
             /* -------------------------------------------------------------
              | LOS TÉRMINOS DE PAGO
@@ -1913,6 +1949,7 @@ class Form extends Component
             'lineas.*.product_id'   => ['nullable', 'exists:products,id'],
             'lineas.*.container_id' => ['nullable', 'exists:containers,id'],
             'lineas.*.grupo'        => ['nullable', 'string', 'max:20'],
+            'lineas.*.use_type'     => ['nullable', Rule::in(UseType::values())],
             'lineas.*.delivery_zip'  => ['nullable', 'string', 'max:10'],
             'lineas.*.rental_months' => ['nullable', 'integer', 'min:1', 'max:120'],
             'lineas.*.work_details'  => ['nullable', 'string', 'max:2000'],
@@ -2089,7 +2126,17 @@ class Form extends Component
                 'issue_date'  => $this->issue_date,
                 'valid_until' => $this->valid_until ?: null,
                 'terms'       => $this->terms ?: null,
-                'use_type'    => $this->use_type,
+                /*
+                 | EL USO DEL DOCUMENTO SALE DE SUS RENGLONES.
+                 |
+                 | Ya no se pregunta arriba. Si algun renglon es de
+                 | exportacion, el documento lo es: es la regla mas
+                 | estricta y la que decide si hace falta certificado.
+                 |
+                 | Asi todo lo que ya dependia de esta columna sigue
+                 | funcionando sin tocarlo.
+                 */
+                'use_type'    => $this->usoDelDocumento(),
 
                 'bill_to' => $this->limpiarDireccion($this->bill_to),
                 'ship_to' => $this->envioDistinto ? $this->limpiarDireccion($this->ship_to) : null,
@@ -2174,6 +2221,7 @@ class Form extends Component
                     'rental_months' => $linea['rental_months'] ?: null,
                     'work_details'  => $linea['work_details'] ?: null,
 
+                    'use_type'           => $linea['use_type'] ?: null,
                     'bundle_key'         => $grupoValido,
                     'bundle_description' => $grupoValido
                         ? ($this->gruposDescripcion[$grupoValido] ?? null)

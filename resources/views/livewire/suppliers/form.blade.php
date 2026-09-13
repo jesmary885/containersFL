@@ -47,7 +47,7 @@
                         <h6 class="seccion-titulo">
                             <span class="paso-num">1</span>
                             <i class="bi bi-shop"></i>
-                            <span>Quién es</span>
+                            <span>Datos generales</span>
                         </h6>
                     </div>
 
@@ -62,15 +62,12 @@
                             </div>
 
                             <div class="col-12 col-md-5">
-                                <label class="form-label">Qué nos vende <span class="text-danger">*</span></label>
+                                <label class="form-label">Tipo <span class="text-danger">*</span></label>
                                 <select class="form-select" wire:model="type">
                                     @foreach ($tipos as $valor => $etiqueta)
                                         <option value="{{ $valor }}">{{ $etiqueta }}</option>
                                     @endforeach
                                 </select>
-                                <div class="form-text">
-                                    Sirve para filtrar y para saber a quién pedir qué.
-                                </div>
                             </div>
 
                             <div class="col-12 col-md-4">
@@ -101,7 +98,7 @@
                         <h6 class="seccion-titulo">
                             <span class="paso-num">2</span>
                             <i class="bi bi-geo-alt"></i>
-                            <span>Dónde está</span>
+                            <span>Dirección</span>
                         </h6>
                     </div>
 
@@ -165,34 +162,24 @@
                         <h6 class="seccion-titulo">
                             <span class="paso-num">3</span>
                             <i class="bi bi-file-earmark-ruled"></i>
-                            <span>Impuestos y estado</span>
+                            <span>Estado</span>
                         </h6>
                     </div>
 
                     <div class="card-body">
 
-                        <div class="form-check form-switch mb-1">
-                            <input class="form-check-input" type="checkbox"
-                                   id="mil99" wire:model="is_1099_reportable">
-                            <label class="form-check-label" for="mil99">
-                                Hay que declararle el 1099
-                            </label>
-                        </div>
-
                         {{--
-                            QUÉ ES EL 1099
+                            Aquí estaba la casilla del 1099.
 
-                            Merece explicarse en pantalla: es una obligación
-                            legal con fecha, y el que la marca no siempre es el
-                            que la presenta.
+                            La quité: busqué "1099" en las tres actas y no
+                            aparece en ninguna. La columna sigue en la base
+                            —alguien del equipo la pensó antes— pero pedirla en
+                            pantalla sin que el cliente la haya pedido es una
+                            casilla que nadie va a marcar porque nadie sabe para
+                            qué es.
+
+                            Si Denisse la pide, vuelve con diez líneas.
                         --}}
-                        <div class="alert alert-light border py-2 small">
-                            <i class="bi bi-info-circle me-1"></i>
-                            Estados Unidos exige declarar cada proveedor al que se le pagaron
-                            <strong>más de $600 en el año</strong>. Marcarlo aquí es lo que permite
-                            sacar esa lista en enero sin repasar doce meses de gastos a mano.
-                        </div>
-
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox"
                                    id="activo" wire:model="is_active">

@@ -171,14 +171,27 @@
                                 </li>
                             @endcan
 
-                            @can('drivers.view')
-                                <li class="nav-item">
-                                    <a href="{{ route('operaciones.choferes.index') }}"
-                                       class="nav-link {{ request()->routeIs('operaciones.choferes.*') ? 'active' : '' }}">
-                                        <i class="nav-icon bi bi-person-badge"></i><p>{{ __('nav.drivers') }}</p>
-                                    </a>
-                                </li>
-                            @endcan
+                            {{--
+                                ── DONDE ESTAN LOS CHOFERES ──
+
+                                En Sistema › Trabajadores, con el resto de la
+                                gente de la empresa.
+
+                                Tenerlos en dos sitios obligaba a registrar dos
+                                veces a la misma persona: un chofer que ademas
+                                hace un delivery cobrado o vende un contenedor
+                                existiria como chofer y como vendedor, con dos
+                                fichas que hay que mantener a la par.
+
+                                Ahora se registra una vez y se dice que rol
+                                tiene. Si es chofer, el formulario pide ademas
+                                su licencia y su certificado medico, y el
+                                sistema mantiene solo la ficha tecnica a la que
+                                apuntan los viajes y las liquidaciones.
+
+                                La ruta operaciones.choferes.index se deja viva
+                                por si hace falta volver atras.
+                            --}}
 
                             {{-- Camiones vivía en "Inventario". En Roles está en Operaciones. --}}
                             @can('vehicles.view')
@@ -362,6 +375,19 @@
                                 un usuario decide qué hace ese rol.
                             --}}
                             @can('users.view')
+                                {{--
+                                    TRABAJADORES va antes que USUARIOS a
+                                    proposito: hay muchos mas trabajadores que
+                                    usuarios, y es la pantalla que se abre a
+                                    diario.
+                                --}}
+                                <li class="nav-item">
+                                    <a href="{{ route('sistema.trabajadores.index') }}"
+                                       class="nav-link {{ request()->routeIs('sistema.trabajadores.*') ? 'active' : '' }}">
+                                        <i class="nav-icon bi bi-person-badge"></i><p>Trabajadores</p>
+                                    </a>
+                                </li>
+
                                 <li class="nav-item">
                                     <a href="{{ route('administracion.usuarios.index') }}"
                                        class="nav-link {{ request()->routeIs('administracion.usuarios.*') ? 'active' : '' }}">

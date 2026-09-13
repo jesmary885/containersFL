@@ -19,6 +19,16 @@ enum DocumentCategory: string
     case ContainerPhoto     = 'container_photo';
     case Pod                = 'pod';                // prueba de entrega firmada
     case ExpenseReceipt     = 'expense_receipt';
+    /*
+     | El comprobante del registro de la empresa en Sunbiz.
+     |
+     | Se verifica antes de darle credito o procesarle una tarjeta, y
+     | hasta ahora la verificacion quedaba como una casilla marcada sin
+     | nada que la respalde. Si manana alguien pregunta quien verifico y
+     | con que, la casilla no prueba nada.
+     */
+    case SunbizRecord       = 'sunbiz_record';
+
     case Other              = 'other';
 
     public function label(): string
@@ -32,6 +42,7 @@ enum DocumentCategory: string
             self::ContainerPhoto    => 'Foto de contenedor',
             self::Pod               => 'Prueba de entrega',
             self::ExpenseReceipt    => 'Recibo de gasto',
+            self::SunbizRecord      => 'Registro de Sunbiz',
             self::Other             => 'Otro',
         };
     }

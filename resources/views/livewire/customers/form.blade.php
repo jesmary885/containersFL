@@ -102,7 +102,7 @@
                 class="ps-paso {{ $paso === 1 ? 'ps-activo' : 'ps-hecho' }}"
                 wire:click="irAlPaso(1)">
             <span class="ps-bolita">{{ $paso > 1 ? '✓' : '1' }}</span>
-            <span class="ps-texto">Quién es</span>
+            <span class="ps-texto">Datos generales</span>
         </button>
 
         <span class="ps-sep"></span>
@@ -111,7 +111,7 @@
                 class="ps-paso {{ $paso === 2 ? 'ps-activo' : ($paso > 2 ? 'ps-hecho' : '') }}"
                 wire:click="irAlPaso(2)">
             <span class="ps-bolita">{{ $paso > 2 ? '✓' : '2' }}</span>
-            <span class="ps-texto">Dónde y con quién</span>
+            <span class="ps-texto">Direcciones y contactos</span>
         </button>
 
         <span class="ps-sep"></span>
@@ -193,7 +193,7 @@
                     <h6 class="seccion-titulo">
                         <span class="paso-num">1</span>
                         <i class="bi bi-person-vcard"></i>
-                        <span>Quién es</span>
+                        <span>Datos generales</span>
                     </h6>
                 </div>
 
@@ -314,7 +314,7 @@
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <label class="form-label">¿Cómo llegó?</label>
+                            <label class="form-label">Origen</label>
                             <select class="form-select" wire:model="source">
                                 <option value="">—</option>
                                 @foreach ($origenes as $valor => $etiqueta)
@@ -433,7 +433,7 @@
                                 </div>
 
                                 <div class="col-12">
-                                    <label class="form-label small">Referencia, suite o unidad</label>
+                                    <label class="form-label small">Suite o unidad</label>
                                     <input type="text"
                                            class="form-control form-control-sm"
                                            wire:model.blur="direcciones.{{ $i }}.line2">
@@ -883,7 +883,7 @@
                     <h6 class="seccion-titulo mb-0">
                         <span class="paso-num">5</span>
                         <i class="bi bi-paperclip"></i>
-                        <span>Documentos del cliente</span>
+                        <span>Documentos</span>
                     </h6>
 
                     <button type="button" class="btn btn-sm btn-outline-primary"

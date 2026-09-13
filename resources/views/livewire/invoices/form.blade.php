@@ -93,7 +93,7 @@
                 class="ps-paso {{ $paso === 1 ? 'ps-activo' : 'ps-hecho' }}"
                 wire:click="irAlPaso(1)">
             <span class="ps-bolita">{{ $paso > 1 ? '✓' : '1' }}</span>
-            <span class="ps-texto">A quién y cuándo</span>
+            <span class="ps-texto">Cliente y condiciones</span>
         </button>
 
         <span class="ps-sep"></span>
@@ -102,7 +102,7 @@
                 class="ps-paso {{ $paso === 2 ? 'ps-activo' : ($paso > 2 ? 'ps-hecho' : '') }}"
                 wire:click="irAlPaso(2)">
             <span class="ps-bolita">{{ $paso > 2 ? '✓' : '2' }}</span>
-            <span class="ps-texto">Qué se le cobra</span>
+            <span class="ps-texto">Conceptos</span>
         </button>
 
         <span class="ps-sep"></span>
@@ -111,7 +111,7 @@
                 class="ps-paso {{ $paso === 3 ? 'ps-activo' : '' }}"
                 wire:click="irAlPaso(3)">
             <span class="ps-bolita">3</span>
-            <span class="ps-texto">Revisar y emitir</span>
+            <span class="ps-texto">Revisión y emisión</span>
         </button>
 
     </div>
@@ -172,7 +172,7 @@
                     <h6 class="seccion-titulo">
                         <span class="paso-num">1</span>
                         <i class="bi bi-person-vcard"></i>
-                        <span>A quién se le factura</span>
+                        <span>Cliente</span>
                     </h6>
                 </div>
 
@@ -270,13 +270,80 @@
                 </div>
             </div>
 
+            {{--
+                ───── QUIÉN VENDIÓ ─────
+
+                Va aquí, en la factura, y no en un módulo aparte, porque en
+                el Excel la comisión es una columna de la venta.
+
+                Y es un TRABAJADOR, no un usuario del sistema: Miguelito
+                vende desde 2024 y probablemente nunca ha abierto el
+                sistema. Denisse teclea la factura, Miguelito la vendió.
+                Quedan guardados los dos.
+
+                Importa que esté aquí y no solo en el presupuesto: hay
+                ventas que se cierran de boca y van directo a facturar sin
+                pasar por cotización. Si el vendedor solo se pudiera poner
+                en el presupuesto, esas comisiones se perderían.
+            --}}
+            <div class="card mb-3 seccion seccion-notas">
+                <div class="card-header">
+                    <h6 class="seccion-titulo">
+                        <i class="bi bi-person-badge"></i>
+                        <span>Comisión de venta</span>
+                    </h6>
+                </div>
+
+                <div class="card-body">
+                    <div class="row g-3 align-items-start">
+
+                        <div class="col-12 col-md-5">
+                            <label class="form-label">Vendedor</label>
+                            <select class="form-select @error('sold_by_employee_id') is-invalid @enderror"
+                                    wire:model.live="sold_by_employee_id">
+                                <option value="">— Sin comisión —</option>
+                                @foreach ($vendedores as $v)
+                                    <option value="{{ $v->id }}">
+                                        {{ $v->name }}
+                                        @if ($v->default_commission_amount !== null)
+                                            · ${{ number_format((float) $v->default_commission_amount, 2) }}
+                                        @elseif ($v->default_commission_percent !== null)
+                                            · {{ rtrim(rtrim(number_format((float) $v->default_commission_percent, 2), '0'), '.') }}%
+                                        @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('sold_by_employee_id')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-12 col-md-7">
+                            @if ($vendedores->isEmpty())
+                                <div class="alert alert-warning py-2 small mb-0">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                    No hay vendedores cargados.
+                                    @can('users.create')
+                                        <a href="{{ route('sistema.trabajadores.index') }}" target="_blank">
+                                            Regístrelos en Trabajadores
+                                        </a>
+                                        o corra el seeder para traer los del Excel.
+                                    @endcan
+                                </div>
+                            @endif
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
             {{-- ───── FECHAS Y TÉRMINOS ───── --}}
             <div class="card mb-3 seccion seccion-datos">
                 <div class="card-header">
                     <h6 class="seccion-titulo">
                         <span class="paso-num">2</span>
                         <i class="bi bi-calendar3"></i>
-                        <span>Cuándo y bajo qué condiciones</span>
+                        <span>Fechas y condiciones</span>
                     </h6>
                 </div>
 
@@ -369,7 +436,7 @@
                     <h6 class="seccion-titulo">
                         <span class="paso-num">3</span>
                         <i class="bi bi-geo-alt"></i>
-                        <span>Dónde se factura y dónde se entrega</span>
+                        <span>Direcciones</span>
                     </h6>
                 </div>
 
@@ -500,7 +567,7 @@
                     <h6 class="seccion-titulo mb-0">
                         <span class="paso-num">4</span>
                         <i class="bi bi-list-ul"></i>
-                        <span>Qué se le cobra</span>
+                        <span>Conceptos</span>
                     </h6>
 
                     <button type="button" class="btn btn-sm btn-primary" wire:click="agregarLinea">
@@ -557,7 +624,7 @@
                             <thead>
                                 <tr>
                                     <th style="width: 36px;"></th>
-                                    <th>Concepto</th>
+                                    <th>Descripción</th>
                                     <th class="text-end" style="width: 90px;">Cant.</th>
                                     <th class="text-end" style="width: 130px;">Precio</th>
                                     <th class="text-center" style="width: 80px;">Tax</th>
@@ -656,16 +723,52 @@
                 </div>
             </div>
 
-            {{-- El total, mientras se cargan renglones --}}
+            {{-- El desglose, mientras se cargan conceptos --}}
+            @php $t2 = $this->totales; @endphp
+
             <div class="card mb-3">
-                <div class="card-body py-2">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-secondary small">
-                            {{ count($lineas) }} {{ count($lineas) === 1 ? 'renglón' : 'renglones' }}
-                        </span>
-                        <span class="fs-5 fw-semibold monto">
-                            ${{ number_format($this->totales['total'], 2) }}
-                        </span>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-12 col-md-6 text-secondary small">
+                            {{ count($lineas) }} {{ count($lineas) === 1 ? 'concepto' : 'conceptos' }}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <table class="table table-sm mb-0">
+                                <tbody>
+                                    <tr>
+                                        <td class="text-secondary">Subtotal</td>
+                                        <td class="text-end monto">${{ number_format($t2['subtotal'], 2) }}</td>
+                                    </tr>
+
+                                    @if ($t2['discount_amount'] > 0)
+                                        <tr>
+                                            <td class="text-secondary">Descuento</td>
+                                            <td class="text-end monto text-danger">
+                                                −${{ number_format($t2['discount_amount'], 2) }}
+                                            </td>
+                                        </tr>
+                                    @endif
+
+                                    <tr>
+                                        <td class="text-secondary">Impuesto</td>
+                                        <td class="text-end monto">${{ number_format($t2['tax_amount'], 2) }}</td>
+                                    </tr>
+
+                                    @if ($t2['credit_card_fee'] > 0)
+                                        <tr>
+                                            <td class="text-secondary">Recargo de tarjeta</td>
+                                            <td class="text-end monto">${{ number_format($t2['credit_card_fee'], 2) }}</td>
+                                        </tr>
+                                    @endif
+
+                                    <tr class="fw-bold border-top fs-5">
+                                        <td>TOTAL</td>
+                                        <td class="text-end monto">${{ number_format($t2['total'], 2) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -683,21 +786,66 @@
 
                 <div class="col-12 col-xl-7">
 
-                    {{-- ───── EL DOCUMENTO ───── --}}
-                    <div class="card mb-3 seccion seccion-entrega">
-                        <div class="card-header">
-                            <h6 class="seccion-titulo mb-0">
-                                <span class="paso-num">5</span>
-                                <i class="bi bi-eye"></i>
-                                <span>Así la va a ver el cliente</span>
-                            </h6>
-                        </div>
+                    {{--
+                        ───── EL DOCUMENTO, COMO SE VA A IMPRIMIR ─────
 
-                        <div class="card-body">
+                        Antes esto era un resumen; ahora es la factura. La
+                        misma cabecera, las mismas dos direcciones, los mismos
+                        renglones y el mismo pie que salen al imprimir.
 
-                            <div class="row g-3 mb-3 small">
+                        La razón es sencilla: si la vista previa no es igual al
+                        documento, nadie la mira. Se pulsa guardar y se revisa
+                        después, que es justo cuando ya se envió.
+                    --}}
+                    <div class="card mb-3">
+                        <div class="card-body doc-preview">
+
+                            {{-- CABECERA --}}
+                            <div class="d-flex justify-content-between align-items-start mb-4">
+                                <div>
+                                    <div class="fs-5 fw-bold">{{ $empresaActual?->legal_name }}</div>
+                                    <div class="small text-secondary">
+                                        {{ $empresaActual?->address_line1 }}<br>
+                                        {{ collect([$empresaActual?->city, $empresaActual?->state])
+                                            ->filter()->implode(', ') }} {{ $empresaActual?->zip }}<br>
+                                        @if ($empresaActual?->phone) {{ $empresaActual->phone }} @endif
+                                    </div>
+                                </div>
+
+                                <div class="text-end">
+                                    <div class="fs-4 fw-bold text-uppercase">Invoice</div>
+                                    <div class="small">
+                                        <div>
+                                            <span class="text-secondary">N.º</span>
+                                            <strong>{{ $numero ?: 'se asigna al guardar' }}</strong>
+                                        </div>
+                                        <div>
+                                            <span class="text-secondary">Emisión</span>
+                                            {{ $issue_date
+                                                ? \Carbon\Carbon::parse($issue_date)->format('d/m/Y') : '—' }}
+                                        </div>
+                                        <div>
+                                            <span class="text-secondary">Pagar antes de</span>
+                                            {{ $due_date
+                                                ? \Carbon\Carbon::parse($due_date)->format('d/m/Y') : '—' }}
+                                        </div>
+                                        @if ($terms)
+                                            <div class="text-secondary">{{ $terms }}</div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{--
+                                LAS DOS DIRECCIONES SE IMPRIMEN SIEMPRE,
+                                aunque sean la misma. Está confirmado por la
+                                factura real de RST.
+                            --}}
+                            <div class="row g-3 mb-4 small">
                                 <div class="col-6">
-                                    <div class="text-secondary">FACTURAR A</div>
+                                    <div class="text-secondary text-uppercase" style="font-size:.7rem">
+                                        Bill to
+                                    </div>
                                     <div class="fw-semibold">{{ $clienteNombre }}</div>
                                     <div>{{ $bill_to['line1'] }}</div>
                                     @if ($bill_to['line2'])<div>{{ $bill_to['line2'] }}</div>@endif
@@ -708,7 +856,9 @@
                                 </div>
 
                                 <div class="col-6">
-                                    <div class="text-secondary">ENTREGAR EN</div>
+                                    <div class="text-secondary text-uppercase" style="font-size:.7rem">
+                                        Ship to
+                                    </div>
                                     @if ($envioDistinto)
                                         <div>{{ $ship_to['line1'] }}</div>
                                         @if ($ship_to['line2'])<div>{{ $ship_to['line2'] }}</div>@endif
@@ -717,37 +867,126 @@
                                             {{ $ship_to['zip'] }}
                                         </div>
                                     @else
-                                        <div class="text-secondary fst-italic">La misma de facturación</div>
+                                        <div class="fw-semibold">{{ $clienteNombre }}</div>
+                                        <div>{{ $bill_to['line1'] }}</div>
+                                        <div>
+                                            {{ collect([$bill_to['city'], $bill_to['state']])->filter()->implode(', ') }}
+                                            {{ $bill_to['zip'] }}
+                                        </div>
                                     @endif
                                 </div>
                             </div>
 
+                            {{-- LOS RENGLONES --}}
                             <table class="table table-sm">
                                 <thead>
-                                    <tr>
-                                        <th>Concepto</th>
-                                        <th class="text-end">Cant.</th>
-                                        <th class="text-end">Precio</th>
-                                        <th class="text-end">Importe</th>
+                                    <tr class="border-bottom border-dark">
+                                        <th>Descripción</th>
+                                        <th class="text-end" style="width:70px;">Cant.</th>
+                                        <th class="text-end" style="width:110px;">Precio</th>
+                                        <th class="text-end" style="width:110px;">Importe</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                @foreach ($lineas as $i => $linea)
+                                @forelse ($lineas as $i => $linea)
                                     @continue (blank($linea['description'] ?? null))
                                     <tr wire:key="rev-{{ $i }}">
                                         <td>
                                             {{ $linea['description'] }}
-                                            @unless ($linea['taxable'])
-                                                <span class="badge bg-light text-secondary border">sin tax</span>
-                                            @endunless
+                                            @if ($linea['service_date'])
+                                                <div class="small text-secondary">
+                                                    {{ \Carbon\Carbon::parse($linea['service_date'])->format('d/m/Y') }}
+                                                </div>
+                                            @endif
                                         </td>
-                                        <td class="text-end">{{ rtrim(rtrim(number_format((float) $linea['quantity'], 2), '0'), '.') }}</td>
-                                        <td class="text-end monto">${{ number_format((float) $linea['unit_price'], 2) }}</td>
-                                        <td class="text-end monto">${{ number_format($this->importeLinea($i), 2) }}</td>
+                                        <td class="text-end">
+                                            {{ rtrim(rtrim(number_format((float) $linea['quantity'], 2), '0'), '.') }}
+                                        </td>
+                                        <td class="text-end monto">
+                                            ${{ number_format((float) $linea['unit_price'], 2) }}
+                                        </td>
+                                        <td class="text-end monto">
+                                            ${{ number_format($this->importeLinea($i), 2) }}
+                                        </td>
                                     </tr>
-                                @endforeach
+                                @empty
+                                    <tr>
+                                        <td colspan="4" class="text-center text-secondary py-3">
+                                            Sin conceptos. Vuelva al paso anterior.
+                                        </td>
+                                    </tr>
+                                @endforelse
                                 </tbody>
                             </table>
+
+                            {{-- LOS TOTALES, DEL LADO DERECHO COMO EN EL PAPEL --}}
+                            <div class="row">
+                                <div class="col-6">
+                                    @if ($notes)
+                                        <div class="small">
+                                            <div class="text-secondary text-uppercase" style="font-size:.7rem">
+                                                Notas
+                                            </div>
+                                            {{ $notes }}
+                                        </div>
+                                    @endif
+                                </div>
+
+                                <div class="col-6">
+                                    <table class="table table-sm mb-0">
+                                        <tbody>
+                                            <tr>
+                                                <td class="text-secondary">Subtotal</td>
+                                                <td class="text-end monto">${{ number_format($t['subtotal'], 2) }}</td>
+                                            </tr>
+
+                                            @if ($t['discount_amount'] > 0)
+                                                <tr>
+                                                    <td class="text-secondary">Descuento</td>
+                                                    <td class="text-end monto">−${{ number_format($t['discount_amount'], 2) }}</td>
+                                                </tr>
+                                            @endif
+
+                                            <tr>
+                                                <td class="text-secondary">
+                                                    Sales tax
+                                                    @if ($t['non_taxable_base'] > 0)
+                                                        <div class="small">
+                                                            ${{ number_format($t['non_taxable_base'], 2) }} exento
+                                                        </div>
+                                                    @endif
+                                                </td>
+                                                <td class="text-end monto">${{ number_format($t['tax_amount'], 2) }}</td>
+                                            </tr>
+
+                                            @if ($t['credit_card_fee'] > 0)
+                                                <tr>
+                                                    <td class="text-secondary">Credit card fee</td>
+                                                    <td class="text-end monto">${{ number_format($t['credit_card_fee'], 2) }}</td>
+                                                </tr>
+                                            @endif
+
+                                            @if ($t['deposit_applied'] > 0)
+                                                <tr>
+                                                    <td class="text-secondary">Anticipo</td>
+                                                    <td class="text-end monto">−${{ number_format($t['deposit_applied'], 2) }}</td>
+                                                </tr>
+                                            @endif
+
+                                            <tr class="fw-bold border-top border-dark fs-5">
+                                                <td>TOTAL</td>
+                                                <td class="text-end monto">${{ number_format($t['total'], 2) }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            @if ($footer_terms)
+                                <div class="border-top mt-4 pt-2 small text-secondary">
+                                    {{ $footer_terms }}
+                                </div>
+                            @endif
 
                         </div>
                     </div>
@@ -757,13 +996,13 @@
                         <div class="card-header">
                             <h6 class="seccion-titulo mb-0">
                                 <i class="bi bi-chat-left-text"></i>
-                                <span>Lo que se escribe en el documento</span>
+                                <span>Textos del documento</span>
                             </h6>
                         </div>
                         <div class="card-body">
 
                             <div class="mb-3">
-                                <label class="form-label">Nota para el cliente</label>
+                                <label class="form-label">Observaciones</label>
                                 <textarea class="form-control" rows="2"
                                           placeholder="Sale impresa en la factura."
                                           wire:model.blur="notes"></textarea>
@@ -973,7 +1212,7 @@
 
                     <button type="button" class="btn btn-success"
                             wire:click="guardar(true)" wire:loading.attr="disabled">
-                        <i class="bi bi-send me-1"></i> Guardar y marcar enviada
+                        <i class="bi bi-envelope-check me-1"></i> Guardar y enviar por correo
                     </button>
                 @endif
 
@@ -1021,14 +1260,35 @@
                                         <option value="{{ $p->id }}">{{ $p->name }}</option>
                                     @endforeach
                                 </select>
-                                <div class="form-text">
-                                    Al elegirlo se precargan precio, impuesto y descripción.
-                                </div>
                             </div>
 
-                            <div class="col-12 col-md-6">
+                            {{--
+                                LA UNIDAD SOLO SALE SI EL CONCEPTO LA LLEVA.
+
+                                Un recargo de tarjeta, una mora o un fee de
+                                depósito no tienen contenedor. Ofrecer el
+                                selector ahí hacía pensar que había que elegir
+                                uno, y ensuciaba el renglón con un dato que no
+                                significa nada.
+
+                                Lo decide el tipo del concepto —requiresContainer()
+                                del catálogo—, no una lista escrita a mano aquí.
+                                Sin concepto elegido se muestra igual, porque
+                                todavía no se sabe.
+                            --}}
+                            @php
+                                $conceptoElegido = ! empty($borrador['product_id'])
+                                    ? $productos->firstWhere('id', (int) $borrador['product_id'])
+                                    : null;
+
+                                $llevaUnidad = $conceptoElegido
+                                    ? $conceptoElegido->type?->requiresContainer()
+                                    : true;
+                            @endphp
+
+                            <div class="col-12 col-md-6" @if (! $llevaUnidad) style="display:none" @endif>
                                 <label class="form-label">Unidad</label>
-                                <select class="form-select" wire:model="borrador.container_id">
+                                <select class="form-select" wire:model.live="borrador.container_id">
                                     <option value="">— Ninguna —</option>
                                     @foreach ($contenedores as $c)
                                         <option value="{{ $c->id }}">
@@ -1036,14 +1296,11 @@
                                         </option>
                                     @endforeach
                                 </select>
-                                <div class="form-text">
-                                    Solo las disponibles: no se factura lo que no está en yarda.
-                                </div>
                             </div>
 
                             <div class="col-12">
                                 <label class="form-label">
-                                    Qué se le cobra <span class="text-danger">*</span>
+                                    Descripción <span class="text-danger">*</span>
                                 </label>
                                 <textarea class="form-control @error('borrador.description') is-invalid @enderror"
                                           rows="2"
@@ -1083,10 +1340,31 @@
                             <div class="col-6 col-md-4">
                                 <label class="form-label">Fecha del servicio</label>
                                 <input type="date" class="form-control" wire:model="borrador.service_date">
-                                <div class="form-text">
-                                    Para el transporte: cada viaje es un día.
-                                </div>
                             </div>
+
+                            {{--
+                                EL USO VA POR RENGLÓN, NO EN LA CABECERA.
+
+                                Una factura puede llevar tres contenedores con
+                                tres destinos distintos: uno para almacenaje, uno
+                                para obra y uno para exportación. Preguntarlo una
+                                sola vez arriba obligaba a elegir uno y que los
+                                otros dos quedaran mal.
+
+                                Solo sale si el concepto lleva unidad: un recargo
+                                de tarjeta no se usa para nada.
+                            --}}
+                            @if ($llevaUnidad)
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label">Uso previsto</label>
+                                    <select class="form-select" wire:model="borrador.use_type">
+                                        <option value="">— Sin especificar —</option>
+                                        @foreach (\App\Enums\UseType::options() as $valor => $etiqueta)
+                                            <option value="{{ $valor }}">{{ $etiqueta }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            @endif
 
 
                             <div class="col-12">

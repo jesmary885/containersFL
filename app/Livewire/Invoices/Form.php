@@ -94,6 +94,29 @@ class Form extends Component
      | campo en una pantalla larga.
      * ================================================================== */
 
+    /* =====================================================================
+     | QUIEN VENDIO
+     |
+     | ── POR QUE VA EN LA FACTURA Y NO EN UN MODULO APARTE ──
+     |
+     | Porque es un dato de la venta, no un tramite posterior. Denisse lo
+     | describe asi del Excel: "dice que tipo de contenedor, el numero del
+     | contenedor, si hay comision, porque tenemos vendedores".
+     |
+     | La comision es una columna de la venta. Si se registrara despues,
+     | alguien tendria que acordarse, y las que se olvidan no se pagan.
+     |
+     | ── Y POR QUE UN TRABAJADOR Y NO UN USUARIO ──
+     |
+     | Miguelito vende y cobra comision desde 2024, y probablemente nunca
+     | ha abierto el sistema. Denisse teclea la factura; Miguelito la
+     | vendio. Son dos personas distintas y las dos quedan guardadas:
+     | `sold_by_employee_id` dice quien vendio y `created_by` quien
+     | registro.
+     * ================================================================== */
+
+    public ?int $sold_by_employee_id = null;
+
     public int $paso = 1;
 
     public const PASOS = 3;
@@ -259,13 +282,18 @@ class Form extends Component
         }
 
         /*
-         | Se siembra el primer renglon SIN abrir el editor.
+         | SIN NINGUN RENGLON.
          |
-         | agregarLinea() ahora abre el modal, y llamarlo aqui hacia que
-         | "Nueva factura" apareciera con la ventana de concepto encima
-         | antes de haber elegido siquiera el cliente.
+         | Aqui estaba el error del "2 conceptos" habiendo uno.
+         |
+         | Se sembraba un renglon en blanco al entrar. No se veia en la
+         | tabla —la vista salta los que no tienen descripcion— pero SI
+         | contaba: el pie decia dos, y al guardar la validacion pedia la
+         | descripcion de la "Linea 1" que nadie habia creado.
+         |
+         | Ahora la lista arranca vacia y el unico camino es el boton de
+         | agregar concepto.
          */
-        $this->lineas[] = $this->lineaVacia();
 
         return null;
     }
@@ -298,7 +326,8 @@ class Form extends Component
         $this->numero    = $invoice->invoice_number;
         $this->yaEnviada = $invoice->sent_at !== null;
 
-        $this->customer_id   = $invoice->customer_id;
+        $this->customer_id          = $invoice->customer_id;
+        $this->sold_by_employee_id  = $invoice->sold_by_employee_id;
         $this->clienteNombre = $invoice->customer?->name ?? '';
 
         $this->type       = $invoice->type?->value ?? 'sale';
@@ -337,6 +366,7 @@ class Form extends Component
             'taxable'      => (bool) $linea->taxable,
             'grupo'        => (string) ($linea->bundle_key ?? ''),
             'service_date' => $linea->service_date?->toDateString(),
+            'use_type'     => $linea->use_type,
         ])->all();
 
         foreach ($invoice->items as $linea) {
@@ -345,16 +375,10 @@ class Form extends Component
             }
         }
 
-        if (empty($this->lineas)) {
-            /*
-         | Se siembra el primer renglon SIN abrir el editor.
-         |
-         | agregarLinea() ahora abre el modal, y llamarlo aqui hacia que
-         | "Nueva factura" apareciera con la ventana de concepto encima
-         | antes de haber elegido siquiera el cliente.
+        /*
+         | Si la factura guardada no tiene renglones, se deja vacia: se
+         | agregan con el boton, igual que en una nueva.
          */
-        $this->lineas[] = $this->lineaVacia();
-        }
     }
 
     /* =====================================================================
@@ -467,7 +491,16 @@ class Form extends Component
             'unit_price'   => 0,
             'taxable'      => false,
             'grupo'        => '',
-            'service_date' => null,
+            /*
+             | La fecha del servicio nace hoy.
+             |
+             | Es la que se cumple casi siempre: se factura lo que se
+             | acaba de hacer. Dejarla vacia obligaba a abrirla en cada
+             | renglon para escribir la fecha de hoy.
+             */
+            'service_date' => now()->toDateString(),
+
+            'use_type' => null,
         ];
     }
 
@@ -695,14 +728,14 @@ class Form extends Component
         $todas = $this->rules();
 
         $porPaso = [
-            1 => ['customer_id', 'type', 'issue_date', 'due_date', 'terms',
+            1 => ['customer_id', 'sold_by_employee_id', 'type', 'issue_date', 'due_date', 'terms',
                   'service_period_start', 'service_period_end',
                   'bill_to.line1', 'bill_to.city', 'bill_to.state', 'bill_to.zip',
                   'ship_to.line1', 'ship_to.city', 'ship_to.state', 'ship_to.zip'],
 
             2 => ['lineas', 'lineas.*.description', 'lineas.*.quantity',
                   'lineas.*.unit_price', 'lineas.*.product_id',
-                  'lineas.*.container_id', 'lineas.*.grupo', 'lineas.*.service_date'],
+                  'lineas.*.container_id', 'lineas.*.grupo', 'lineas.*.service_date', 'lineas.*.use_type'],
 
             3 => ['tax_rate', 'discount_amount', 'deposit_applied',
                   'expected_payment_method', 'notes', 'footer_terms'],
@@ -823,14 +856,7 @@ class Form extends Component
 
         $this->lineas = array_values($this->lineas);
 
-        /*
-         | Se repone un renglon en blanco SIN abrir el modal: agregarLinea()
-         | ahora lo abre, y abrirlo justo despues de borrar seria una
-         | ventana que nadie pidio.
-         */
-        if (empty($this->lineas)) {
-            $this->lineas[] = $this->lineaVacia();
-        }
+        /* Quedarse sin renglones esta bien: se agregan con el boton. */
 
         /*
          | Se vacia la seleccion: guarda posiciones, y acabamos de
@@ -934,7 +960,21 @@ class Form extends Component
          | el efecto antes de guardar. Al guardar, el observer hace lo
          | mismo si el campo viene vacío.
          * -------------------------------------------------------------- */
-        if ($campo === 'terms' || $campo === 'issue_date') {
+        /* -----------------------------------------------------------------
+         | LA FECHA DE VENCIMIENTO YA NO SE CALCULA SOLA
+         |
+         | Antes se recalculaba al escribir los terminos. El problema es
+         | que no hay ninguna regla documentada: ni las actas ni la hoja
+         | de VENTAS del Excel dicen a cuantos dias vence una factura.
+         |
+         | Poner una fecha inventada es peor que dejarla vacia: nadie la
+         | revisa, y el aviso de cobranza empieza a saltar cuando al
+         | sistema le parece.
+         |
+         | Se propone solo la PRIMERA vez, al crear, y desde ahi la
+         | escribe quien factura.
+         * -------------------------------------------------------------- */
+        if (blank($this->due_date) && ($campo === 'terms' || $campo === 'issue_date')) {
             $this->due_date = \Carbon\Carbon::parse($this->issue_date ?: now())
                 ->addDays($this->diasDeTermino($this->terms))
                 ->toDateString();
@@ -1090,7 +1130,8 @@ class Form extends Component
     protected function rules(): array
     {
         return [
-            'customer_id' => ['required', 'exists:customers,id'],
+            'customer_id'         => ['required', 'exists:customers,id'],
+            'sold_by_employee_id' => ['nullable', 'exists:employees,id'],
             'type'        => ['required', Rule::in(InvoiceType::values())],
             'issue_date'  => ['required', 'date'],
             'due_date'    => ['nullable', 'date', 'after_or_equal:issue_date'],
@@ -1128,6 +1169,7 @@ class Form extends Component
             'lineas.*.container_id' => ['nullable', 'exists:containers,id'],
             'lineas.*.grupo'        => ['nullable', 'string', 'max:20'],
             'lineas.*.service_date' => ['nullable', 'date'],
+            'lineas.*.use_type'     => ['nullable', 'string', 'max:30'],
         ];
     }
 
@@ -1241,6 +1283,7 @@ class Form extends Component
             $datos = [
                 'company_id'  => $empresa->id,
                 'customer_id' => $this->customer_id,
+                'sold_by_employee_id' => $this->sold_by_employee_id ?: null,
                 'type'        => $this->type,
                 'issue_date'  => $this->issue_date,
                 'due_date'    => $this->due_date ?: null,
@@ -1338,6 +1381,7 @@ class Form extends Component
                     'unit_price'   => $linea['unit_price'],
                     'taxable'      => (bool) ($linea['taxable'] ?? false),
                     'service_date' => $linea['service_date'] ?: null,
+                    'use_type'     => $linea['use_type'] ?: null,
 
                     'bundle_key'         => $grupoValido,
                     'bundle_description' => $grupoValido
@@ -1421,6 +1465,16 @@ class Form extends Component
         $empresa = app(CompanyContext::class)->get();
 
         return view('livewire.invoices.form', [
+
+            /*
+             | Vendedores y administradores de la empresa activa,
+             | mas los que trabajan para las dos.
+             */
+            'vendedores' => \App\Models\Employee::salespeople()
+                ->forCompany(app(\App\Support\CompanyContext::class)->get()?->id)
+                ->orderBy('first_name')
+                ->get(),
+
 
             // Los productos de esta empresa más los compartidos.
             'productos' => Product::query()

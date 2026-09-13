@@ -1133,6 +1133,7 @@ class Form extends Component
                 DocumentCategory::TaxExemption->value     => 'Certificado de exención',
                 DocumentCategory::CcAuthorization->value  => 'Autorización de tarjeta',
                 DocumentCategory::ExportCertificate->value => 'Certificado de exportación',
+                DocumentCategory::SunbizRecord->value      => 'Registro de Sunbiz',
                 DocumentCategory::Other->value            => 'Otro',
             ],
 

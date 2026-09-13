@@ -61,7 +61,7 @@ return [
     'payment_method_hint'    => 'Con esto el sistema sabe si tiene que sumar el recargo de tarjeta. Se copia a la factura al convertir.',
     'payment_method_unknown' => '— Todavía no se sabe —',
 
-    'use_type'           => '¿Para qué va a usar el contenedor?',
+    'use_type'           => 'Uso previsto',
     'export_notice'      => 'Venta de exportación',
     'export_no_tax'      => 'No lleva impuesto de venta.',
     'export_needs_cert'  => 'Antes de facturar hace falta el certificado CSC en PDF.',
@@ -177,7 +177,7 @@ return [
     'unit_picker_title'  => 'Elegir unidad para la línea :line',
     /* ── Los pasos ── */
     'step_who'           => 'Quién y cuándo',
-    'step_what'          => 'Qué lleva',
+    'step_what'          => 'Conceptos',
     'step_review'        => 'Revisar y enviar',
     'step_review_locked' => 'Se abre al darle a Procesar.',
     'step_review_go'     => 'Ir al documento. No hace falta procesar otra vez.',

@@ -26,6 +26,8 @@ use App\Livewire\Auth\Login;
 
 use App\Livewire\Containers\Form  as ContainerForm;
 use App\Livewire\Depots\Form      as DepotForm;
+use App\Livewire\Employees\Form   as EmployeeForm;
+use App\Livewire\Employees\Index  as EmployeeIndex;
 use App\Livewire\Depots\Index     as DepotIndex;
 use App\Livewire\Purchases\Form   as PurchaseForm;
 use App\Livewire\Purchases\Index  as PurchaseIndex;
@@ -387,6 +389,31 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/sistema/catalogos', Placeholder::class)
         ->middleware('can:catalogs.view')->name('sistema.catalogos.index');
+
+    /* ---------------------------------------------------------------
+     | TRABAJADORES
+     |
+     | Usa los permisos de `users` a proposito: es administracion de
+     | personal, y quien puede dar de alta a un usuario es quien decide
+     | quien trabaja aqui.
+     |
+     | No son lo mismo. Un usuario entra con contrasena; un trabajador
+     | vende, maneja o limpia. Miguelito cobra comisiones desde 2024 y
+     | probablemente nunca ha abierto el sistema.
+     * ------------------------------------------------------------ */
+    Route::middleware('can:users.view')->group(function () {
+
+        Route::get('/sistema/trabajadores', EmployeeIndex::class)
+            ->name('sistema.trabajadores.index');
+
+        Route::get('/sistema/trabajadores/nuevo', EmployeeForm::class)
+            ->middleware('can:users.create')
+            ->name('sistema.trabajadores.create');
+
+        Route::get('/sistema/trabajadores/{employee}/editar', EmployeeForm::class)
+            ->middleware('can:users.update')
+            ->name('sistema.trabajadores.edit');
+    });
 
     Route::get('/configuracion', Placeholder::class)
         ->middleware('can:settings.view')->name('configuracion.index');

@@ -85,6 +85,23 @@
                 </button>
             </div>
 
+
+            {{--
+                IMPORTAR
+
+                Todavía no hace nada, y está a propósito: es para poder
+                enseñar en la reunión que el sistema va a poder tragarse el
+                Excel en vez de que alguien teclee cientos de fichas.
+
+                Se construye cuando se decida el formato exacto del archivo
+                de origen. Prometerlo en pantalla antes de eso sería
+                prometer algo que todavía no se sabe cómo va a ser.
+            --}}
+            <button type="button" class="btn btn-outline-secondary" disabled
+                    title="Disponible en la próxima fase">
+                <i class="bi bi-upload me-1"></i> Importar
+            </button>
+
             @can('customers.create')
                 <a href="{{ route('comercial.clientes.create') }}" class="btn btn-primary">
                     <i class="bi bi-person-plus me-1"></i> Nuevo cliente
@@ -139,7 +156,7 @@
                 <span class="kpi-cuerpo">
                     <span class="kpi-label d-block">Sin dirección</span>
                     <span class="kpi-valor d-block">{{ $resumen['sinDireccion'] }}</span>
-                    <span class="kpi-pie d-block">Hay que teclearla cada vez</span>
+                    <span class="kpi-pie d-block">Sin dirección registrada</span>
                 </span>
             </button>
         </div>
@@ -150,10 +167,10 @@
                     wire:click="filtrarPor('papeles')">
                 <span class="kpi-icono"><i class="bi bi-paperclip"></i></span>
                 <span class="kpi-cuerpo">
-                    <span class="kpi-label d-block">Papeles al día</span>
+                    <span class="kpi-label d-block">Documentos vigentes</span>
                     <span class="kpi-valor d-block">{{ $resumen['papeles'] }}</span>
                     <span class="kpi-pie d-block">
-                        {{ $resumen['papeles'] > 0 ? 'Vencidos o por vencer' : 'Todo en regla' }}
+                        {{ $resumen['papeles'] > 0 ? 'Vencidos o próximos a vencer' : 'Sin vencimientos próximos' }}
                     </span>
                 </span>
             </button>
@@ -167,7 +184,7 @@
                 <span class="kpi-cuerpo">
                     <span class="kpi-label d-block">Exentos de tax</span>
                     <span class="kpi-valor d-block">{{ $resumen['exentos'] }}</span>
-                    <span class="kpi-pie d-block">Con certificado vigente</span>
+                    <span class="kpi-pie d-block">Certificado vigente</span>
                 </span>
             </button>
         </div>
@@ -180,7 +197,7 @@
                 <span class="kpi-cuerpo">
                     <span class="kpi-label d-block">En retención</span>
                     <span class="kpi-valor d-block">{{ $resumen['retenidos'] }}</span>
-                    <span class="kpi-pie d-block">No se les vende a crédito</span>
+                    <span class="kpi-pie d-block">Crédito suspendido</span>
                 </span>
             </button>
         </div>

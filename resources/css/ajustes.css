@@ -403,3 +403,32 @@ a.bs-empresa:hover {
     font-weight: 600;
     color: #1d4ed8;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6 · LA VISTA PREVIA DEL DOCUMENTO
+   ═══════════════════════════════════════════════════════════════════════════
+
+   En el último paso de la factura. No es un resumen: es el documento tal
+   como sale impreso.
+
+   La razón de que sea idéntico y no parecido: si la vista previa no es
+   igual al documento, nadie la mira. Se pulsa guardar y se revisa
+   después, que es justo cuando ya se envió.
+
+   Fondo blanco y ancho de papel para que se lea como una hoja y no como
+   otra pantalla del sistema.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.doc-preview {
+    background: #fff;
+    font-size: .9rem;
+}
+
+.doc-preview table th {
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--sys-mute);
+    font-weight: 600;
+}

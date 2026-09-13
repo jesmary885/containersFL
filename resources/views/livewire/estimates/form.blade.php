@@ -171,7 +171,7 @@
                 class="ps-paso {{ $paso === 2 ? 'ps-activo' : '' }}"
                 wire:click="irAlPaso(2)">
             <span class="ps-bolita">2</span>
-            <span class="ps-texto">{{ __('estimates.step_what') }}</span>
+            <span class="ps-texto">{{ __('estimates.section_lines') }}</span>
         </button>
 
         <span class="ps-sep"></span>
@@ -490,44 +490,22 @@
                                 @enderror
                             </div>
 
-                            {{-- ───── TIPO DE USO ───── --}}
-                            <div class="col-12">
-                                <label class="form-label">
-                                    {{ __('estimates.use_type') }} <span class="text-danger">*</span>
-                                </label>
+                            {{--
+                                ───── EL USO SALIÓ DE AQUÍ ─────
 
-                                <div class="d-flex gap-3">
-                                    @foreach ($tiposDeUso as $valor => $etiqueta)
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="radio"
-                                                   id="uso-{{ $valor }}"
-                                                   value="{{ $valor }}"
-                                                   wire:model.live="use_type">
-                                            <label class="form-check-label" for="uso-{{ $valor }}">
-                                                {{ $etiqueta }}
-                                            </label>
-                                        </div>
-                                    @endforeach
-                                </div>
+                                Preguntaba una sola vez para qué se va a usar el
+                                contenedor. Y un presupuesto puede llevar varios,
+                                con destinos distintos: uno para almacenaje, otro
+                                para obra, otro para exportación.
 
-                                {{--
-                                    El aviso de exportación, escrito para
-                                    el vendedor y no para el programador.
-                                --}}
-                                @if ($use_type === 'export')
-                                    <div class="alert alert-info mt-3 mb-0">
-                                        <strong>
-                                            <i class="bi bi-globe-americas me-1"></i>
-                                            {{ __('estimates.export_notice') }}
-                                        </strong>
-                                        <ul class="mb-0 mt-2 small">
-                                            <li>{{ __('estimates.export_no_tax') }}</li>
-                                            <li>{{ __('estimates.export_needs_cert') }}</li>
-                                            <li>{{ __('estimates.export_no_delivery') }}</li>
-                                        </ul>
-                                    </div>
-                                @endif
-                            </div>
+                                Preguntándolo arriba había que elegir uno solo y
+                                los demás quedaban mal. Y no es decorativo:
+                                RB-056 dice que en exportación solo entra el
+                                Cargo Worthy, así que el uso decide qué unidades
+                                se pueden ofrecer — por unidad, no por documento.
+
+                                Ahora se pregunta en cada concepto.
+                            --}}
 
                         </div>
                     </div>
@@ -1597,6 +1575,38 @@
                                         @error('borrador.container_id')
                                             <div class="text-danger small mt-1">{{ $message }}</div>
                                         @enderror
+
+                                        {{--
+                                            EL USO PREVISTO DE ESTA UNIDAD.
+
+                                            Bajó de la cabecera del documento.
+                                            Un presupuesto puede llevar tres
+                                            contenedores con tres destinos, y
+                                            arriba había que elegir uno solo.
+
+                                            El documento hereda el uso de sus
+                                            renglones: si alguno es de
+                                            exportación, el documento lo es.
+                                        --}}
+                                        <div class="mt-2">
+                                            <label class="form-label small">
+                                                {{ __('estimates.use_type') }}
+                                            </label>
+                                            <select class="form-select form-select-sm"
+                                                    wire:model.live="borrador.use_type">
+                                                <option value="">— Sin especificar —</option>
+                                                @foreach ($tiposDeUso as $valor => $etiqueta)
+                                                    <option value="{{ $valor }}">{{ $etiqueta }}</option>
+                                                @endforeach
+                                            </select>
+
+                                            @if (($borrador['use_type'] ?? null) === 'export')
+                                                <div class="alert alert-info py-2 small mt-2 mb-0">
+                                                    <i class="bi bi-globe-americas me-1"></i>
+                                                    {{ __('estimates.export_needs_cert') }}
+                                                </div>
+                                            @endif
+                                        </div>
                                     </div>
 
                                     <div class="{{ $esRenta ? 'rn-c4' : 'rn-c4' }}">

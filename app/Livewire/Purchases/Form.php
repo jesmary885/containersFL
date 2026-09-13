@@ -77,7 +77,18 @@ class Form extends Component
 
     /* ── DÓNDE ESTÁN Y HASTA CUÁNDO ── */
     public ?int $depot_id = null;
-    public ?string $pickup_fee         = '0';
+
+    /*
+     | El pickup YA NO SE PIDE AQUI.
+     |
+     | Al registrar la compra todavia no se sabe: depende de cuantas
+     | unidades se traigan en cada viaje, de quien las traiga y de cuando.
+     | Un release de siete se puede retirar en tres viajes distintos, con
+     | tres costos distintos.
+     |
+     | Se pregunta en el RETIRO, que es cuando se sabe. La columna se
+     | mantiene en cero para no romper nada que la lea.
+     */
     public ?string $daily_late_fee     = null;
     public ?string $pickup_deadline_at = null;
 
@@ -118,7 +129,6 @@ class Form extends Component
         $this->purchase_date = $p->purchase_date?->toDateString() ?? now()->toDateString();
 
         $this->depot_id           = $p->depot_id;
-        $this->pickup_fee         = $p->pickup_fee;
         $this->daily_late_fee     = $p->daily_late_fee;
         $this->pickup_deadline_at = $p->pickup_deadline_at?->toDateString();
 
@@ -203,10 +213,6 @@ class Form extends Component
             $deposito = Depot::find($this->depot_id);
 
             if ($deposito) {
-                if (blank($this->pickup_fee) || (float) $this->pickup_fee === 0.0) {
-                    $this->pickup_fee = $deposito->default_pickup_fee;
-                }
-
                 $this->daily_late_fee ??= $deposito->daily_late_fee;
 
                 if (blank($this->pickup_deadline_at) && $deposito->default_pickup_days) {
@@ -241,27 +247,17 @@ class Form extends Component
     }
 
     /**
-     * Lo que cuesta el pickup de toda la compra.
+     * El total de la compra.
      *
-     * El campo se guarda POR UNIDAD, como en el Excel: ahí cada renglón
-     * es un contenedor y tiene su columna PICK UP. Aquí se multiplica
-     * para enseñar el total del lote.
-     */
-    public function getPickupTotalProperty(): float
-    {
-        return round((float) ($this->pickup_fee ?: 0) * $this->unidades, 2);
-    }
-
-    /**
-     * El total.
+     * Solo la mercancía. El pickup no está aquí porque al registrar la
+     * compra todavía no se sabe cuánto va a costar traerla: depende de
+     * cuántas se traigan en cada viaje y de quién las traiga.
      *
-     * Incluye el pickup, igual que el Excel: ahí el TOTAL de cada renglón
-     * es PRECIO + PICK UP. Es el costo de la mercancía puesta en la
-     * yarda, que es el número con el que esta empresa trabaja.
+     * Se va sumando solo, a medida que se registran los retiros.
      */
     public function getTotalProperty(): float
     {
-        return round($this->subtotal + $this->pickupTotal, 2);
+        return round($this->subtotal, 2);
     }
 
     public function getUnidadesProperty(): int
@@ -288,7 +284,6 @@ class Form extends Component
             'depot_id' => ['nullable', 'exists:depots,id',
                 Rule::requiredIf(fn () => $this->type === PurchaseType::Release->value)],
 
-            'pickup_fee'     => ['nullable', 'numeric', 'min:0', 'max:99999'],
             'daily_late_fee' => ['nullable', 'numeric', 'min:0', 'max:9999'],
 
             'pickup_deadline_at' => ['nullable', 'date', 'after_or_equal:purchase_date',
@@ -373,7 +368,8 @@ class Form extends Component
                 'purchase_date' => $this->purchase_date,
 
                 'depot_id'           => $this->depot_id ?: null,
-                'pickup_fee'         => (float) ($this->pickup_fee ?: 0),
+                /* Se llena solo, sumando lo que cueste cada retiro. */
+                'pickup_fee'         => 0,
                 'daily_late_fee'     => $this->daily_late_fee !== '' ? $this->daily_late_fee : null,
                 'pickup_deadline_at' => $this->pickup_deadline_at ?: null,
 

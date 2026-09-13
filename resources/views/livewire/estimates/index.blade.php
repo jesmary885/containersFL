@@ -145,11 +145,11 @@
             <div class="kpi kpi-ok">
                 <span class="kpi-icono"><i class="bi bi-cash-stack"></i></span>
                 <span class="kpi-cuerpo">
-                    <span class="kpi-label d-block">En la calle</span>
+                    <span class="kpi-label d-block">Monto cotizado</span>
                     <span class="kpi-valor d-block">
                         ${{ number_format($resumen['montoAbierto'], 2) }}
                     </span>
-                    <span class="kpi-pie d-block">Cotizado y sin cerrar</span>
+                    <span class="kpi-pie d-block">Pendiente de respuesta</span>
                 </span>
             </div>
         </div>
