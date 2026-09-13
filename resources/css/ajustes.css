@@ -373,3 +373,33 @@ a.bs-empresa:hover {
     color: var(--sys-ok);
     border-color: var(--sys-ok);
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5 · EL AVISO DE "YA COTIZADA"
+   ═══════════════════════════════════════════════════════════════════════════
+
+   En el buscador de unidades del presupuesto. Dice que esa unidad ya
+   está ofrecida en otro presupuesto abierto.
+
+   ── POR QUÉ AZUL Y NO ÁMBAR ──
+
+   Porque el ámbar ya está usado, justo al lado, para "ya está en la
+   línea 2". Ese es un error de dedo dentro del documento que estás
+   haciendo, y hay que corregirlo.
+
+   Este es otra cosa: información sobre otro documento. La unidad se
+   puede elegir perfectamente —un presupuesto no reserva nada— y lo único
+   que hace falta es que el vendedor lo sepa antes de prometerla.
+
+   Dos avisos del mismo color se leen como el mismo aviso. En azul, se
+   ve de un vistazo cuál de los dos obliga a hacer algo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.bu-aviso-cotizada {
+    display: block;
+    margin-top: .25rem;
+    font-size: .72rem;
+    font-weight: 600;
+    color: #1d4ed8;
+}

@@ -1942,7 +1942,19 @@
                 {{-- RESULTADOS --}}
                 <div class="bu-lista">
                     @forelse ($this->resultadosContenedor as $unidad)
-                        @php $usadaEnLinea = $this->contenedoresYaUsados[$unidad->id] ?? null; @endphp
+                        @php
+                            $usadaEnLinea = $this->contenedoresYaUsados[$unidad->id] ?? null;
+
+                            /*
+                             | Ya ofrecida en OTRO presupuesto abierto.
+                             |
+                             | No la bloquea: un presupuesto no reserva, es una
+                             | cotizacion que vale tres dias y que el cliente
+                             | puede no aceptar. Solo avisa, para que el vendedor
+                             | sepa que esa unidad ya esta prometida y decida.
+                             */
+                            $yaCotizada = $this->cotizadasEnOtros[$unidad->id] ?? null;
+                        @endphp
 
                         <button type="button" class="bu-item"
                                 wire:key="unidad-{{ $unidad->id }}"
@@ -1962,6 +1974,27 @@
                                 @if ($usadaEnLinea)
                                     <span class="bu-aviso-usada">
                                         <i class="bi bi-exclamation-triangle me-1"></i>{{ __('estimates.already_in_line', ['line' => $usadaEnLinea]) }}
+                                    </span>
+                                @endif
+
+                                {{--
+                                    El aviso de "ya cotizada".
+
+                                    Va despues del de "ya esta en la linea N"
+                                    porque ese es un error de dedo dentro de este
+                                    mismo documento —mas urgente— y este es una
+                                    advertencia sobre otro documento.
+
+                                    Se ensena aunque la unidad este deshabilitada:
+                                    saber que ademas esta ofrecida a otro cliente
+                                    sigue siendo util.
+                                --}}
+                                @if ($yaCotizada)
+                                    <span class="bu-aviso-cotizada">
+                                        <i class="bi bi-clock-history me-1"></i>{{ __('estimates.already_quoted', [
+                                            'number' => $yaCotizada->estimate_number,
+                                            'state'  => mb_strtolower($yaCotizada->status->label()),
+                                        ]) }}
                                     </span>
                                 @endif
                             </div>

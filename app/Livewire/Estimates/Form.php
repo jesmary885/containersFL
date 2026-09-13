@@ -5,6 +5,7 @@ namespace App\Livewire\Estimates;
 use App\Enums\EstimateStatus;
 use App\Enums\UseType;
 use App\Models\Container;
+use App\Models\EstimateItem;
 use App\Models\Customer;
 use App\Models\CustomerAddress;
 use App\Models\Depot;
@@ -1184,6 +1185,77 @@ class Form extends Component
         }
 
         return $usados;
+    }
+
+    /**
+     * Las unidades que ya estan cotizadas en OTRO presupuesto abierto.
+     *
+     * Devuelve [container_id => Estimate].
+     *
+     * ── POR QUE AVISAR Y NO BLOQUEAR ──
+     *
+     * Un presupuesto NO reserva. Es una cotizacion que vale tres dias y
+     * que el cliente puede no aceptar nunca. Lo que saca una unidad del
+     * inventario disponible es una venta o una renta, no una cotizacion.
+     *
+     * Si cotizar bloqueara, cada presupuesto que nadie acepta congela
+     * inventario tres dias. Con varios vendedores cotizando, te quedas
+     * sin nada que ofrecer teniendo la yarda llena.
+     *
+     * Pero el riesgo contrario tambien es real: prometerle la misma
+     * unidad a dos clientes. Por eso se avisa: el vendedor ve que esa
+     * unidad ya esta ofrecida, en cual presupuesto, y decide.
+     *
+     * ── QUE CUENTA COMO "ABIERTO" ──
+     *
+     * Solo borrador y enviado. Un presupuesto rechazado, vencido o ya
+     * convertido en factura no compite por la unidad:
+     *
+     *   · rechazado y vencido  →  el cliente no la va a llevar
+     *   · convertido           →  ya hay factura, y entonces la unidad
+     *                             sale del disponible por si sola
+     *
+     * Avisar por esos seria ruido, y un aviso que salta siempre deja de
+     * leerse a la semana.
+     *
+     * ── Y EL PROPIO PRESUPUESTO NO CUENTA ──
+     *
+     * Al editar uno ya guardado, sus unidades no pueden salir avisando de
+     * si mismas. De las repetidas DENTRO del mismo documento ya se
+     * encarga contenedoresYaUsados().
+     */
+    public function getCotizadasEnOtrosProperty(): array
+    {
+        $ids = $this->resultadosContenedor->pluck('id')->all();
+
+        if (empty($ids)) {
+            return [];
+        }
+
+        return EstimateItem::query()
+            ->whereIn('container_id', $ids)
+            ->whereHas('estimate', function ($q) {
+                $q->whereIn('status', [
+                    EstimateStatus::Draft->value,
+                    EstimateStatus::Sent->value,
+                ]);
+
+                if ($this->estimateId) {
+                    $q->whereKeyNot($this->estimateId);
+                }
+            })
+            ->with('estimate:id,estimate_number,status,valid_until')
+            ->get()
+            /*
+             | Si una unidad esta en dos presupuestos abiertos, se avisa
+             | del mas reciente. Nombrar los dos alargaria el renglon y no
+             | cambia la decision: lo que importa es que YA esta ofrecida.
+             */
+            ->sortByDesc('id')
+            ->groupBy('container_id')
+            ->map(fn ($items) => $items->first()->estimate)
+            ->filter()
+            ->all();
     }
 
     public function seleccionarContenedor(int $contenedorId): void

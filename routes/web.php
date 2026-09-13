@@ -25,6 +25,13 @@ use App\Livewire\Payments\Show  as PaymentShow;
 use App\Livewire\Auth\Login;
 
 use App\Livewire\Containers\Form  as ContainerForm;
+use App\Livewire\Depots\Form      as DepotForm;
+use App\Livewire\Depots\Index     as DepotIndex;
+use App\Livewire\Purchases\Form   as PurchaseForm;
+use App\Livewire\Purchases\Index  as PurchaseIndex;
+use App\Livewire\Purchases\Show   as PurchaseShow;
+use App\Livewire\Suppliers\Form   as SupplierForm;
+use App\Livewire\Suppliers\Index  as SupplierIndex;
 use App\Livewire\Containers\Index as ContainerIndex;
 use App\Livewire\Containers\Show  as ContainerShow;
 
@@ -224,14 +231,63 @@ Route::middleware('auth')->group(function () {
      | Ahora cada una llega a su propia direccion y la pantalla dice
      | "en construccion", que es la verdad y no confunde a nadie.
      * ------------------------------------------------------------ */
-    Route::get('/compras/proveedores', Placeholder::class)
-        ->middleware('can:suppliers.view')->name('compras.proveedores.index');
+    /* ---------------------------------------------------------------
+     | PROVEEDORES
+     |
+     | Mismo cuidado con el ORDEN de siempre: /nuevo va ANTES que
+     | /{supplier}, porque {supplier} acepta cualquier cosa, incluida la
+     | palabra "nuevo".
+     * ------------------------------------------------------------ */
+    Route::middleware('can:suppliers.view')->group(function () {
 
-    Route::get('/compras/compras', Placeholder::class)
-        ->middleware('can:purchases.view')->name('compras.compras.index');
+        Route::get('/compras/proveedores', SupplierIndex::class)
+            ->name('compras.proveedores.index');
 
-    Route::get('/compras/depositos', Placeholder::class)
-        ->middleware('can:depots.view')->name('compras.depositos.index');
+        Route::get('/compras/proveedores/nuevo', SupplierForm::class)
+            ->middleware('can:suppliers.create')
+            ->name('compras.proveedores.create');
+
+        Route::get('/compras/proveedores/{supplier}/editar', SupplierForm::class)
+            ->middleware('can:suppliers.update')
+            ->name('compras.proveedores.edit');
+    });
+
+    /* ---------------------------------------------------------------
+     | COMPRAS Y RELEASES
+     * ------------------------------------------------------------ */
+    Route::middleware('can:purchases.view')->group(function () {
+
+        Route::get('/compras/compras', PurchaseIndex::class)
+            ->name('compras.compras.index');
+
+        Route::get('/compras/compras/nueva', PurchaseForm::class)
+            ->middleware('can:purchases.create')
+            ->name('compras.compras.create');
+
+        Route::get('/compras/compras/{purchase}/editar', PurchaseForm::class)
+            ->middleware('can:purchases.update')
+            ->name('compras.compras.edit');
+
+        Route::get('/compras/compras/{purchase}', PurchaseShow::class)
+            ->name('compras.compras.show');
+    });
+
+    /* ---------------------------------------------------------------
+     | DEPOSITOS
+     * ------------------------------------------------------------ */
+    Route::middleware('can:depots.view')->group(function () {
+
+        Route::get('/compras/depositos', DepotIndex::class)
+            ->name('compras.depositos.index');
+
+        Route::get('/compras/depositos/nuevo', DepotForm::class)
+            ->middleware('can:depots.create')
+            ->name('compras.depositos.create');
+
+        Route::get('/compras/depositos/{depot}/editar', DepotForm::class)
+            ->middleware('can:depots.update')
+            ->name('compras.depositos.edit');
+    });
 
     Route::get('/compras/insumos', Placeholder::class)
         ->middleware('can:parts.view')->name('compras.insumos.index');

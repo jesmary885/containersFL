@@ -246,6 +246,7 @@ return [
     'export_eligible'    => 'Export eligible',
     'unclassified'       => 'Unclassified',
     'already_in_line'    => 'Already on line :line.',
+    'already_quoted'     => 'Already quoted on :number (:state). Not reserved: the customer has not accepted yet.',
     'no_price'           => 'No price on file',
     'rent_per_month'     => 'Rent $:amount/mo',
     'no_units'           => 'No units available right now.',

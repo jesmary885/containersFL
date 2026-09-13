@@ -257,6 +257,7 @@ return [
     'export_eligible'    => 'Apto exportación',
     'unclassified'       => 'Sin clasificar',
     'already_in_line'    => 'Ya está en la línea :line.',
+    'already_quoted'     => 'Ya cotizada en :number (:state). No está reservada: el cliente aún no la acepta.',
     'no_price'           => 'Sin precio cargado',
     'rent_per_month'     => 'Renta $:amount/mes',
     'no_units'           => 'No hay unidades disponibles en este momento.',

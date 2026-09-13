@@ -47,6 +47,22 @@ class Purchase extends Model
     /** Fees que cobró el depósito por pasarse del plazo de recogida. */
     public function expenses() { return $this->hasMany(Expense::class); }
 
+    /**
+     * Quien registro la compra.
+     *
+     * ── FALTABA, Y ROMPIA LA FICHA ──
+     *
+     * La tabla tiene la columna `created_by` desde el principio, pero el
+     * modelo no tenia la relacion. La ficha pedia `->load('createdBy')` y
+     * Laravel cortaba con:
+     *
+     *     Call to undefined relationship [createdBy] on model [Purchase]
+     *
+     * Una columna sin relacion es un dato que esta guardado y que nadie
+     * puede leer sin escribir la consulta a mano.
+     */
+    public function createdBy() { return $this->belongsTo(User::class, 'created_by'); }
+
     public function containers()
     {
         return $this->hasManyThrough(Container::class, PurchaseItem::class);
