@@ -128,10 +128,26 @@ class ContainerObserver
             (string) $container->getRawOriginal('status'),
         );
 
+        /* -----------------------------------------------------------
+         | EL CONTEXTO QUE DEJO QUIEN LO MOVIO
+         |
+         | Este observer solo ve el antes y el despues. No sabe POR QUE
+         | se movio la unidad ni que nota escribio la persona.
+         |
+         | Antes, la pantalla de "Mover" resolvia eso escribiendo ella
+         | misma un segundo movimiento con la nota, y por eso en la
+         | ficha salian dos asientos por cada clic.
+         |
+         | Ahora la pantalla —o la factura, o la venta— deja el contexto
+         | en el propio modelo con conMovimiento(), y aqui se recoge.
+         | Sigue habiendo UN SOLO sitio que escribe el historial.
+         * -------------------------------------------------------- */
         ContainerMovement::create([
             'container_id'     => $container->id,
 
-            'type'             => $this->deducirTipo($container, $estadoAnterior),
+            // Si nadie dijo de que se trata, se deduce del estado nuevo.
+            'type'             => $container->tipoDelMovimiento
+                                  ?? $this->deducirTipo($container, $estadoAnterior),
 
             'status_before'    => $estadoAnterior,
             'status_after'     => $container->status,
@@ -140,9 +156,26 @@ class ContainerObserver
             'to_location_id'   => $container->location_id,
             'from_depot_id'    => $container->getOriginal('depot_id'),
 
+            /*
+             | De que documento viene. Es lo que permite que el historial
+             | diga "esto fue por la factura 1371" en vez de solo "paso a
+             | rentado".
+             */
+            'reference_type'   => $container->origenDelMovimiento
+                                  ? $container->origenDelMovimiento->getMorphClass()
+                                  : null,
+            'reference_id'     => $container->origenDelMovimiento?->getKey(),
+
             'moved_at'         => now(),
+            'notes'            => $container->notaDelMovimiento,
             'created_by'       => auth()->id(),
         ]);
+
+        /*
+         | Se limpia para que no se pegue al siguiente guardado del mismo
+         | objeto en esta misma peticion.
+         */
+        $container->olvidarContextoDelMovimiento();
     }
 
     /**

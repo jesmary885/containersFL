@@ -34,7 +34,7 @@
         <div>
             <h4 class="mb-0 fw-semibold">Registrar un pago</h4>
             <small class="text-secondary">
-                Lo que entra, y a qué facturas se le descuenta.
+                Registro del cobro y su aplicación a las facturas del cliente.
             </small>
         </div>
 
@@ -66,7 +66,7 @@
                         <h6 class="seccion-titulo">
                             <span class="paso-num">1</span>
                             <i class="bi bi-person-vcard"></i>
-                            <span>Quién paga</span>
+                            <span>Cliente</span>
                         </h6>
                     </div>
 
@@ -132,7 +132,7 @@
                         <h6 class="seccion-titulo">
                             <span class="paso-num">2</span>
                             <i class="bi bi-cash-coin"></i>
-                            <span>Cuánto y cómo</span>
+                            <span>Datos del cobro</span>
                         </h6>
                     </div>
 
@@ -242,6 +242,93 @@
                                 Si después el dueño de la tarjeta reclama el cargo al banco,
                                 ese papel es lo único que respalda a la empresa.
                             </div>
+
+                            {{--
+                                ═══════════════════════════════════════════
+                                LA FACTURA NO TRAE EL 3.5%
+                                ═══════════════════════════════════════════
+
+                                El caso: se emitió la factura sin saber cómo
+                                iba a pagar el cliente, así que salió sin
+                                recargo. Después llama y dice que paga con
+                                tarjeta.
+
+                                Antes esto no tenía salida. O se cobraba lo
+                                que dice la factura y el 3.5% lo ponía la
+                                empresa, o se cobraba de más de lo que dice
+                                el documento, que es justo lo que provoca un
+                                chargeback.
+
+                                El recargo va en la FACTURA, no en el pago:
+                                es el documento que el cliente recibe y el
+                                importe que autoriza al firmar. Por eso aquí
+                                no se ajusta nada en silencio — se enseñan
+                                los números y se ofrece corregir.
+                            --}}
+                            @if (count($this->facturasSinRecargo) > 0)
+                                <div class="alert alert-danger py-2 small">
+
+                                    <div class="mb-2">
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                        <strong>
+                                            @if (count($this->facturasSinRecargo) === 1)
+                                                Esta factura se emitió sin el recargo de tarjeta.
+                                            @else
+                                                Estas facturas se emitieron sin el recargo de tarjeta.
+                                            @endif
+                                        </strong>
+                                        El cliente dijo entonces que no sabía cómo iba a pagar.
+                                    </div>
+
+                                    <table class="table table-sm mb-2 bg-body rounded">
+                                        <thead>
+                                            <tr>
+                                                <th>Factura</th>
+                                                <th class="text-end">Dice hoy</th>
+                                                <th class="text-end">Recargo</th>
+                                                <th class="text-end">Pasaría a</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach ($this->facturasSinRecargo as $f)
+                                                <tr wire:key="sinrec-{{ $f['id'] }}">
+                                                    <td class="doc-numero">{{ $f['numero'] }}</td>
+                                                    <td class="text-end monto">${{ number_format($f['saldo'], 2) }}</td>
+                                                    <td class="text-end monto">
+                                                        +${{ number_format($f['recargo'], 2) }}
+                                                        <span class="text-secondary">
+                                                            ({{ rtrim(rtrim(number_format($f['porcentaje'], 2), '0'), '.') }}%)
+                                                        </span>
+                                                    </td>
+                                                    <td class="text-end monto fw-semibold">
+                                                        ${{ number_format($f['nuevoSaldo'], 2) }}
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+
+                                    <button type="button" class="btn btn-sm btn-danger"
+                                            wire:click="agregarRecargoDeTarjeta"
+                                            wire:loading.attr="disabled">
+                                        <i class="bi bi-plus-circle me-1"></i>
+                                        Agregar el recargo y actualizar el cobro
+                                    </button>
+
+                                    <div class="mt-2">
+                                        <strong>Después hay que reenviarle la factura al cliente</strong>,
+                                        y el formulario de autorización tiene que firmarse por el
+                                        importe nuevo. Si el papel dice un monto y en la tarjeta se
+                                        pasa otro, el papel deja de proteger a la empresa.
+                                    </div>
+
+                                    <div class="mt-1 text-secondary">
+                                        Si el cliente no acepta el recargo, cámbiele la forma de
+                                        pago: en efectivo, cheque, Zelle o transferencia no se cobra.
+                                    </div>
+
+                                </div>
+                            @endif
 
                             <div class="btn-group w-100 mb-3" role="group">
                                 <input type="radio" class="btn-check" id="authExistente"
@@ -404,7 +491,7 @@
                         <h6 class="seccion-titulo mb-0">
                             <span class="paso-num">4</span>
                             <i class="bi bi-list-check"></i>
-                            <span>A qué facturas se le descuenta</span>
+                            <span>Aplicación a facturas</span>
                         </h6>
 
                         @if ($customer_id && $this->facturasPendientes->isNotEmpty())
@@ -412,7 +499,7 @@
                                 <button type="button" class="btn btn-sm btn-outline-primary"
                                         wire:click="aplicarAutomatico"
                                         title="Reparte el monto entre las facturas, la más vieja primero">
-                                    <i class="bi bi-magic me-1"></i> Repartir solo
+                                    <i class="bi bi-magic me-1"></i> Distribuir
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-secondary"
                                         wire:click="limpiarAplicaciones">
@@ -537,9 +624,9 @@
                             <div class="alert alert-danger py-2 small mt-2 mb-0">
                                 <div class="mb-2">
                                     <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                                    Está repartiendo
-                                    <strong>${{ number_format(abs($this->saldoSinAsignar), 2) }} de más</strong>
-                                    de lo que dice que entró.
+                                    <strong>El total aplicado supera el monto del pago
+                                    en ${{ number_format(abs($this->saldoSinAsignar), 2) }}.</strong>
+                                    No se puede aplicar a facturas más dinero del que se recibió.
                                 </div>
 
                                 {{--
@@ -554,10 +641,12 @@
                                 <button type="button" class="btn btn-sm btn-danger"
                                         wire:click="usarSumaComoMonto">
                                     <i class="bi bi-arrow-left-circle me-1"></i>
-                                    Poner ${{ number_format($this->totalAplicado, 2) }} como monto
+                                    Fijar el monto en ${{ number_format($this->totalAplicado, 2) }}
                                 </button>
 
-                                <span class="ms-2">o baje lo repartido.</span>
+                                <span class="ms-2">
+                                    o corrija los importes de la tabla.
+                                </span>
                             </div>
                         @elseif ($this->saldoSinAsignar > 0.001 && $customer_id)
                             <div class="alert alert-info py-2 small mt-2 mb-0">

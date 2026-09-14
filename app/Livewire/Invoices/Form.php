@@ -2,19 +2,26 @@
 
 namespace App\Livewire\Invoices;
 
+use App\Enums\DocumentCategory;
+use App\Enums\EstimateStatus;
 use App\Enums\InvoiceType;
 use App\Enums\PaymentMethod;
+use App\Enums\UseType;
 use App\Models\Container;
 use App\Models\Customer;
+use App\Models\EstimateItem;
 use App\Models\Invoice;
 use App\Models\Product;
 use App\Services\InvoiceCalculator;
+use App\Services\PricingResolver;
 use App\Support\CompanyContext;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use App\Livewire\Concerns\AuthorizesAccess;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -52,6 +59,18 @@ class Form extends Component
 {
     use AuthorizesAccess;
 
+    /*
+     | Detecta las unidades que ya estan en OTRA factura viva. Sin esto,
+     | la misma unidad se podia facturar dos veces a dos clientes.
+     */
+    use \App\Livewire\Concerns\DetectaUnidadesComprometidas;
+
+    /*
+     | WithFileUploads le da al componente la capacidad de recibir
+     | archivos. Es el mismo trait que ya usaba la ficha de la factura.
+     */
+    use WithFileUploads;
+
     /* =====================================================================
      | LOS PERMISOS
      |
@@ -82,6 +101,39 @@ class Form extends Component
      * saltar a otra ventana.
      */
     public bool $guardada = false;
+
+    /* =====================================================================
+     | LOS ADJUNTOS (RB-034)
+     |
+     | ── POR QUE ESTAN AQUI Y NO SOLO EN LA FICHA ──
+     |
+     | Porque el momento de adjuntar es JUSTO ANTES de enviar el correo.
+     | Teniendolos solo en la ficha, habia que guardar, salir a otra
+     | pantalla, subir los papeles, y volver a entrar para mandar la
+     | factura. Tres pantallas para una sola gestion.
+     |
+     | ── POR QUE SOLO DESPUES DE GUARDAR ──
+     |
+     | Un adjunto se cuelga DE la factura: necesita el id de la factura
+     | para saber de quien es. Mientras la factura no existe no hay a que
+     | colgarlo.
+     |
+     | Por eso el paso 3 ensena la zona desactivada con el motivo escrito,
+     | en vez de esconderla: si no se ve, nadie sabe que existe.
+     * ================================================================== */
+
+    public $archivo = null;
+
+    public string $categoriaArchivo = 'other';
+
+    /**
+     * Si el archivo se le manda al cliente con la factura.
+     *
+     * Viene marcado porque ese es el caso normal. Se desmarca para los
+     * papeles internos —la autorizacion de tarjeta firmada, por ejemplo—
+     * que no salen de la oficina.
+     */
+    public bool $viajaConLaFactura = true;
 
     /* =====================================================================
      | TERMINOS DE PAGO
@@ -223,9 +275,19 @@ class Form extends Component
      | quien cotiza son la misma persona.
      * ================================================================== */
 
-    public bool $buscadorUnidad = false;
+    /**
+     * Sobre QUE renglon esta abierto el buscador de unidades.
+     *
+     * Antes era un booleano ($buscadorUnidad) y el buscador se dibujaba
+     * dentro del propio modal, apretado en media columna. Ahora es una
+     * capa aparte a pantalla completa —la misma del presupuesto— y por
+     * eso necesita saber a que renglon le va a escribir.
+     *
+     * null = cerrado.
+     */
+    public ?int $lineaBuscandoContenedor = null;
 
-    public string $buscarUnidad = '';
+    public string $buscarContenedor = '';
 
     public ?int $lineaEditando = null;
 
@@ -329,6 +391,23 @@ class Form extends Component
 
             $this->cargarDesde($invoice);
 
+            /* -------------------------------------------------------------
+             | ENTRAR DIRECTO A UN PASO
+             |
+             | Lo usa la conversión de presupuesto a factura, que manda
+             | ?paso=3: el cliente, las direcciones y las líneas vienen ya
+             | copiadas, así que lo único que falta es revisar y emitir.
+             | Entrar por el paso 1 obligaría a pulsar Siguiente dos veces
+             | para llegar a lo que realmente toca.
+             |
+             | Se limita al rango válido a propósito: el número llega por
+             | la dirección del navegador, o sea desde fuera, y un valor
+             | raro dejaría la pantalla en un paso que no existe.
+             * ---------------------------------------------------------- */
+            $pedido = (int) request()->query('paso', 1);
+
+            $this->paso = max(1, min($pedido, self::PASOS));
+
             return null;
         }
 
@@ -345,6 +424,20 @@ class Form extends Component
                 ? (string) $this->terms
                 : '';
             $this->tax_rate = $calc->defaultTaxRate($empresa);
+
+            /* -------------------------------------------------------------
+             | LOS TERMINOS DEL PIE
+             |
+             | Salen de la ficha de la empresa (companies.invoice_footer_terms).
+             | Esa columna existe desde la primera migracion y no la leia
+             | nadie: cada factura nueva arrancaba con el pie en blanco y
+             | habia que escribirlo a mano o quedaba sin el.
+             |
+             | Es texto fijo —condiciones, garantia, aviso de mora— y es el
+             | mismo en todas las facturas de esa empresa. Queda editable
+             | aqui por si una en concreto necesita otro.
+             * ---------------------------------------------------------- */
+            $this->footer_terms = $empresa->invoice_footer_terms;
         }
 
         /*
@@ -433,6 +526,22 @@ class Form extends Component
             'grupo'        => (string) ($linea->bundle_key ?? ''),
             'service_date' => $linea->service_date?->toDateString(),
             'use_type'     => $linea->use_type,
+
+            // Los campos propios de cada concepto. Sin esto, reabrir una
+            // factura guardada perdia el plazo, las millas y el detalle
+            // de la reparacion aunque estuvieran en la base.
+            'delivery_zip'  => $linea->delivery_zip,
+            'miles'         => $linea->miles !== null ? (float) $linea->miles : null,
+            'rate_per_mile' => $linea->rate_per_mile !== null ? (float) $linea->rate_per_mile : null,
+            'rental_months' => $linea->rental_months,
+            'work_details'  => $linea->work_details,
+
+            /*
+             | Una descripcion que ya esta guardada se considera escrita a
+             | mano: la reviso una persona al emitir. Cambiar el concepto
+             | al corregir no debe pisarla.
+             */
+            'desc_manual'   => filled($linea->description),
         ])->all();
 
         foreach ($invoice->items as $linea) {
@@ -557,6 +666,7 @@ class Form extends Component
             'unit_price'   => 0,
             'taxable'      => false,
             'grupo'        => '',
+
             /*
              | La fecha del servicio nace hoy.
              |
@@ -566,7 +676,51 @@ class Form extends Component
              */
             'service_date' => now()->toDateString(),
 
-            'use_type' => null,
+            /*
+             | El uso previsto de ESTA unidad.
+             |
+             | Va por renglon y no en la cabecera: una factura puede
+             | llevar tres contenedores con tres destinos distintos.
+             */
+            'use_type'     => null,
+
+            /* -------------------------------------------------------------
+             | LOS CAMPOS QUE VENIAN DEL PRESUPUESTO Y AQUI SE PERDIAN
+             |
+             | Las columnas ya existen en invoice_items desde la migracion
+             | del 11-sep (align_invoices_with_estimates). Lo que faltaba
+             | era que el formulario las pidiera y las guardara.
+             |
+             | Sin ellas, el cliente aprobaba un presupuesto que decia
+             | "reparacion: cambio de pisos y pintura, 3 meses, 42 millas"
+             | y recibia una factura que decia "reparacion".
+             * ---------------------------------------------------------- */
+
+            // Solo en lineas de ENTREGA. El importe se calcula: millas x tarifa.
+            'delivery_zip'  => null,
+            'miles'         => null,
+            'rate_per_mile' => null,
+
+            // Solo en lineas de RENTA. NO multiplica el importe.
+            'rental_months' => null,
+
+            // Solo en REPARACION. Que se le hizo al contenedor.
+            'work_details'  => null,
+
+            /*
+             | Bandera: la descripcion la escribio una persona.
+             |
+             | Mientras sea false, cambiar el concepto reescribe el texto.
+             | En cuanto alguien lo edita a mano pasa a true y no se toca
+             | nunca mas.
+             |
+             | Sin esta bandera pasa esto: se elige "Renta de contenedor",
+             | el sistema escribe ese nombre, se cambia el concepto a
+             | "Entrega / Delivery" y la descripcion se queda diciendo
+             | "Renta de contenedor". La factura sale impresa con un
+             | delivery llamado renta.
+             */
+            'desc_manual'   => false,
         ];
     }
 
@@ -621,6 +775,11 @@ class Form extends Component
         $this->borrador        = [];
         $this->borradorEsNuevo = false;
 
+        // El buscador de unidades es una capa por encima del modal. Si el
+        // modal se va y el buscador se queda, queda una pantalla flotando
+        // sobre el formulario sin nada debajo a lo que escribirle.
+        $this->cerrarBuscadorContenedor();
+
         $this->resetValidation();
     }
 
@@ -637,16 +796,72 @@ class Form extends Component
             return;
         }
 
-        $this->validate([
+        $producto = $this->productoDelBorrador();
+
+        /* -----------------------------------------------------------------
+         | CADA CONCEPTO EXIGE LO SUYO
+         |
+         | Antes se pedian siempre los mismos tres campos: descripcion,
+         | cantidad y precio. Eso dejaba pasar una entrega sin millas y
+         | una renta sin plazo, que son justo los datos que despues nadie
+         | encuentra cuando el cliente reclama.
+         |
+         | Es la misma tabla de reglas que el presupuesto, a proposito:
+         | convertir un presupuesto en factura es copiar, no traducir
+         | (RB-033). Si la factura exigiera menos, se podria "perder" un
+         | dato al convertir sin que nada avisara.
+         * -------------------------------------------------------------- */
+        $reglas = [
             'borrador.description' => ['required', 'string', 'max:1000'],
-            'borrador.quantity'    => ['required', 'numeric', 'min:0.01'],
             'borrador.unit_price'  => ['required', 'numeric', 'min:0'],
-        ], [
+            'borrador.quantity'    => ['required', 'numeric', 'min:0.01'],
+        ];
+
+        if ($producto?->type->requiresContainer()) {
+            $reglas['borrador.container_id'] = ['required', 'exists:containers,id'];
+        }
+
+        if ($producto?->isRental()) {
+            $reglas['borrador.rental_months'] = ['required', 'integer', 'min:1', 'max:120'];
+        }
+
+        if ($producto?->isDelivery()) {
+            $reglas['borrador.delivery_zip']  = ['required', 'string', 'max:10'];
+            $reglas['borrador.miles']         = ['required', 'numeric', 'min:0'];
+            $reglas['borrador.rate_per_mile'] = ['required', 'numeric', 'min:0'];
+        }
+
+        if ($producto && $producto->code === 'REPAIR') {
+            $reglas['borrador.work_details'] = ['required', 'string', 'max:2000'];
+        }
+
+        $this->validate($reglas, [
             'borrador.description.required' => 'Escriba que se le esta cobrando. '
                                               .'Es el texto que el cliente va a leer.',
             'borrador.quantity.min'   => 'La cantidad tiene que ser mayor que cero.',
             'borrador.unit_price.min' => 'El precio no puede ser negativo.',
+        ], [
+            'borrador.description'   => 'descripcion',
+            'borrador.unit_price'    => 'precio',
+            'borrador.quantity'      => 'cantidad',
+            'borrador.container_id'  => 'unidad',
+            'borrador.rental_months' => 'plazo',
+            'borrador.delivery_zip'  => 'ZIP de destino',
+            'borrador.miles'         => 'millas',
+            'borrador.rate_per_mile' => 'tarifa por milla',
+            'borrador.work_details'  => 'trabajo realizado',
         ]);
+
+        /*
+         | Un contenedor no viene en cantidades. Un renglon es una
+         | unidad; si hay dos contenedores, hay dos renglones.
+         |
+         | Se fuerza aqui y no solo en la pantalla porque el dato puede
+         | llegar de una conversion de presupuesto o de una duplicacion.
+         */
+        if ($producto?->type->requiresContainer()) {
+            $this->borrador['quantity'] = 1;
+        }
 
         $this->lineas[$this->lineaEditando] = $this->borrador;
 
@@ -857,27 +1072,28 @@ class Form extends Component
      * El precio varia por temporada y por volumen. Esto solo ahorra
      * teclear el caso normal.
      */
-    protected function aplicarPrecioDeContenedor(int $contenedorId, bool $forzar = false): void
-    {
-        $contenedor = \App\Models\Container::with(['size:id,name', 'condition:id,name', 'grade:id,name'])
+    protected function aplicarPrecioDeContenedor(
+        int $contenedorId,
+        ?Product $producto = null,
+        bool $forzar = false,
+    ): void {
+        $contenedor = Container::with(['size:id,name', 'condition:id,name', 'grade:id,name'])
             ->find($contenedorId);
 
         if (! $contenedor) {
             return;
         }
 
-        $producto = ! empty($this->borrador['product_id'])
-            ? Product::find($this->borrador['product_id'])
-            : null;
+        $producto ??= $this->productoDelBorrador();
 
-        $esRenta = $producto?->isRental() ?? ($this->type === 'rental');
+        $esRenta = $producto?->isRental() ?? ($this->type === InvoiceType::Rental->value);
 
         $precio = $contenedor->suggestedPrice($esRenta);
 
         /*
          | null = esa unidad no tiene precio cargado para eso. Se deja el
-         | campo como esta para que la persona escriba, en vez de meter
-         | un cero que se puede guardar por distraccion.
+         | campo como esta para que la persona escriba, en vez de meter un
+         | cero que se puede guardar por distraccion.
          */
         if ($precio !== null && ($forzar || empty($this->borrador['unit_price']))) {
             $this->borrador['unit_price'] = $precio;
@@ -886,64 +1102,261 @@ class Form extends Component
         /*
          | LA DESCRIPCION
          |
-         | La arma el concepto si hay uno; si no, la propia unidad. Asi el
-         | presupuesto y la factura escriben exactamente el mismo texto.
+         | La arma el concepto, no este archivo: ver Product::autoDescription().
+         | Asi el presupuesto y la factura escriben exactamente el mismo
+         | texto, que es lo que exige RB-033.
          |
-         | Solo se escribe si el campo esta vacio: lo que teclee una
-         | persona no se pisa nunca.
+         | Se respeta lo que haya tecleado una persona (desc_manual).
          */
-        if (blank($this->borrador['description'] ?? null)) {
+        if (empty($this->borrador['desc_manual'])) {
             $this->borrador['description'] = $producto
                 ? $producto->autoDescription($contenedor)
                 : $contenedor->lineDescription();
         }
+
+        /*
+         | EL CONTENEDOR SI PAGA EL 7% (RB-006), salvo en exportacion.
+         |
+         | El uso se mira en el propio renglon y no en la cabecera: una
+         | factura puede llevar una unidad para almacenaje y otra para
+         | exportar, y solo la segunda va sin impuesto.
+         |
+         | Y transporte nunca lleva impuesto, sea cual sea el uso (RB-005).
+         */
+        $esExport    = ($this->borrador['use_type'] ?? null) === UseType::Export->value;
+        $esTransport = $this->type === InvoiceType::Transport->value;
+
+        $this->borrador['taxable'] = ! $esExport && ! $esTransport;
+
+        $this->resetValidation('borrador.description');
+        $this->resetValidation('borrador.unit_price');
     }
 
-    public function abrirBuscadorUnidad(): void
+    /* =====================================================================
+     | LOS PRECIOS DEL TRANSPORTE
+     * ================================================================== */
+
+    /**
+     * Calcula el importe de una linea de ENTREGA: millas x tarifa.
+     *
+     * ── DE DONDE SALE LA TARIFA ──
+     *
+     * De la ficha del transportista si la tiene, y si no del ajuste
+     * operations.default_rate_per_mile. Ni un numero escrito en este
+     * archivo: si manana sube la tarifa, se cambia en Configuracion.
+     *
+     * Todo lo que escribe este metodo queda editable en el renglon. Es
+     * una sugerencia para no teclear el caso normal, no un candado
+     * (RB-029).
+     *
+     * ── EL PICKUP NO ENTRA ──
+     *
+     * El pickup es el viaje deposito -> yarda y lo paga FLCHR (RB-031).
+     * Nunca se le cobra al cliente, asi que no tiene precio que calcular
+     * en una factura.
+     */
+    protected function aplicarPrecioDeTransporte(Product $producto): void
     {
-        $this->buscarUnidad   = '';
-        $this->buscadorUnidad = true;
+        if (! $producto->isDelivery()) {
+            return;
+        }
+
+        $empresa  = app(CompanyContext::class)->get();
+        $resolver = app(PricingResolver::class);
+
+        // La tarifa se precarga una sola vez por renglon. Si la persona
+        // la piso a mano, se respeta.
+        if (($this->borrador['rate_per_mile'] ?? null) === null) {
+            $this->borrador['rate_per_mile'] = $resolver->ratePerMile($empresa);
+        }
+
+        $millas = (float) ($this->borrador['miles'] ?? 0);
+
+        // Sin millas no hay nada que calcular todavia. En cuanto las
+        // escriba, updated() vuelve a pasar por aqui.
+        if ($millas <= 0) {
+            return;
+        }
+
+        $this->borrador['unit_price'] = round(
+            $millas * (float) $this->borrador['rate_per_mile'],
+            2,
+        );
+
+        $this->borrador['quantity'] = 1;
+
+        // RB-005: el transporte NUNCA lleva sales tax en Florida.
+        $this->borrador['taxable'] = false;
+
+        $this->resetValidation('borrador.unit_price');
     }
 
-    public function cerrarBuscadorUnidad(): void
+    /** Recalcula el renglon de transporte cuando cambian millas o tarifa. */
+    protected function recalcularLineaDeTransporte(): void
     {
-        $this->buscadorUnidad = false;
-        $this->buscarUnidad   = '';
+        $producto = $this->productoDelBorrador();
+
+        if ($producto && $producto->isDelivery()) {
+            $this->aplicarPrecioDeTransporte($producto);
+        }
+    }
+
+    /* =====================================================================
+     | EL BUSCADOR DE UNIDADES
+     |
+     | ── POR QUE UNA CAPA APARTE Y NO UNA LISTA DENTRO DEL MODAL ──
+     |
+     | Porque dentro del modal solo cabia media columna: una lista de 220
+     | pixeles de alto donde cada unidad se veia en dos renglones
+     | apretados. Con doscientos contenedores en yarda, elegir ahi es
+     | adivinar.
+     |
+     | Es exactamente el mismo buscador del presupuesto, y a proposito:
+     | quien cotiza y quien factura son la misma persona.
+     * ================================================================== */
+
+    public function abrirBuscadorContenedor(int $indice): void
+    {
+        $this->lineaBuscandoContenedor = $indice;
+        $this->buscarContenedor        = '';
+    }
+
+    public function cerrarBuscadorContenedor(): void
+    {
+        $this->lineaBuscandoContenedor = null;
+        $this->buscarContenedor        = '';
     }
 
     /**
-     * Las unidades que se pueden facturar.
+     * Las unidades que coinciden con lo que se esta escribiendo.
      *
-     * Solo las disponibles de verdad: en yarda y sin venta ni renta
-     * encima. Ofrecer una que ya esta comprometida es prometerle al
-     * cliente algo que no se le puede dar.
+     * Solo las de la empresa activa y solo las disponibles de verdad:
+     * en yarda, sin venta ni renta encima (RB-019). Las compradas pero
+     * todavia en el deposito del proveedor NO salen: no se factura lo
+     * que no se ha retirado.
      */
-    public function getResultadosUnidadProperty()
+    public function getResultadosContenedorProperty()
     {
+        $empresa = app(CompanyContext::class)->get();
+
         return Container::query()
             ->available()
-            ->forBillingCompany(app(\App\Support\CompanyContext::class)->get()?->id)
-            ->when($this->buscarUnidad, fn ($q) => $q->search($this->buscarUnidad))
+            ->forBillingCompany($empresa?->id)
+            ->search($this->buscarContenedor)
             ->with(['size:id,name', 'condition:id,name', 'grade:id,name'])
-            ->orderBy('container_number')
-            ->limit(25)
+            ->orderBy('internal_code')
+            ->limit(15)
             ->get();
     }
 
-    public function seleccionarUnidad(int $contenedorId): void
+    /**
+     * Las unidades ya elegidas en OTROS renglones de esta misma factura.
+     *
+     * La pantalla las ensena deshabilitadas. Cobrar dos veces el mismo
+     * contenedor en la misma factura es un error de dedo que despues se
+     * convierte en un contenedor vendido a dos clientes.
+     *
+     * Devuelve [container_id => numero de renglon].
+     */
+    public function getContenedoresYaUsadosProperty(): array
+    {
+        $usados = [];
+
+        foreach ($this->lineas as $i => $linea) {
+            // El renglon que se esta editando se salta: su propia unidad
+            // no puede salir deshabilitada en su propio buscador.
+            if ($i === $this->lineaEditando) {
+                continue;
+            }
+
+            if (! empty($linea['container_id'])) {
+                $usados[(int) $linea['container_id']] = $i + 1;
+            }
+        }
+
+        return $usados;
+    }
+
+    /**
+     * Las unidades que estan ofrecidas en un presupuesto todavia abierto.
+     *
+     * Devuelve [container_id => Estimate].
+     *
+     * ── POR QUE AVISAR AL FACTURAR ──
+     *
+     * Porque el presupuesto NO reserva: es una cotizacion que vale tres
+     * dias. Si mientras tanto alguien factura esa misma unidad a otro
+     * cliente, el presupuesto abierto queda prometiendo algo que ya no
+     * existe, y nadie se entera hasta que el cliente acepta.
+     *
+     * No bloquea, avisa. La factura manda sobre el presupuesto: quien
+     * paga primero se lleva la unidad. Pero conviene saber a quien hay
+     * que llamar para avisarle.
+     *
+     * Solo cuentan los presupuestos en borrador o enviados. Uno
+     * rechazado, vencido o ya convertido no compite por la unidad.
+     */
+    public function getCotizadasEnOtrosProperty(): array
+    {
+        $ids = $this->resultadosContenedor->pluck('id')->all();
+
+        if (empty($ids)) {
+            return [];
+        }
+
+        return EstimateItem::query()
+            ->whereIn('container_id', $ids)
+            ->whereHas('estimate', function ($q) {
+                $q->whereIn('status', [
+                    EstimateStatus::Draft->value,
+                    EstimateStatus::Sent->value,
+                ]);
+            })
+            ->with('estimate:id,estimate_number,status,valid_until')
+            ->get()
+            ->sortByDesc('id')
+            ->groupBy('container_id')
+            ->map(fn ($items) => $items->first()->estimate)
+            ->filter()
+            ->all();
+    }
+
+    public function seleccionarContenedor(int $contenedorId): void
     {
         if ($this->lineaEditando === null) {
             return;
         }
 
+        /* -----------------------------------------------------------------
+         | EL CANDADO DE VERDAD
+         |
+         | El botón deshabilitado del buscador se puede saltar, y entre que
+         | se abrió el buscador y se pulsó, otra persona pudo facturar esa
+         | misma unidad. Aquí es donde el dato entra al documento, así que
+         | aquí se vuelve a comprobar.
+         * -------------------------------------------------------------- */
+        if ($factura = ($this->comprometidasEnFacturas[$contenedorId] ?? null)) {
+            $this->cerrarBuscadorContenedor();
+
+            session()->flash('error',
+                'La unidad ya está facturada en la '.$factura->invoice_number
+                .'. Facturarla otra vez sería venderla dos veces.');
+
+            return;
+        }
+
         $this->borrador['container_id'] = $contenedorId;
 
-        $this->aplicarPrecioDeContenedor($contenedorId, forzar: true);
+        $this->aplicarPrecioDeContenedor(
+            $contenedorId,
+            $this->productoDelBorrador(),
+            forzar: true,
+        );
 
-        $this->cerrarBuscadorUnidad();
+        $this->cerrarBuscadorContenedor();
     }
 
-    public function quitarUnidadDelRenglon(): void
+    public function quitarContenedor(): void
     {
         $this->borrador['container_id'] = null;
     }
@@ -1012,11 +1425,6 @@ class Form extends Component
                 : ($this->termsSeleccion ?: null);
         }
 
-        // Cambió el producto de una línea.
-        if (preg_match('/^lineas\.(\d+)\.product_id$/', $campo, $partes)) {
-            $this->aplicarProducto((int) $partes[1]);
-        }
-
         /* -----------------------------------------------------------------
          | CAMBIO EL PRODUCTO DENTRO DEL MODAL
          |
@@ -1029,18 +1437,41 @@ class Form extends Component
          | precios haya que acordarse de cambiarla en dos sitios. Nunca se
          | acuerda uno de los dos.
          * -------------------------------------------------------------- */
-        if ($campo === 'borrador.product_id' && $this->lineaEditando !== null) {
-            $this->lineas[$this->lineaEditando] = $this->borrador;
+        if ($campo === 'borrador.product_id') {
+            $this->aplicarProducto();
+        }
 
-            $this->aplicarProducto($this->lineaEditando);
+        /* -----------------------------------------------------------------
+         | ALGUIEN ESCRIBIO LA DESCRIPCION A MANO
+         |
+         | A partir de aqui el texto es suyo y cambiar el concepto ya no
+         | lo pisa. Si la deja vacia, vuelve a ser automatica.
+         * -------------------------------------------------------------- */
+        if ($campo === 'borrador.description') {
+            $this->borrador['desc_manual'] = filled($this->borrador['description'] ?? null);
+        }
 
-            $this->borrador = $this->lineas[$this->lineaEditando];
+        /* -----------------------------------------------------------------
+         | CAMBIARON LAS MILLAS O LA TARIFA DE UNA ENTREGA
+         |
+         | El importe del transporte se calcula, no se teclea. Y cada
+         | renglon lleva los suyos: una factura de tres contenedores puede
+         | ir a tres direcciones distintas (RB-049).
+         * -------------------------------------------------------------- */
+        if ($campo === 'borrador.miles' || $campo === 'borrador.rate_per_mile') {
+            $this->recalcularLineaDeTransporte();
+        }
 
-            // Si ya habia una unidad elegida, su precio manda sobre el
-            // del concepto: es el precio de ESE contenedor.
-            if (! empty($this->borrador['container_id'])) {
-                $this->aplicarPrecioDeContenedor((int) $this->borrador['container_id'], forzar: true);
-            }
+        /* -----------------------------------------------------------------
+         | CAMBIO EL USO PREVISTO DE ESA UNIDAD (RB-006, RB-016)
+         |
+         | En exportacion no se cobra sales tax de Florida. Se desmarca
+         | SOLO este renglon: la factura puede llevar una unidad para
+         | almacenaje y otra para exportar.
+         * -------------------------------------------------------------- */
+        if ($campo === 'borrador.use_type'
+            && ($this->borrador['use_type'] ?? null) === UseType::Export->value) {
+            $this->borrador['taxable'] = false;
         }
 
         /* -----------------------------------------------------------------
@@ -1056,7 +1487,11 @@ class Form extends Component
                 return;
             }
 
-            $this->aplicarPrecioDeContenedor((int) $this->borrador['container_id'], forzar: true);
+            $this->aplicarPrecioDeContenedor(
+                (int) $this->borrador['container_id'],
+                $this->productoDelBorrador(),
+                forzar: true,
+            );
         }
 
         // Cambió la etiqueta de grupo.
@@ -1125,41 +1560,142 @@ class Form extends Component
         }
     }
 
-    /** Precarga una línea con los datos del producto elegido. */
-    protected function aplicarProducto(int $indice): void
+    /* =====================================================================
+     | EL CATALOGO DE CONCEPTOS
+     * ================================================================== */
+
+    /**
+     * Los conceptos facturables, una sola consulta por peticion.
+     *
+     * Los metodos del editor tambien lo necesitan y no pueden esperar a
+     * que se pinte la pantalla, asi que se resuelve aqui y render() lo
+     * reutiliza.
+     */
+    public function getProductosDisponiblesProperty()
     {
-        $productoId = $this->lineas[$indice]['product_id'] ?? null;
+        static $cache = null;
 
-        if (! $productoId) {
-            return;
-        }
+        return $cache ??= Product::query()
+            ->active()
+            ->forCompany(app(CompanyContext::class)->get()?->id)
+            ->usableIn('invoice')
+            ->get();
+    }
 
-        $producto = Product::find($productoId);
+    /** El concepto del renglon que se esta editando. */
+    public function productoDelBorrador(): ?Product
+    {
+        $id = $this->borrador['product_id'] ?? null;
+
+        return $id ? $this->productosDisponibles->firstWhere('id', (int) $id) : null;
+    }
+
+    /**
+     * Precarga el renglon con los datos del concepto elegido.
+     *
+     * ── QUE CAMBIO ──
+     *
+     * Antes recibia el indice del renglon y escribia directo sobre
+     * $lineas. Eso obligaba a volcar el borrador, aplicar, y recogerlo
+     * de vuelta en cada tecla, y por el camino se perdia lo que la
+     * persona estaba escribiendo.
+     *
+     * Ahora trabaja sobre el borrador, que es lo unico que el modal
+     * tiene delante. Es el mismo metodo que el presupuesto.
+     */
+    protected function aplicarProducto(): void
+    {
+        $producto = $this->productoDelBorrador();
 
         if (! $producto) {
             return;
         }
 
-        // lineDefaults() vive en el modelo Product: es el mismo método que
-        // usa el presupuesto. Un solo sitio para los valores por defecto.
         $defaults = $producto->lineDefaults();
 
-        // La descripción solo se pisa si estaba vacía: lo que el usuario
-        // ya escribió, se respeta.
-        if (blank($this->lineas[$indice]['description'])) {
-            $this->lineas[$indice]['description'] = $defaults['description'];
+        /* -----------------------------------------------------------------
+         | LA DESCRIPCION
+         |
+         | Se reescribe salvo que la haya tecleado una persona. Si ya hay
+         | una unidad elegida, el texto se arma con ella:
+         | "Venta de contenedor - 40 ft High Cube - Usado (MSCU...)".
+         * -------------------------------------------------------------- */
+        if (empty($this->borrador['desc_manual'])) {
+            $unidad = ! empty($this->borrador['container_id'])
+                ? Container::with(['size:id,name', 'condition:id,name', 'grade:id,name'])
+                    ->find($this->borrador['container_id'])
+                : null;
+
+            $this->borrador['description'] = $producto->autoDescription($unidad);
         }
 
-        if (empty($this->lineas[$indice]['unit_price'])) {
-            $this->lineas[$indice]['unit_price'] = $defaults['unit_price'];
+        if (empty($this->borrador['unit_price'])) {
+            $this->borrador['unit_price'] = $defaults['unit_price'];
         }
 
-        $this->lineas[$indice]['taxable'] = $this->type === InvoiceType::Transport->value
+        /* -----------------------------------------------------------------
+         | EL IMPUESTO
+         |
+         | Transporte nunca lleva sales tax (RB-005) y exportacion tampoco
+         | (RB-016). Fuera de esos dos casos manda lo que diga el catalogo.
+         * -------------------------------------------------------------- */
+        $esTransport = $this->type === InvoiceType::Transport->value;
+        $esExport    = ($this->borrador['use_type'] ?? null) === UseType::Export->value;
+
+        $this->borrador['taxable'] = ($esTransport || $esExport)
             ? false
             : $defaults['taxable'];
 
+        // Si el concepto no lleva contenedor, se limpia el que pudiera
+        // haber quedado elegido de antes.
         if (! $producto->type->requiresContainer()) {
-            $this->lineas[$indice]['container_id'] = null;
+            $this->borrador['container_id'] = null;
+        }
+
+        /* -----------------------------------------------------------------
+         | LOS CAMPOS PROPIOS DE CADA CONCEPTO
+         |
+         | Se limpian al cambiar de concepto. Sin esto, pasar de una
+         | entrega a una renta dejaba el ZIP y las millas de la entrega
+         | anterior pegados al renglon, y esos datos terminaban impresos.
+         * -------------------------------------------------------------- */
+        if ($producto->isRental()) {
+            if (empty($this->borrador['rental_months'])) {
+                $empresa = app(CompanyContext::class)->get();
+
+                $this->borrador['rental_months'] =
+                    (int) ($empresa?->setting('rentals', 'default_months', 1) ?? 1);
+            }
+        } else {
+            $this->borrador['rental_months'] = null;
+        }
+
+        if (! $producto->isDelivery()) {
+            $this->borrador['delivery_zip']  = null;
+            $this->borrador['miles']         = null;
+            $this->borrador['rate_per_mile'] = null;
+        }
+
+        if ($producto->code !== 'REPAIR') {
+            $this->borrador['work_details'] = null;
+        }
+
+        // TRANSPORTE: el importe se calcula, no se teclea.
+        if ($producto->isDelivery()) {
+            $this->aplicarPrecioDeTransporte($producto);
+        }
+
+        /*
+         | CONTENEDOR: si ya habia uno elegido, se refresca el precio.
+         | Pasa al cambiar de "Venta" a "Renta" con la misma unidad: son
+         | dos numeros distintos de la misma ficha.
+         */
+        if ($producto->type->requiresContainer() && ! empty($this->borrador['container_id'])) {
+            $this->aplicarPrecioDeContenedor(
+                (int) $this->borrador['container_id'],
+                $producto,
+                forzar: true,
+            );
         }
     }
 
@@ -1182,6 +1718,34 @@ class Form extends Component
         }
 
         return array_keys(array_filter($conteo, fn ($n) => $n > 1));
+    }
+
+    /**
+     * Que lleva cada grupo y cuanto suma.
+     *
+     * Es lo que se ensena en el pie de la lista: "Grupo A: renglones 1 y
+     * 2 - el cliente ve $2.750,00". Sin ese numero, agrupar es un acto de
+     * fe: no se ve el precio consolidado hasta imprimir.
+     */
+    public function getResumenGruposProperty(): array
+    {
+        $resumen = [];
+
+        foreach ($this->gruposConVariasLineas() as $grupo) {
+            $total   = 0.0;
+            $numeros = [];
+
+            foreach ($this->lineas as $i => $linea) {
+                if (trim((string) ($linea['grupo'] ?? '')) === $grupo) {
+                    $total    += $this->importeLinea($i);
+                    $numeros[] = $i + 1;
+                }
+            }
+
+            $resumen[$grupo] = ['total' => $total, 'lineas' => $numeros];
+        }
+
+        return $resumen;
     }
 
     /**
@@ -1341,6 +1905,21 @@ class Form extends Component
             'lineas.*.grupo'        => ['nullable', 'string', 'max:20'],
             'lineas.*.service_date' => ['nullable', 'date'],
             'lineas.*.use_type'     => ['nullable', 'string', 'max:30'],
+
+            /*
+             | Aqui van sueltas a proposito. Lo obligatorio de cada
+             | concepto —el plazo de una renta, las millas de una
+             | entrega— ya se exige en guardarLinea(), que es donde la
+             | persona tiene el campo delante.
+             |
+             | Repetirlo aqui sacaria el error en la pantalla equivocada:
+             | un mensaje rojo sobre un renglon que esta cerrado.
+             */
+            'lineas.*.delivery_zip'  => ['nullable', 'string', 'max:10'],
+            'lineas.*.miles'         => ['nullable', 'numeric', 'min:0'],
+            'lineas.*.rate_per_mile' => ['nullable', 'numeric', 'min:0'],
+            'lineas.*.rental_months' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'lineas.*.work_details'  => ['nullable', 'string', 'max:2000'],
         ];
     }
 
@@ -1555,6 +2134,25 @@ class Form extends Component
                     'service_date' => $linea['service_date'] ?: null,
                     'use_type'     => $linea['use_type'] ?: null,
 
+                    /* -------------------------------------------------
+                     | LO QUE ANTES SE PERDIA AL FACTURAR
+                     |
+                     | Las columnas existen en invoice_items desde la
+                     | migracion del 11-sep. Lo que faltaba era guardarlas.
+                     |
+                     | RB-033: convertir un presupuesto en factura es
+                     | copiar, no traducir. Si la factura no tiene donde
+                     | poner el plazo o las millas, la copia pierde datos
+                     | en silencio.
+                     * ---------------------------------------------- */
+                    'delivery_zip'  => $linea['delivery_zip']  ?: null,
+                    'miles'         => $linea['miles']         !== null && $linea['miles'] !== ''
+                                        ? $linea['miles'] : null,
+                    'rate_per_mile' => $linea['rate_per_mile'] !== null && $linea['rate_per_mile'] !== ''
+                                        ? $linea['rate_per_mile'] : null,
+                    'rental_months' => $linea['rental_months'] ?: null,
+                    'work_details'  => $linea['work_details']  ?: null,
+
                     'bundle_key'         => $grupoValido,
                     'bundle_description' => $grupoValido
                         ? ($this->gruposDescripcion[$grupoValido] ?? null)
@@ -1588,6 +2186,23 @@ class Form extends Component
             if ($yEnviar) {
                 $factura->markAsSent();
             }
+
+            /* -------------------------------------------------------------
+             | SACAR DEL INVENTARIO LO QUE SE ACABA DE COBRAR
+             |
+             | Aqui faltaba el puente: la factura guardaba el container_id
+             | de cada renglon y ahi se acababa. Se rentaba una unidad y en
+             | su ficha no pasaba nada: seguia "en yarda", seguia contando
+             | como disponible y su historial no mencionaba la renta.
+             |
+             | El metodo del modelo se encarga de las excepciones: solo
+             | mueve lo que sigue en yarda, asi que facturar el mes 5 de
+             | una renta no vuelve a mover nada.
+             |
+             | Va DENTRO de la transaccion: si la factura no se guarda,
+             | el contenedor tampoco se mueve.
+             * ---------------------------------------------------------- */
+            $factura->aplicarEfectoEnContenedores();
 
             return $factura;
         });
@@ -1647,6 +2262,153 @@ class Form extends Component
      | LO QUE SE PINTA
      * ================================================================== */
 
+    /* =====================================================================
+     | LOS ADJUNTOS
+     |
+     | Son los mismos tres metodos de la ficha, con una sola diferencia:
+     | aqui la factura se busca por $invoiceId en vez de venir inyectada.
+     * ================================================================== */
+
+    /** Los documentos ya colgados de esta factura. */
+    public function getDocumentosProperty()
+    {
+        if (! $this->invoiceId) {
+            return collect();
+        }
+
+        return Invoice::whereKey($this->invoiceId)
+            ->with('documents')
+            ->first()
+            ?->documents ?? collect();
+    }
+
+    /**
+     * Sube un archivo y lo cuelga de la factura.
+     *
+     * Los archivos van a storage/app/facturas/{id}/. Agrupar por factura
+     * hace que respaldar o limpiar sea trivial, y evita que dos archivos
+     * con el mismo nombre de facturas distintas se pisen.
+     */
+    public function subirArchivo(): void
+    {
+        // Adjuntar cambia el documento: es edicion, no lectura.
+        $this->exigirPermiso('update');
+
+        if (! $this->invoiceId) {
+            session()->flash('error',
+                'Guarde la factura antes de adjuntar. Un archivo se cuelga '
+                .'de un documento que ya existe.');
+
+            return;
+        }
+
+        $this->validate([
+            'archivo'          => 'required|file|max:10240',
+            'categoriaArchivo' => 'required|string',
+        ], [
+            'archivo.required' => 'Elija un archivo.',
+            'archivo.max'      => 'El archivo no puede pasar de 10 MB.',
+        ]);
+
+        try {
+            $factura = Invoice::findOrFail($this->invoiceId);
+
+            $nombreOriginal = $this->archivo->getClientOriginalName();
+
+            $ruta = $this->archivo->store('facturas/'.$factura->id, 'local');
+
+            $factura->attachDocument(
+                path: $ruta,
+                nombre: $nombreOriginal,
+                disk: 'local',
+                categoria: DocumentCategory::tryFrom($this->categoriaArchivo) ?? DocumentCategory::Other,
+                viajaConLaFactura: $this->viajaConLaFactura,
+                mime: $this->archivo->getMimeType(),
+                bytes: $this->archivo->getSize(),
+            );
+
+            // Se limpia el formulario para poder subir otro sin recargar.
+            $this->reset(['archivo', 'categoriaArchivo']);
+            $this->viajaConLaFactura = true;
+
+            session()->flash('exito', 'Documento adjuntado.');
+
+        } catch (\Throwable $e) {
+            session()->flash('error', 'No se pudo subir el archivo: '.$e->getMessage());
+        }
+    }
+
+    /** Descarga un adjunto. */
+    public function descargar(int $documentId)
+    {
+        $this->exigirPermiso('view');
+
+        $factura = $this->invoiceId ? Invoice::find($this->invoiceId) : null;
+
+        $documento = $factura?->documents()->find($documentId);
+
+        if (! $documento) {
+            session()->flash('error', 'Ese documento no pertenece a esta factura.');
+
+            return null;
+        }
+
+        $disco = $documento->disk ?: 'local';
+
+        if (! Storage::disk($disco)->exists($documento->path)) {
+            session()->flash('error',
+                'El archivo "'.$documento->name.'" ya no esta en el servidor. '
+                .'Es posible que se haya borrado a mano.');
+
+            return null;
+        }
+
+        return Storage::disk($disco)->download($documento->path, $documento->name);
+    }
+
+    /**
+     * Quita un adjunto.
+     *
+     * El modelo Document borra el archivo del disco solo, en su evento
+     * "deleted": asi no queda basura ocupando espacio cada vez que
+     * alguien se equivoca de archivo.
+     */
+    public function quitarArchivo(int $documentId): void
+    {
+        $this->exigirPermiso('update');
+
+        $factura = $this->invoiceId ? Invoice::find($this->invoiceId) : null;
+
+        $documento = $factura?->documents()->find($documentId);
+
+        if (! $documento) {
+            return;
+        }
+
+        $documento->delete();
+
+        session()->flash('exito', 'Documento quitado.');
+    }
+
+    /** Las unidades puestas en algun renglon, indexadas por id. */
+    protected function contenedoresElegidos()
+    {
+        $ids = collect($this->lineas)
+            ->pluck('container_id')
+            ->filter()
+            ->unique()
+            ->all();
+
+        if (empty($ids)) {
+            return collect();
+        }
+
+        return Container::whereIn('id', $ids)
+            ->with(['size:id,name', 'condition:id,name', 'grade:id,name'])
+            ->get()
+            ->keyBy('id');
+    }
+
     public function render()
     {
         $empresa = app(CompanyContext::class)->get();
@@ -1667,11 +2429,29 @@ class Form extends Component
                 ->get(),
 
 
-            // Los productos de esta empresa más los compartidos.
-            'productos' => Product::query()
-                ->active()
-                ->forCompany($empresa?->id)
-                ->get(),
+            /*
+             | Los conceptos FACTURABLES: los compartidos y los propios de
+             | esta empresa.
+             |
+             | usableIn('invoice') es lo que deja entrar "Cargo por mora",
+             | "Almacenaje" y "Recargo por tarjeta", que no se cotizan
+             | pero si se cobran.
+             */
+            'productos' => $this->productosDisponibles,
+
+            /*
+             | Las unidades YA elegidas en algun renglon, solo para poder
+             | ensenar su numero y su clasificacion en la tarjeta.
+             |
+             | No se trae el inventario entero: para elegir esta el
+             | buscador, que consulta al escribir.
+             */
+            'contenedoresElegidos' => $this->contenedoresElegidos(),
+
+            'tiposDeUso' => UseType::options(),
+
+            // Las categorias del desplegable de adjuntos.
+            'categorias' => DocumentCategory::options(),
 
             /*
              | Las unidades disponibles de verdad (RB-019).

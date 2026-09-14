@@ -143,14 +143,26 @@
         </div>
 
         <div class="col-6 col-lg-3">
-            <div class="kpi kpi-ok">
+            {{--
+                Era el único contador que no se podía pulsar. Los otros
+                tres ya filtraban y este obligaba a traducir el número a
+                mano en los filtros de al lado.
+
+                border-2 marca cuál está aplicado, igual que el de
+                "Por vencer".
+            --}}
+            <button type="button"
+                    class="kpi kpi-ok {{ $soloDelMes ? 'border-2' : '' }}"
+                    wire:click="verDelMes">
                 <span class="kpi-icono"><i class="bi bi-graph-up-arrow"></i></span>
                 <span class="kpi-cuerpo">
                     <span class="kpi-label d-block">Facturado del mes</span>
                     <span class="kpi-valor d-block">${{ number_format($resumen['delMes'], 2) }}</span>
-                    <span class="kpi-pie d-block">{{ now()->translatedFormat('F Y') }}</span>
+                    <span class="kpi-pie d-block">
+                        {{ $soloDelMes ? 'Filtrando · pulse para quitar' : now()->translatedFormat('F Y') }}
+                    </span>
                 </span>
-            </div>
+            </button>
         </div>
 
     </div>

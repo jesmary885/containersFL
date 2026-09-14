@@ -609,6 +609,19 @@ class Estimate extends Model
                     'rental_months' => $linea->rental_months,
                     'work_details'  => $linea->work_details,
 
+                    /* ---------------------------------------------------------
+                     | EL USO PREVISTO, POR RENGLON (RB-056)
+                     |
+                     | La cabecera ya lo copiaba, pero el uso vive en cada
+                     | renglon desde la migracion del 13-sep: un documento
+                     | puede llevar tres contenedores con tres destinos, y
+                     | solo el de exportacion va sin impuesto.
+                     |
+                     | Sin esta linea, al convertir se perdia cual de las
+                     | tres unidades era la que se exportaba.
+                     * ------------------------------------------------------ */
+                    'use_type'      => $linea->use_type,
+
                     'bundle_key'         => $linea->bundle_key,
                     'bundle_description' => $linea->bundle_description,
                     'sort_order'         => $linea->sort_order,

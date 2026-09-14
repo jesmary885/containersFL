@@ -263,4 +263,18 @@ return [
     'no_units'           => 'No hay unidades disponibles en este momento.',
     'no_units_match'     => 'Ninguna unidad coincide con «:term».',
 
+
+    /* =====================================================================
+     | PASO 3 · REVISAR Y ENVIAR
+     |
+     | Claves nuevas: el paso 3 dejo de ser un enlace a la ficha y pasó a
+     | vivir dentro del formulario, igual que en facturación.
+     * ================================================================== */
+
+    'number_on_save'  => 'se asigna al guardar',
+    'step_n_of'       => 'Paso :paso de :total',
+    'card_needs_form' => 'No se cobra hasta tener el formulario de autorización firmado por el cliente.',
+    'save_no_send'    => 'Guardar sin enviar',
+    'save_and_send'   => 'Guardar y enviar por correo',
+
 ];

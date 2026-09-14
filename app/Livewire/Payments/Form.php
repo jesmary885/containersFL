@@ -9,6 +9,8 @@ use App\Models\Customer;
 use App\Models\CreditCardAuthorization;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Services\InvoiceCalculator;
+use App\Support\CompanyContext;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use App\Livewire\Concerns\AuthorizesAccess;
@@ -241,6 +243,164 @@ class Form extends Component
             ->get();
     }
 
+    /* =====================================================================
+     | EL RECARGO DE TARJETA QUE LA FACTURA NO TRAE (RB-009)
+     |
+     | ── EL CASO REAL ──
+     |
+     | Se emite la factura sin saber cómo va a pagar el cliente, así que
+     | sale sin el 3.5%. Días después el cliente llama y dice que paga con
+     | tarjeta.
+     |
+     | Hasta ahora eso no tenía salida: el sistema pedía el formulario de
+     | autorización firmado, pero el importe seguía siendo el de la
+     | factura sin recargo. O se cobraba de menos —y el 3.5% lo pagaba la
+     | empresa— o se cobraba de más que lo que dice el documento, que es
+     | justo lo que provoca un chargeback.
+     |
+     | ── DÓNDE VA EL RECARGO ──
+     |
+     | En la FACTURA, no en el pago. La factura es el documento que el
+     | cliente recibe y el que firma cuando autoriza el cargo: si el papel
+     | dice 490 y en la tarjeta le pasan 507, tiene razón al reclamarlo.
+     |
+     | Por eso esto no ajusta el pago en silencio: detecta las facturas
+     | que no traen el recargo, enseña los números antes y después, y
+     | ofrece corregirlas. Después hay que reenviárselas al cliente.
+     * ================================================================== */
+
+    /**
+     * Las facturas de este cobro que todavía no llevan el 3.5%.
+     *
+     * Devuelve una lista con el número, el saldo de hoy, el recargo que
+     * le tocaría y el saldo nuevo. Es lo que se pinta en el aviso.
+     */
+    public function getFacturasSinRecargoProperty(): array
+    {
+        if ($this->method !== PaymentMethod::CreditCard->value) {
+            return [];
+        }
+
+        $empresa = app(CompanyContext::class)->get();
+
+        if (! $empresa) {
+            return [];
+        }
+
+        $porcentaje = app(InvoiceCalculator::class)->defaultCreditCardFeePercent($empresa);
+
+        if ($porcentaje <= 0) {
+            return [];
+        }
+
+        $pendientes = [];
+
+        foreach ($this->facturasPendientes as $factura) {
+
+            // Solo las que están en este cobro.
+            if (! array_key_exists($factura->id, $this->aplicaciones)) {
+                continue;
+            }
+
+            // Ya lo trae: nada que hacer.
+            if ((float) $factura->credit_card_fee_percent > 0) {
+                continue;
+            }
+
+            /*
+             | El recargo se calcula sobre el total con impuesto, que es
+             | la base configurada en payments.cc_fee_base. Aquí solo se
+             | estima para el aviso; el número definitivo lo pone el
+             | InvoiceCalculator al aplicarlo.
+             */
+            $recargo = round((float) $factura->total * $porcentaje / 100, 2);
+
+            $pendientes[] = [
+                'id'         => $factura->id,
+                'numero'     => $factura->invoice_number,
+                'saldo'      => (float) $factura->balance_due,
+                'recargo'    => $recargo,
+                'nuevoSaldo' => round((float) $factura->balance_due + $recargo, 2),
+                'porcentaje' => $porcentaje,
+            ];
+        }
+
+        return $pendientes;
+    }
+
+    /**
+     * Agrega el 3.5% a esas facturas y ajusta el cobro.
+     *
+     * Lo que hace, en orden:
+     *
+     *   1. Deja escrito en la factura que el cliente paga con tarjeta.
+     *      Sin eso, el documento mostraría un recargo sin decir de dónde
+     *      sale, y cuando el cliente pregunte no hay qué contestarle.
+     *
+     *   2. Pone el porcentaje y recalcula. El importe exacto lo saca el
+     *      InvoiceCalculator, que es el único sitio donde vive esa
+     *      aritmética.
+     *
+     *   3. Sube lo aplicado y el monto del pago al saldo nuevo, para que
+     *      quien cobra no tenga que rehacer las cuentas a mano.
+     *
+     * No se toca una factura bloqueada: si ya está pagada o anulada, el
+     * InvoiceObserver lo impide desde el modelo y hace bien.
+     */
+    public function agregarRecargoDeTarjeta(): void
+    {
+        $this->exigirPermiso('create');
+
+        $empresa = app(CompanyContext::class)->get();
+
+        if (! $empresa) {
+            return;
+        }
+
+        $porcentaje = app(InvoiceCalculator::class)->defaultCreditCardFeePercent($empresa);
+
+        $tocadas = [];
+
+        foreach ($this->facturasSinRecargo as $fila) {
+
+            $factura = Invoice::find($fila['id']);
+
+            if (! $factura || $factura->isLocked()) {
+                continue;
+            }
+
+            $factura->expected_payment_method = PaymentMethod::CreditCard->value;
+            $factura->credit_card_fee_percent = $porcentaje;
+
+            // recalculate() vuelve a pasar por el calculador y guarda.
+            $factura->load('items')->recalculate();
+
+            $factura->refresh();
+
+            // El cobro se ajusta al saldo nuevo.
+            $this->aplicaciones[$factura->id] = round((float) $factura->balance_due, 2);
+
+            $tocadas[] = $factura->invoice_number;
+        }
+
+        if (empty($tocadas)) {
+            return;
+        }
+
+        // El monto del pago pasa a ser la suma de lo aplicado.
+        $this->amount = $this->totalAplicado;
+
+        // Y el monto que hay que autorizar en el formulario es ese mismo.
+        $this->nuevaAuthMontoAutorizado = $this->amount;
+
+        session()->flash('exito',
+            'Se agregó el recargo de tarjeta a '
+            .(count($tocadas) === 1 ? 'la factura ' : 'las facturas ')
+            .implode(', ', $tocadas)
+            .'. Reenvíe'.(count($tocadas) === 1 ? 'la' : 'las')
+            .' al cliente: el importe cambió.');
+    }
+
     public function getTotalAplicadoProperty(): float
     {
         return round(array_sum(array_map('floatval', $this->aplicaciones)), 2);
@@ -327,6 +487,33 @@ class Form extends Component
      */
     public function updated(string $campo): void
     {
+        /* -----------------------------------------------------------------
+         | CAMBIO EL MONTO DEL PAGO
+         |
+         | ── QUE PASABA ──
+         |
+         | Se entraba desde una factura de $490 y el reparto venia
+         | precargado con esos $490. Se corregia el monto a $400 —un abono,
+         | el cliente queda debiendo $90— y el reparto seguia diciendo 490.
+         |
+         | Resultado: un cartel rojo diciendo que se repartian $90 de mas,
+         | sobre una operacion perfectamente normal. El sistema acusaba a
+         | la persona de un descuadre que habia creado el propio sistema.
+         |
+         | Ahora el reparto se recorta al monto nuevo. Un abono de $400
+         | sobre una factura de $490 queda aplicado 400 y la factura
+         | conserva $90 de saldo, que es exactamente como lo lleva el
+         | Excel de hoy (hoja CUENTAS: columnas MONTO / PAGADO / DEBE).
+         |
+         | Solo se recorta hacia abajo. Si el monto sube, no se reparte
+         | dinero solo: a que factura va es una decision de quien cobra.
+         * -------------------------------------------------------------- */
+        if ($campo === 'amount') {
+            $this->ajustarRepartoAlMonto();
+
+            return;
+        }
+
         if (! str_starts_with($campo, 'aplicaciones.')) {
             return;
         }
@@ -337,11 +524,55 @@ class Form extends Component
     }
 
     /**
-     * El boton del cartel: "usar esta suma como monto".
+     * Recorta lo repartido para que nunca pase del monto del pago.
      *
-     * Para el otro caso, el de quien SI escribio un monto y despues
-     * repartio de mas. Ahi no se puede adivinar cual de los dos numeros
-     * esta bien, asi que se pregunta en vez de decidir.
+     * Va de arriba abajo respetando el orden en que estan las facturas:
+     * la primera cobra lo que pueda, la siguiente lo que quede, y las
+     * que se quedan en cero salen del reparto.
+     */
+    protected function ajustarRepartoAlMonto(): void
+    {
+        $monto = round((float) $this->amount, 2);
+
+        // Sin monto no hay nada que repartir.
+        if ($monto <= 0.001) {
+            $this->aplicaciones = [];
+
+            return;
+        }
+
+        // Si lo repartido cabe dentro del monto, no se toca nada: puede
+        // ser a proposito que sobre dinero sin asignar.
+        if ($this->totalAplicado <= $monto + 0.001) {
+            return;
+        }
+
+        $restante = $monto;
+        $nuevas   = [];
+
+        foreach ($this->aplicaciones as $facturaId => $importe) {
+            if ($restante <= 0.001) {
+                break;
+            }
+
+            $cabe = min($restante, round((float) $importe, 2));
+
+            if ($cabe > 0.001) {
+                $nuevas[$facturaId] = round($cabe, 2);
+                $restante -= $cabe;
+            }
+        }
+
+        $this->aplicaciones = $nuevas;
+    }
+
+    /**
+     * Iguala el monto del pago a la suma de lo aplicado.
+     *
+     * Es la salida para cuando se subieron los importes de las facturas
+     * a mano por encima del monto. Ahi no se puede saber cual de los dos
+     * numeros es el correcto, asi que se ofrece la correccion en vez de
+     * decidirla.
      */
     public function usarSumaComoMonto(): void
     {
@@ -353,6 +584,24 @@ class Form extends Component
         if ($this->method !== PaymentMethod::CreditCard->value) {
             $this->credit_card_authorization_id = null;
             $this->fee_amount = 0;
+
+            return;
+        }
+
+        /* -----------------------------------------------------------------
+         | EL MONTO AUTORIZADO SE PRECARGA CON LO QUE SE VA A COBRAR
+         |
+         | El formulario que firma el cliente autoriza UN IMPORTE
+         | CONCRETO. Si el papel dice 490 y en la tarjeta le pasan 507,
+         | el cliente tiene razón al reclamarlo al banco y el papel deja
+         | de proteger a la empresa: es exactamente lo contrario de para
+         | lo que se pide (RB-011).
+         |
+         | Se precarga y queda editable: el cliente puede autorizar un
+         | tope mayor para cobros sucesivos.
+         * -------------------------------------------------------------- */
+        if ($this->nuevaAuthMontoAutorizado <= 0) {
+            $this->nuevaAuthMontoAutorizado = (float) $this->amount;
         }
     }
 

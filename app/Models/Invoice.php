@@ -540,4 +540,96 @@ class Invoice extends Model
             'uploaded_by'       => auth()->id(),
         ]);
     }
+
+    /* =====================================================================
+     | EL EFECTO SOBRE EL INVENTARIO
+     * ================================================================== */
+
+    /**
+     * Saca del inventario las unidades que esta factura cobra.
+     *
+     * ── QUE PROBLEMA RESUELVE ──
+     *
+     * Se rentaba un contenedor desde facturacion y en la ficha de esa
+     * unidad no pasaba nada: seguia diciendo "en yarda", seguia contando
+     * como disponible y su historial no mencionaba la renta.
+     *
+     * No era un error de la pantalla. Es que nadie habia escrito el
+     * puente: la factura guardaba el container_id en sus renglones y ahi
+     * se acababa.
+     *
+     * En este sistema la factura ES la venta, asi que emitirla es el
+     * momento en que la unidad deja de estar disponible.
+     *
+     * ── LAS CUATRO REGLAS ──
+     *
+     * 1. Solo se mira el CONCEPTO del renglon, no el tipo de la factura.
+     *    Una misma factura puede llevar una venta y una renta.
+     *
+     * 2. Solo se mueve lo que esta EN YARDA. Es lo que hace que facturar
+     *    el mes 5 de una renta no vuelva a mover nada: la unidad ya esta
+     *    en "rentado" desde el mes 1. Y lo que impide que corregir una
+     *    factura vieja reviva un contenedor ya vendido.
+     *
+     * 3. El movimiento lo escribe el ContainerObserver, como todos. Aqui
+     *    solo se le deja puesto el contexto para que el historial diga de
+     *    que factura vino.
+     *
+     * 4. Una factura ANULADA no mueve nada. Si se anula despues de haber
+     *    movido, la unidad se devuelve a mano desde la ficha: eso es una
+     *    decision de la persona, no del sistema. El contenedor puede
+     *    haberse entregado igual.
+     *
+     * No devuelve nada ni lanza errores: si una unidad no se puede mover,
+     * se salta. Emitir la factura no puede fallar por el inventario.
+     */
+    public function aplicarEfectoEnContenedores(): void
+    {
+        if ($this->status === InvoiceStatus::Void) {
+            return;
+        }
+
+        $this->loadMissing('items.product', 'items.container');
+
+        foreach ($this->items as $linea) {
+
+            $unidad   = $linea->container;
+            $concepto = $linea->product;
+
+            if (! $unidad || ! $concepto) {
+                continue;
+            }
+
+            $destino = match (true) {
+                $concepto->isSale()   => \App\Enums\ContainerStatus::Sold,
+                $concepto->isRental() => \App\Enums\ContainerStatus::Rented,
+                default               => null,
+            };
+
+            if (! $destino) {
+                continue;
+            }
+
+            // Regla 2: solo lo que sigue en yarda.
+            if ($unidad->status !== \App\Enums\ContainerStatus::InYard) {
+                continue;
+            }
+
+            $unidad->conMovimiento(
+                tipo: $destino === \App\Enums\ContainerStatus::Sold
+                    ? \App\Enums\MovementType::Sale
+                    : \App\Enums\MovementType::Delivery,
+                nota: 'Por la factura '.$this->invoice_number.'.',
+                origen: $this,
+            );
+
+            $unidad->status = $destino;
+
+            if ($destino === \App\Enums\ContainerStatus::Sold) {
+                $unidad->sold_at = $this->issue_date;
+            }
+
+            $unidad->save();
+        }
+    }
 }

@@ -105,7 +105,7 @@
             <div class="kpi kpi-apagado">
                 <span class="kpi-icono"><i class="bi bi-wallet2"></i></span>
                 <span class="kpi-cuerpo">
-                    <span class="kpi-label d-block">Nos costó</span>
+                    <span class="kpi-label d-block">Costo total</span>
                     <span class="kpi-valor d-block">${{ number_format($container->total_cost, 2) }}</span>
                     <span class="kpi-pie d-block">Puesta en yarda</span>
                 </span>
@@ -139,7 +139,7 @@
             <div class="kpi {{ $margen === null ? 'kpi-apagado' : ($margen > 0 ? 'kpi-ok' : 'kpi-bad') }}">
                 <span class="kpi-icono"><i class="bi bi-graph-up-arrow"></i></span>
                 <span class="kpi-cuerpo">
-                    <span class="kpi-label d-block">Deja</span>
+                    <span class="kpi-label d-block">Margen</span>
                     <span class="kpi-valor d-block">
                         {{ $margen === null ? '—' : '$'.number_format($margen, 2) }}
                     </span>
@@ -180,7 +180,7 @@
 
             <div class="card mb-3">
                 <div class="card-header bg-white">
-                    <span class="fw-semibold"><i class="bi bi-info-circle me-1"></i> Qué es y dónde está</span>
+                    <span class="fw-semibold"><i class="bi bi-info-circle me-1"></i> Ficha técnica y ubicación</span>
                 </div>
                 <div class="card-body">
 
@@ -254,7 +254,7 @@
             {{-- ───── EL DESGLOSE DEL COSTO ───── --}}
             <div class="card mb-3">
                 <div class="card-header bg-white">
-                    <span class="fw-semibold"><i class="bi bi-cash-coin me-1"></i> De dónde sale el costo</span>
+                    <span class="fw-semibold"><i class="bi bi-cash-coin me-1"></i> Desglose del costo</span>
                 </div>
                 <div class="card-body">
                     <table class="table table-sm mb-0">
@@ -334,9 +334,58 @@
 
                                 @if ($m->status_before && $m->status_after && $m->status_before !== $m->status_after)
                                     <div class="small">
-                                        {{ \App\Enums\ContainerStatus::tryFrom($m->status_before)?->label() ?? $m->status_before }}
+                                        {{--
+                                            OJO CON ESTOS DOS RENGLONES.
+
+                                            Aqui habia un tryFrom() y era lo que
+                                            reventaba el boton "Mover":
+
+                                              ContainerStatus::tryFrom():
+                                              Argument #1 must be of type
+                                              string|int, ContainerStatus given
+
+                                            El modelo ContainerMovement ya
+                                            convierte status_before y
+                                            status_after al enum (estan en su
+                                            casts()). Cuando llegan aqui YA son
+                                            el enum, y tryFrom() solo acepta el
+                                            texto crudo de la base.
+
+                                            Se pregunta si es el enum y se le
+                                            pide la etiqueta directamente. El
+                                            segundo caso —que sea texto— cubre
+                                            los movimientos viejos que se
+                                            hubieran guardado antes del cast.
+                                        --}}
+                                        {{ $m->status_before instanceof \App\Enums\ContainerStatus
+                                            ? $m->status_before->label()
+                                            : (\App\Enums\ContainerStatus::tryFrom((string) $m->status_before)?->label()
+                                                ?? $m->status_before) }}
+
                                         <i class="bi bi-arrow-right mx-1 text-secondary"></i>
-                                        <strong>{{ \App\Enums\ContainerStatus::tryFrom($m->status_after)?->label() ?? $m->status_after }}</strong>
+
+                                        <strong>{{ $m->status_after instanceof \App\Enums\ContainerStatus
+                                            ? $m->status_after->label()
+                                            : (\App\Enums\ContainerStatus::tryFrom((string) $m->status_after)?->label()
+                                                ?? $m->status_after) }}</strong>
+                                    </div>
+                                @endif
+
+                                {{--
+                                    DE QUÉ DOCUMENTO VIENE
+
+                                    Un asiento que solo dice "pasó a rentado"
+                                    obliga a ir a buscar en qué factura fue.
+                                    Con la referencia, el historial contesta
+                                    solo.
+                                --}}
+                                @if ($m->reference_type && $m->reference_id)
+                                    <div class="small text-secondary">
+                                        <i class="bi bi-link-45deg me-1"></i>
+                                        {{ class_basename($m->reference_type) === 'Invoice'
+                                            ? 'Factura'
+                                            : class_basename($m->reference_type) }}
+                                        #{{ $m->reference_id }}
                                     </div>
                                 @endif
 
@@ -373,38 +422,134 @@
 
                     @endforelse
 
+                    {{--
+                        EL PAGINADOR
+
+                        Antes el historial se cortaba en 30 con un limit() y
+                        el resto no se podía ver. Una unidad que lleva dos
+                        años rotando entre patios pasa de 30 asientos, y la
+                        parte vieja quedaba inalcanzable.
+
+                        El contador de arriba dice cuántos hay en total: sin
+                        él, 15 movimientos en pantalla pueden ser todos o
+                        pueden ser los últimos quince de doscientos.
+                    --}}
+                    @if ($movimientos->hasPages())
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 pt-3 border-top">
+                            <span class="small text-secondary">
+                                {{ $movimientos->firstItem() }}–{{ $movimientos->lastItem() }}
+                                de {{ $movimientos->total() }} movimientos
+                            </span>
+
+                            {{ $movimientos->links() }}
+                        </div>
+                    @elseif ($movimientos->total() > 0)
+                        <div class="small text-secondary mt-3 pt-3 border-top">
+                            {{ $movimientos->total() }}
+                            {{ $movimientos->total() === 1 ? 'movimiento' : 'movimientos' }} en total.
+                        </div>
+                    @endif
+
                 </div>
             </div>
 
             {{-- ───── VENTAS Y RENTAS ───── --}}
             <div class="card mb-3">
                 <div class="card-header bg-white">
-                    <span class="fw-semibold"><i class="bi bi-receipt me-1"></i> A quién se le ha dado</span>
+                    <span class="fw-semibold"><i class="bi bi-receipt me-1"></i> Historial comercial</span>
                 </div>
                 <div class="card-body">
 
-                    <div class="fw-semibold small text-secondary mb-2">Ventas</div>
+                    {{--
+                        EL HISTORIAL COMERCIAL
 
-                    @forelse ($ventas as $v)
-                        <div class="small mb-1">
-                            {{ $v->sale_date?->format('d/m/Y') }} ·
-                            <strong>{{ $v->customer?->name ?? '—' }}</strong> ·
-                            ${{ number_format((float) ($v->pivot->unit_price ?? 0), 2) }}
+                        Antes esta sección leía los pivots sale_containers y
+                        rental_containers, que escriben los módulos de Ventas
+                        y Rentas. Esos módulos no existen todavía, así que
+                        los pivots están vacíos y la ficha decía "nunca se ha
+                        rentado" de una unidad recién rentada.
+
+                        Ahora sale de los renglones de factura, que es donde
+                        está el dato real: quién, cuándo, cuánto, en qué
+                        documento y si ya pagó.
+                    --}}
+                    @forelse ($lineasFacturadas as $linea)
+                        @php
+                            $factura = $linea->invoice;
+                            $cliente = $factura?->customer;
+                            $saldo   = (float) ($factura?->balance_due ?? 0);
+                        @endphp
+
+                        <div class="border-bottom py-2" wire:key="hist-{{ $linea->id }}">
+
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+
+                                <div style="min-width: 0;">
+                                    <div class="fw-semibold small">
+                                        {{ $linea->product?->name ?? 'Concepto libre' }}
+                                    </div>
+
+                                    <div class="small text-secondary">
+                                        {{ $cliente?->display_name ?? $cliente?->company_name ?? 'Sin cliente' }}
+                                    </div>
+
+                                    <div class="small text-secondary">
+                                        {{ $factura?->issue_date?->format('d/m/Y') }}
+                                        ·
+                                        <a href="{{ route('finanzas.facturacion.show', $factura?->id) }}"
+                                           class="text-decoration-none">
+                                            Factura {{ $factura?->invoice_number }}
+                                        </a>
+                                    </div>
+
+                                    {{-- El detalle propio del concepto --}}
+                                    @if ($linea->rental_months)
+                                        <div class="small text-secondary">
+                                            Plazo: {{ $linea->rental_months }}
+                                            {{ $linea->rental_months == 1 ? 'mes' : 'meses' }}
+                                        </div>
+                                    @endif
+
+                                    @if ($linea->use_type)
+                                        <div class="small text-secondary">
+                                            Uso: {{ \App\Enums\UseType::tryFrom($linea->use_type)?->label() ?? $linea->use_type }}
+                                        </div>
+                                    @endif
+
+                                    @if ($linea->work_details)
+                                        <div class="small text-secondary">{{ $linea->work_details }}</div>
+                                    @endif
+                                </div>
+
+                                <div class="text-end flex-shrink-0">
+                                    <div class="fw-semibold">
+                                        ${{ number_format((float) $linea->amount, 2) }}
+                                        @if ($linea->rental_months)
+                                            <span class="small text-secondary d-block">al mes</span>
+                                        @endif
+                                    </div>
+
+                                    {{--
+                                        El estado de cobro, que es la otra
+                                        mitad de la pregunta: no basta saber
+                                        a quién se le dio, hace falta saber
+                                        si pagó.
+                                    --}}
+                                    @if ($saldo <= 0.01)
+                                        <span class="badge text-bg-success">Cobrada</span>
+                                    @else
+                                        <span class="badge text-bg-warning">
+                                            Debe ${{ number_format($saldo, 2) }}
+                                        </span>
+                                    @endif
+                                </div>
+
+                            </div>
                         </div>
                     @empty
-                        <div class="small text-secondary mb-2">Nunca se ha vendido.</div>
-                    @endforelse
-
-                    <div class="fw-semibold small text-secondary mt-3 mb-2">Rentas</div>
-
-                    @forelse ($rentas as $r)
-                        <div class="small mb-1">
-                            {{ $r->start_date?->format('d/m/Y') }} ·
-                            <strong>{{ $r->customer?->name ?? '—' }}</strong> ·
-                            ${{ number_format((float) ($r->pivot->monthly_rate ?? 0), 2) }}/mes
+                        <div class="small text-secondary py-2">
+                            Esta unidad todavía no se ha vendido ni rentado.
                         </div>
-                    @empty
-                        <div class="small text-secondary">Nunca se ha rentado.</div>
                     @endforelse
 
                 </div>
@@ -413,7 +558,7 @@
             {{-- ───── DOCUMENTOS ───── --}}
             <div class="card mb-3">
                 <div class="card-header bg-white">
-                    <span class="fw-semibold"><i class="bi bi-paperclip me-1"></i> Fotos y papeles</span>
+                    <span class="fw-semibold"><i class="bi bi-paperclip me-1"></i> Documentos adjuntos</span>
                 </div>
                 <div class="card-body">
 

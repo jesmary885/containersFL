@@ -448,6 +448,31 @@ a.bs-empresa:hover {
 
 @media print {
 
+    /* ───────────────────────────────────────────────────────────────
+       FUERA EL ENCABEZADO Y EL PIE DEL NAVEGADOR
+
+       Lo que salía arriba —"13/9/26, 14:43" y "Laravel"— y abajo —la
+       ruta "127.0.0.1:8000/..." y el "1/1"— NO es HTML nuestro. Lo
+       escribe el navegador en el margen de la hoja, y por eso ninguna
+       regla de CSS normal lo alcanzaba.
+
+       El único modo de quitarlo desde el código es dejar el margen de
+       página en cero: sin margen no hay sitio donde escribirlo, y
+       Chrome, Edge y Firefox lo omiten.
+
+       El precio es que el contenido quedaría pegado al borde del
+       papel, así que el aire se lo devolvemos nosotros abajo, con
+       padding sobre el propio documento. El resultado es el mismo y
+       lo controlamos nosotros.
+
+       Si alguna vez hiciera falta volver a verlo —para depurar— está
+       la casilla "Encabezados y pies de página" en "Más ajustes" del
+       cuadro de impresión.
+       ─────────────────────────────────────────────────────────────── */
+    @page {
+        margin: 0;
+    }
+
     .app-sidebar,
     .app-header,
     .app-footer,
@@ -469,9 +494,18 @@ a.bs-empresa:hover {
         padding: 0 !important;
     }
 
-    /* Solo el documento */
+    /* ───────────────────────────────────────────────────────────────
+       EL AIRE DE LA HOJA
+
+       Como el margen de página está en cero para que el navegador no
+       escriba nada en él, los márgenes reales del documento van aquí.
+
+       Los valores son los de una carta americana con márgenes
+       normales: algo más de centímetro y medio por lado.
+       ─────────────────────────────────────────────────────────────── */
     .doc-preview {
         font-size: 11pt;
+        padding: 16mm 14mm !important;
     }
 
     .card {
@@ -484,6 +518,30 @@ a.bs-empresa:hover {
     .seccion-datos,
     .seccion-notas {
         display: none !important;
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       LA MARCA MANUAL
+
+       El encabezado del formulario —el titulo "Editar factura 1369",
+       la leyenda del asterisco y el boton Volver— no tenia ninguna
+       clase propia, asi que ninguna de las reglas de arriba lo
+       alcanzaba y salia impreso encima de la factura.
+
+       En vez de inventar un selector fragil del tipo
+       ".app-content > div:first-child", que se rompe en cuanto alguien
+       mueve un div, se marca a mano lo que no va al papel.
+
+       Regla para el futuro: si algo aparece en la impresion y no
+       deberia, se le pone class="no-imprimir" y listo.
+       ─────────────────────────────────────────────────────────────── */
+    .no-imprimir {
+        display: none !important;
+    }
+
+    /* Los enlaces no imprimen su URL entre parentesis */
+    a[href]::after {
+        content: none !important;
     }
 }
 

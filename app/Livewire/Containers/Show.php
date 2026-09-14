@@ -10,6 +10,7 @@ use App\Models\Location;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -44,6 +45,19 @@ use Livewire\Component;
 class Show extends Component
 {
     use AuthorizesAccess;
+
+    /*
+     | WithPagination pagina el historial de movimientos.
+     |
+     | Antes se cortaba en 30 con un limit() y el resto no habia forma de
+     | verlo: una unidad que lleva dos anos rotando entre patios pasa de
+     | 30 asientos y la parte vieja quedaba inalcanzable.
+     |
+     | Se usa el nombre de pagina 'mov' y no el 'page' de siempre porque
+     | esta ficha ya tiene mas listas. Con el nombre por defecto, pasar de
+     | pagina en una moveria la otra.
+     */
+    use WithPagination;
 
     protected string $permisoBase = 'containers';
 
@@ -117,28 +131,40 @@ class Show extends Component
             return;
         }
 
+        /* -----------------------------------------------------------------
+         | AQUI ESTABA EL DUPLICADO
+         |
+         | Antes esto hacia dos cosas: actualizaba el contenedor Y creaba
+         | el movimiento a mano.
+         |
+         | El problema es que actualizar el contenedor YA dispara al
+         | ContainerObserver, que escribe su propio movimiento. Cada clic
+         | en "Mover" dejaba dos asientos identicos en el historial, y
+         | por eso se veia todo repetido.
+         |
+         | La regla es que el historial lo escribe SOLO el observer: es
+         | lo que garantiza que un movimiento hecho desde una factura, una
+         | venta o un comando quede registrado igual que uno hecho desde
+         | esta pantalla.
+         |
+         | Lo unico que el observer no podia saber es el tipo y la nota.
+         | Ahora se los dejamos puestos antes de guardar.
+         * -------------------------------------------------------------- */
+        $this->container->conMovimiento(
+            tipo: $cambioUbicacion ? MovementType::Transfer : MovementType::StatusChange,
+            nota: $this->notaMovimiento ?: null,
+        );
+
         $this->container->update([
             'status'      => $this->nuevoEstado,
             'location_id' => $this->nuevaUbicacion,
         ]);
 
-        $this->container->movements()->create([
-            'type' => $cambioUbicacion
-                ? MovementType::Transfer->value
-                : MovementType::StatusChange->value,
-
-            'from_location_id' => $ubicacionAntes,
-            'to_location_id'   => $this->nuevaUbicacion,
-
-            'status_before' => $estadoAntes,
-            'status_after'  => $this->nuevoEstado,
-
-            'moved_at'   => now(),
-            'notes'      => $this->notaMovimiento ?: null,
-            'created_by' => auth()->id(),
-        ]);
-
         $this->container->refresh();
+
+        // Al listar el historial se vuelve a la primera pagina: el
+        // movimiento que se acaba de hacer esta arriba del todo.
+        $this->resetPage('mov');
 
         $this->cerrarMover();
 
@@ -167,8 +193,18 @@ class Show extends Component
         $movimientos = $this->container->movements()
             ->with(['fromLocation', 'toLocation', 'createdBy'])
             ->latest('moved_at')
-            ->limit(30)
-            ->get();
+            /*
+             | latest('id') como segundo criterio.
+             |
+             | Varios movimientos de la misma unidad pueden compartir el
+             | mismo moved_at al segundo —una venta que cambia estado y
+             | ubicacion a la vez—. Sin un segundo criterio, el orden
+             | entre ellos lo decide la base y puede cambiar de una
+             | pagina a otra: se veria un asiento repetido en la pagina 1
+             | y en la 2, y otro que no aparece en ninguna.
+             */
+            ->latest('id')
+            ->paginate(15, pageName: 'mov');
 
         /* -----------------------------------------------------------------
          | ¿SE PUEDE VENDER HOY?
@@ -192,12 +228,41 @@ class Show extends Component
                 ->orderBy('expires_at')
                 ->get(),
 
-            /*
-             | Dónde ha estado vendida o rentada. Con el precio del día,
-             | que es el que quedó congelado en el pivot.
-             */
-            'ventas'  => $this->container->sales()->with('customer')->latest('sale_date')->limit(5)->get(),
-            'rentas'  => $this->container->rentals()->with('customer')->latest('start_date')->limit(5)->get(),
+            /* -----------------------------------------------------------------
+             | EL HISTORIAL COMERCIAL
+             |
+             | ── POR QUE SALE DE LAS FACTURAS ──
+             |
+             | Antes esta seccion leia sale_containers y rental_containers,
+             | los pivots que escriben los modulos de Ventas y Rentas. Esos
+             | modulos todavia no existen, asi que los pivots estan vacios y
+             | la ficha decia "nunca se ha rentado" de una unidad que se
+             | acababa de rentar.
+             |
+             | En este sistema la factura ES la venta, y cada renglon de
+             | factura guarda su container_id. Ahi esta el dato real: quien,
+             | cuando, cuanto, en que documento y si ya pago.
+             |
+             | El dia que existan Ventas y Rentas como modulos, esta consulta
+             | se amplia; no se tira.
+             |
+             | ── SOLO LAS DE LA EMPRESA ACTIVA ──
+             |
+             | El filtro de compania se aplica solo en la subconsulta. Es lo
+             | correcto: una misma unidad puede facturarse desde FLCHR o
+             | desde RST, y cada quien ve lo suyo.
+             * -------------------------------------------------------------- */
+            'lineasFacturadas' => \App\Models\InvoiceItem::query()
+                ->where('container_id', $this->container->id)
+                ->whereHas('invoice', fn ($q) => $q->where('status', '!=', 'void'))
+                ->with([
+                    'invoice:id,invoice_number,customer_id,issue_date,status,balance_due,total',
+                    'invoice.customer:id,display_name,company_name',
+                    'product:id,name,code,type',
+                ])
+                ->orderByDesc('id')
+                ->limit(20)
+                ->get(),
 
             'estados'     => ContainerStatus::options(),
             'ubicaciones' => Location::where('is_active', true)->orderBy('name')->get(),

@@ -65,6 +65,66 @@ class Container extends Model
     }
 
     /* =====================================================================
+     | EL CONTEXTO DEL PROXIMO MOVIMIENTO
+     |
+     | ── QUE PROBLEMA RESUELVE ──
+     |
+     | El historial lo escribe el ContainerObserver, y lo escribe SOLO el
+     | observer: esa es la regla que evita tener dos fuentes del historial
+     | diciendo cosas distintas.
+     |
+     | Pero el observer solo ve el antes y el despues. No sabe por que se
+     | movio la unidad ni que nota escribio la persona.
+     |
+     | Antes, la pantalla de "Mover" resolvia eso escribiendo ella misma
+     | un segundo movimiento con la nota. Resultado: dos asientos por cada
+     | clic. Es el duplicado que se veia en la ficha.
+     |
+     | Ahora la pantalla deja el contexto AQUI y el observer lo recoge.
+     | Sigue habiendo un solo escritor.
+     |
+     | ── NO SON COLUMNAS ──
+     |
+     | Son propiedades normales de PHP, no atributos de Eloquent. Viven
+     | mientras dura la peticion y no se guardan en ninguna parte.
+     * ================================================================== */
+
+    /** Que clase de movimiento es. Si es null, el observer lo deduce. */
+    public ?\App\Enums\MovementType $tipoDelMovimiento = null;
+
+    /** La nota que escribio la persona. */
+    public ?string $notaDelMovimiento = null;
+
+    /** De que documento viene el movimiento (una factura, una venta...). */
+    public ?\Illuminate\Database\Eloquent\Model $origenDelMovimiento = null;
+
+    /**
+     * Deja el contexto puesto para el guardado que viene.
+     *
+     *     $contenedor->conMovimiento(MovementType::Transfer, 'Cambio de patio')
+     *                ->update(['location_id' => 4]);
+     */
+    public function conMovimiento(
+        ?\App\Enums\MovementType $tipo = null,
+        ?string $nota = null,
+        ?\Illuminate\Database\Eloquent\Model $origen = null,
+    ): static {
+        $this->tipoDelMovimiento   = $tipo;
+        $this->notaDelMovimiento   = $nota;
+        $this->origenDelMovimiento = $origen;
+
+        return $this;
+    }
+
+    /** Lo borra, para que no se pegue al siguiente guardado. */
+    public function olvidarContextoDelMovimiento(): void
+    {
+        $this->tipoDelMovimiento   = null;
+        $this->notaDelMovimiento   = null;
+        $this->origenDelMovimiento = null;
+    }
+
+    /* =====================================================================
      | EVENTOS
      * ================================================================== */
 

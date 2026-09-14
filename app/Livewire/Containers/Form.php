@@ -216,6 +216,28 @@ class Form extends Component
     public function updated(string $campo): void
     {
         /* -----------------------------------------------------------------
+         | LOS DOS CODIGOS SE REVISAN AL ESCRIBIR
+         |
+         | ── QUE PASABA ──
+         |
+         | Se escribia un numero de 18 caracteres, se pulsaba Guardar y
+         | salia el error del maximo. Correcto. Pero al borrar dos letras
+         | el error SE QUEDABA en pantalla: Livewire solo limpia la bolsa
+         | de errores cuando se vuelve a validar, y eso no ocurria hasta
+         | pulsar Guardar otra vez.
+         |
+         | Desde fuera se veia como "pongo 15 y tampoco deja", porque el
+         | mensaje rojo seguia ahi mientras se corregia.
+         |
+         | validateOnly() revalida ESE campo y solo ese: el error
+         | desaparece en cuanto el valor es valido, sin sacar en rojo el
+         | resto del formulario que todavia no se ha llenado.
+         * -------------------------------------------------------------- */
+        if (in_array($campo, ['container_number', 'internal_code'], true)) {
+            $this->validateOnly($campo, $this->rules(), $this->messages(), $this->validationAttributes());
+        }
+
+        /* -----------------------------------------------------------------
          | CAMBIÓ LA MEDIDA → SE PROPONEN LOS PESOS
          |
          | Cada tamaño tiene su tara y su máximo de fábrica. Están en el
@@ -383,6 +405,21 @@ class Form extends Component
     protected function messages(): array
     {
         return [
+            /*
+             | Sin este mensaje salia el de Laravel, en ingles y sin
+             | contexto: "The número de contenedor field must not be
+             | greater than 15 characters".
+             |
+             | El proyecto no tiene lang/es/validation.php, asi que TODO
+             | mensaje que no se escriba a mano sale en ingles. Conviene
+             | publicarlo y traducirlo en algun momento; mientras tanto,
+             | los de esta pantalla van aqui.
+             */
+            'container_number.max' => 'El número ISO tiene 11 caracteres '
+                                     .'(4 letras y 7 dígitos). El campo admite 15 como máximo.',
+
+            'internal_code.max'    => 'El código interno admite 20 caracteres como máximo.',
+
             'container_number.unique' => 'Ya hay una unidad registrada con ese número. '
                                         .'Un contenedor no puede estar dos veces en el inventario.',
             'container_size_id.required' => 'Elija la medida. Sin ella no se puede cotizar la unidad.',

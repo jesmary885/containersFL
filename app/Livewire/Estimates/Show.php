@@ -234,20 +234,40 @@ class Show extends Component
 
             session()->flash('exito',
                 'Se emitió la factura '.$factura->invoice_number.' a partir de este presupuesto. '
-                .'Quedó en borrador: revísela antes de enviarla al cliente.');
+                .'Quedó en borrador: revise el documento y emítala.');
 
             /* -------------------------------------------------------------
-             | Llevar al usuario a la factura recién creada.
+             | AL FORMULARIO, EN EL PASO DE REVISIÓN. NO A LA FICHA.
              |
-             | Antes se quedaba en el presupuesto con un mensaje verde. Si
-             | el mensaje pasaba desapercibido —y pasa— la sensación era
-             | que el botón no había hecho nada.
+             | ── QUÉ ESTABA MAL ──
              |
-             | Y como el listado de facturas abre filtrado por "con saldo",
-             | ir a buscarla ahí tampoco era evidente. Mejor no obligar a
-             | buscarla: mostrarla.
+             | Llevaba a la ficha (facturacion.show), que es una pantalla
+             | de SOLO LECTURA. Y la factura acababa de nacer en borrador:
+             | lo que toca justo después de convertir es revisarla,
+             | ajustar lo que haga falta y emitirla.
+             |
+             | O sea, el sistema dejaba al usuario en la única pantalla
+             | donde no podía hacer nada de eso, y para continuar tenía
+             | que buscar el botón de editar y volver a empezar.
+             |
+             | ── POR QUÉ EL PASO 3 ──
+             |
+             | Porque el trabajo del paso 1 y del paso 2 ya está hecho: el
+             | cliente, las direcciones, los términos y todas las líneas
+             | vienen copiados del presupuesto que el cliente aprobó.
+             |
+             | Entrar por el paso 1 obligaría a pulsar Siguiente dos veces
+             | para llegar a lo único que falta. El paso 3 es la vista
+             | previa del documento con las acciones debajo, que es
+             | exactamente lo que se necesita.
+             |
+             | Los otros dos pasos siguen ahí, en la barra de arriba, por
+             | si hay que corregir algo.
              * ---------------------------------------------------------- */
-            return redirect()->route('finanzas.facturacion.show', $factura);
+            return redirect()->route('finanzas.facturacion.edit', [
+                'invoice' => $factura,
+                'paso'    => 3,
+            ]);
 
         } catch (\Throwable $e) {
             $this->confirmando = null;

@@ -38,30 +38,26 @@
     Traducirlos no le sirve a nadie y duplica el trabajo de mantenerlos.
 --}}
 {{--
-    x-data va en la raíz del componente para que el observador siga vivo
-    cuando Livewire vuelve a pintar la pantalla.
+    LA RAÍZ DEL COMPONENTE
 
-    Lo que hace: mirar si la tarjeta de totales está a la vista. Si no lo
-    está, aparece la barra de abajo. Nada más.
+    Aquí vivía un observador de Alpine que miraba si la tarjeta de totales
+    de la derecha seguía a la vista, para encender una barra flotante
+    abajo con los mismos números.
+
+    Se fue junto con las dos cosas que vigilaba. Los totales ahora van
+    debajo de los conceptos, como en facturación: siempre a la vista y sin
+    nada que sincronizar.
 --}}
-<div class="con-barra-totales"
-     x-data="{ totalesVisibles: true }"
-     x-init="
-        $nextTick(() => {
-            const tarjeta = $refs.tarjetaTotales;
-            if (!tarjeta) return;
-
-            new IntersectionObserver(
-                ([e]) => { totalesVisibles = e.isIntersecting },
-                { threshold: 0.2 }
-            ).observe(tarjeta);
-        })
-     ">
+<div>
 
     {{-- ─────────────────────────────────────────────────────────────
          ENCABEZADO
     ───────────────────────────────────────────────────────────── --}}
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    {{--
+        no-imprimir: esto es la pantalla, no el documento. Ver la regla
+        en el bloque @media print de ajustes.css.
+    --}}
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2 no-imprimir">
 
         <div>
             <h4 class="mb-0">
@@ -93,6 +89,7 @@
                 <strong>*</strong> {{ __('common.required_field') }}
             </span>
 
+            {{-- Volver es salir: siempre al listado. --}}
             <a href="{{ route('comercial.presupuestos.index') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-arrow-left me-1"></i> {{ __('common.back_to_list') }}
             </a>
@@ -146,16 +143,21 @@
         LA BARRA DE PASOS
         ═══════════════════════════════════════════════════════════════════
 
-        Dos pantallas acá y una tercera que no es este formulario:
+        Tres pantallas, las tres dentro de este formulario:
 
           1 · QUIÉN Y CUÁNDO   cliente, uso, fechas, términos, direcciones
-          2 · QUÉ LLEVA        conceptos, grupos, notas, totales
-          3 · REVISAR          la ficha, con el documento armado
+          2 · QUÉ LLEVA        conceptos, grupos y el total
+          3 · REVISAR Y ENVIAR el documento como lo va a ver el cliente
 
-        El 3 sale deshabilitado hasta que se le da a Procesar, y entonces
-        deja de ser este formulario: revisar es leer el documento como lo
-        va a ver el cliente, y eso ya existe en show.blade.php. Pintarlo
-        también acá sería mantener dos veces la misma plantilla.
+        ── QUÉ CAMBIÓ ──
+
+        El paso 3 era un enlace que salía de aquí y llevaba a la ficha.
+        Eso obligaba a revisar en una pantalla y corregir en otra: se veía
+        un precio raro, había que volver, cambiarlo, y procesar otra vez
+        para volver a mirarlo.
+
+        Ahora los tres pasos se navegan igual, como en facturación. Hacia
+        atrás es libre; hacia adelante valida lo que queda en medio.
     --}}
     <div class="ps-barra">
         <button type="button"
@@ -168,41 +170,22 @@
         <span class="ps-sep"></span>
 
         <button type="button"
-                class="ps-paso {{ $paso === 2 ? 'ps-activo' : '' }}"
+                class="ps-paso {{ $paso === 2 ? 'ps-activo' : ($paso > 2 ? 'ps-hecho' : '') }}"
                 wire:click="irAlPaso(2)">
-            <span class="ps-bolita">2</span>
+            <span class="ps-bolita">{{ $paso > 2 ? '✓' : '2' }}</span>
             <span class="ps-texto">{{ __('estimates.section_lines') }}</span>
         </button>
 
         <span class="ps-sep"></span>
 
-        {{--
-            EL PASO 3 ES NAVEGABLE SI EL DOCUMENTO YA EXISTE.
-
-            Un presupuesto que ya pasó por Procesar tiene su documento
-            armado. Volver al paso 2 a comprobar un precio y querer
-            regresar no debería obligar a procesar de nuevo: no se
-            cambió nada.
-
-            Si es nuevo, o sigue en borrador, sale deshabilitado: no hay
-            documento que revisar todavía, y el único camino es el botón
-            Procesar de abajo.
-        --}}
-        @if ($this->puedeIrARevisar)
-            <a href="{{ route('comercial.presupuestos.show', $estimateId) }}"
-               class="ps-paso ps-hecho"
-               title="{{ __('estimates.step_review_go') }}">
-                <span class="ps-bolita">3</span>
-                <span class="ps-texto">{{ __('estimates.step_review') }}</span>
-            </a>
-        @else
-            <button type="button" class="ps-paso" disabled
-                    title="{{ __('estimates.step_review_locked') }}">
-                <span class="ps-bolita">3</span>
-                <span class="ps-texto">{{ __('estimates.step_review') }}</span>
-            </button>
-        @endif
+        <button type="button"
+                class="ps-paso {{ $paso === 3 ? 'ps-activo' : '' }}"
+                wire:click="irAlPaso(3)">
+            <span class="ps-bolita">3</span>
+            <span class="ps-texto">{{ __('estimates.step_review') }}</span>
+        </button>
     </div>
+
 
     {{--
         LA TIRA DE CONTEXTO
@@ -275,7 +258,15 @@
                 direcciones, que eran una pila de inputs estrechos,
                 respiran.
             --}}
-            <div class="col-12 {{ $paso === 2 ? 'col-xl-8' : '' }}">
+            {{--
+                Una sola columna a ancho completo en los tres pasos.
+
+                Antes el paso 2 se partía en 8 y 4 para dejarle sitio al
+                panel de totales de la derecha. Ese panel ya no está: los
+                conceptos, que es donde se trabaja, se quedan con toda la
+                pantalla.
+            --}}
+            <div class="col-12">
 
                 {{-- ═══════════ PASO 1 · QUIÉN Y CUÁNDO ═══════════ --}}
                 @if ($paso === 1)
@@ -1005,31 +996,78 @@
                     @endif
                 </div>
 
-                {{-- ─────────────────────────────────────────────
-                     5 · NOTAS
-                ───────────────────────────────────────────── --}}
-                <div class="card mb-3 seccion seccion-notas">
-                    <div class="card-header">
-                        <h6 class="seccion-titulo">
-                            <span class="paso-num">5</span>
-                            <i class="bi bi-sticky"></i>
-                            <span>{{ __('estimates.section_notes') }}</span>
-                        </h6>
-                    </div>
+                {{--
+                    ═══════════════════════════════════════════════════════
+                    EL DESGLOSE, MIENTRAS SE CARGAN CONCEPTOS
+                    ═══════════════════════════════════════════════════════
 
+                    ── QUÉ SE FUE DE AQUÍ ──
+
+                    El panel pegajoso de la derecha y la barra flotante de
+                    abajo. Eran dos sitios distintos enseñando los mismos
+                    números, y el de la derecha se comía un tercio de la
+                    pantalla justo donde se cargan los renglones.
+
+                    Ahora es lo mismo que en facturación: los conceptos
+                    ocupan el ancho completo y el total va debajo, que es
+                    donde uno está mirando cuando termina de cargar.
+
+                    Los campos que SE TOCAN —descuento, tasa, exento,
+                    tarjeta— se fueron al paso 3, junto a la vista previa.
+                    Ahí es donde se decide, con el documento delante.
+                --}}
+                <div class="card mb-3">
                     <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">{{ __('estimates.doc_notes') }}</label>
-                                <textarea class="form-control" rows="3"
-                                          placeholder="{{ __('estimates.doc_notes_ph') }}"
-                                          wire:model="notes"></textarea>
+                        <div class="row">
+                            <div class="col-12 col-md-6 text-secondary small">
+                                {{ trans_choice('estimates.lines_count', count($lineas), ['count' => count($lineas)]) }}
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">{{ __('estimates.footer_terms') }}</label>
-                                <textarea class="form-control" rows="3"
-                                          placeholder="{{ __('estimates.footer_terms_ph') }}"
-                                          wire:model="footer_terms"></textarea>
+
+                            <div class="col-12 col-md-6">
+                                @php $t2 = $this->totales; @endphp
+
+                                <table class="table table-sm mb-0">
+                                    <tbody>
+                                        <tr>
+                                            <td class="text-secondary">{{ __('common.subtotal') }}</td>
+                                            <td class="text-end monto">${{ number_format($t2['subtotal'], 2) }}</td>
+                                        </tr>
+
+                                        @if ($t2['discount_amount'] > 0)
+                                            <tr>
+                                                <td class="text-secondary">{{ __('common.discount') }}</td>
+                                                <td class="text-end monto text-danger">
+                                                    −${{ number_format($t2['discount_amount'], 2) }}
+                                                </td>
+                                            </tr>
+                                        @endif
+
+                                        <tr>
+                                            <td class="text-secondary">
+                                                {{ __('common.sales_tax') }}
+                                                @if ($t2['non_taxable_base'] > 0)
+                                                    <div class="small">
+                                                        ${{ number_format($t2['non_taxable_base'], 2) }}
+                                                        {{ __('estimates.non_taxable_freight') }}
+                                                    </div>
+                                                @endif
+                                            </td>
+                                            <td class="text-end monto">${{ number_format($t2['tax_amount'], 2) }}</td>
+                                        </tr>
+
+                                        @if ($t2['credit_card_fee'] > 0)
+                                            <tr>
+                                                <td class="text-secondary">{{ __('common.card_surcharge') }}</td>
+                                                <td class="text-end monto">${{ number_format($t2['credit_card_fee'], 2) }}</td>
+                                            </tr>
+                                        @endif
+
+                                        <tr class="fw-bold border-top fs-5">
+                                            <td>{{ __('common.total') }}</td>
+                                            <td class="text-end monto">${{ number_format($t2['total'], 2) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -1037,347 +1075,437 @@
 
                 @endif {{-- fin paso 2 --}}
 
-            </div>
+                {{-- ═══════════ PASO 3 · REVISAR Y ENVIAR ═══════════
 
-            {{-- ═════════════════════════════════════════════════════
-                 COLUMNA DERECHA · LOS TOTALES
+                     Antes esto no existía en el formulario: el paso 3 era
+                     un enlace que sacaba de aquí y llevaba a la ficha.
 
-                 Solo en el paso 2. En el paso 1 no hay conceptos
-                 todavía: un panel de totales en $0.00 al lado de los
-                 datos del cliente no informa de nada y ocupa un tercio
-                 de la pantalla.
-            ═════════════════════════════════════════════════════ --}}
-            @if ($paso === 2)
-            <div class="col-12 col-xl-4">
-                {{--
-                    panel-pegajoso y no position-sticky de Bootstrap.
+                     Ahora es la misma zona de facturación. La vista previa
+                     ES el documento —la misma cabecera, las mismas dos
+                     direcciones, los mismos renglones y el mismo pie que
+                     salen al imprimir— y los ajustes de dinero están al
+                     lado, para poder corregir mirando el resultado.
 
-                    La clase de Bootstrap ya estaba puesta y no hacía
-                    nada: `position: sticky` se rompe en silencio si
-                    algún contenedor de más arriba tiene overflow
-                    distinto de visible, y el layout de AdminLTE lo trae
-                    en varios sitios para que el sidebar no desborde.
+                     La razón es sencilla: si la vista previa no es igual
+                     al documento, nadie la mira. Se pulsa guardar y se
+                     revisa después, que es justo cuando ya se envió.
+                ═══════════════════════════════════════════════ --}}
+                @if ($paso === 3)
 
-                    No da error. El elemento simplemente se comporta como
-                    si la propiedad no existiera.
+                @php $t = $this->totales; @endphp
 
-                    La clase nueva vive en sistema.css y arregla las dos
-                    cosas: apaga ese overflow y le pone al panel una
-                    altura máxima con scroll propio, para que con quince
-                    líneas cargadas siga entrando en la pantalla.
-                --}}
-                <div class="panel-pegajoso">
+                <div class="row g-3">
 
-                    {{--
-                        ═══════════════════════════════════════════════
-                        EL PANEL DE TOTALES
-                        ═══════════════════════════════════════════════
+                    <div class="col-12 col-xl-7">
 
-                        ── POR QUÉ NO USA .card DE BOOTSTRAP ──
+                        <div class="card mb-3">
+                            <div class="card-body doc-preview">
 
-                        Porque la palabra "Totales" te salía en blanco
-                        sobre blanco. El encabezado tenía que ser oscuro,
-                        pero AdminLTE define .card-header con la misma
-                        fuerza que nuestra regla, y cuando dos reglas
-                        pesan igual gana la que el navegador lee de
-                        último. Según qué archivo cargue primero, ganaba
-                        una u otra. El texto quedaba blanco y el fondo
-                        también.
-
-                        Este panel tiene marcado propio y clases propias.
-                        No comparte ni un nombre con Bootstrap, así que no
-                        hay nada con qué pelearse.
-
-                        ── CÓMO ESTÁ ARMADO ──
-
-                        Tres zonas, de arriba abajo:
-
-                          1. Cabecera oscura: dice qué es esto.
-                          2. Los ajustes que SE TOCAN: descuento, tax,
-                             exento, tarjeta.
-                          3. El desglose que SALE: subtotal, bases,
-                             impuesto, y el total en una banda verde.
-
-                        Lo que se toca arriba, lo que sale abajo. Cuando
-                        están mezclados, la gente intenta escribir encima
-                        del total.
-
-                        x-ref es la marca que busca el observador de la
-                        raíz. Cuando esta tarjeta sale de la pantalla,
-                        aparece la barra de totales de abajo.
-                    --}}
-                    <div class="panel-totales" x-ref="tarjetaTotales">
-
-                        <div class="pt-cabecera">
-                            <i class="bi bi-calculator-fill"></i>
-                            <span>{{ __('common.totals') }}</span>
-                        </div>
-
-                        {{-- ── 1 · LO QUE SE TOCA ── --}}
-                        <div class="pt-ajustes">
-                            <div class="row g-2">
-
-                                <div class="col-6">
-                                    <label class="form-label small mb-1">{{ __('estimates.discount_field') }}</label>
-                                    <input type="number" step="0.01" min="0"
-                                           class="form-control form-control-sm text-end @error('discount_amount') is-invalid @enderror"
-                                           wire:model.live.debounce.500ms="discount_amount">
-                                    @error('discount_amount')
-                                        <div class="invalid-feedback d-block">{{ $message }}</div>
-                                    @enderror
-                                </div>
-
-                                <div class="col-6">
-                                    <label class="form-label small mb-1">{{ __('estimates.tax_rate_field') }}</label>
-                                    <input type="number" step="0.01" min="0" max="100"
-                                           class="form-control form-control-sm text-end @error('tax_rate') is-invalid @enderror"
-                                           wire:model.live.debounce.500ms="tax_rate"
-                                           @disabled($tax_exempt)>
-                                    @error('tax_rate')
-                                        <div class="invalid-feedback d-block">{{ $message }}</div>
-                                    @enderror
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox"
-                                               id="exento" wire:model.live="tax_exempt">
-                                        <label class="form-check-label small" for="exento">
-                                            {{ __('estimates.customer_exempt') }}
-                                        </label>
+                                {{-- CABECERA --}}
+                                <div class="d-flex justify-content-between align-items-start mb-4">
+                                    <div>
+                                        <div class="fs-5 fw-bold">{{ $empresaActual?->legal_name }}</div>
+                                        <div class="small text-secondary">
+                                            {{ $empresaActual?->address_line1 }}<br>
+                                            {{ collect([$empresaActual?->city, $empresaActual?->state])
+                                                ->filter()->implode(', ') }} {{ $empresaActual?->zip }}<br>
+                                            @if ($empresaActual?->phone) {{ $empresaActual->phone }} @endif
+                                        </div>
                                     </div>
 
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox"
-                                               id="tarjeta" wire:model.live="pagaConTarjeta">
-                                        <label class="form-check-label small" for="tarjeta">
-                                            {{ __('estimates.pays_with_card', [
-                                                'percent' => number_format($credit_card_fee_percent, 2),
-                                            ]) }}
-                                        </label>
+                                    <div class="text-end">
+                                        <div class="fs-4 fw-bold text-uppercase">Estimate</div>
+                                        <div class="small">
+                                            <div>
+                                                <span class="text-secondary">N.º</span>
+                                                <strong>{{ $numero ?: __('estimates.number_on_save') }}</strong>
+                                            </div>
+                                            <div>
+                                                <span class="text-secondary">{{ __('estimates.issue_short') }}</span>
+                                                {{ $issue_date ? \Carbon\Carbon::parse($issue_date)->format('d/m/Y') : '—' }}
+                                            </div>
+                                            <div>
+                                                <span class="text-secondary">{{ __('estimates.valid_short') }}</span>
+                                                {{ $valid_until ? \Carbon\Carbon::parse($valid_until)->format('d/m/Y') : '—' }}
+                                            </div>
+                                            @if ($terms)
+                                                <div class="text-secondary">{{ $terms }}</div>
+                                            @endif
+                                        </div>
                                     </div>
                                 </div>
 
-                            </div>
-                        </div>
+                                {{--
+                                    LAS DOS DIRECCIONES SE IMPRIMEN SIEMPRE,
+                                    aunque sean la misma. Está confirmado por
+                                    el documento real de RST.
+                                --}}
+                                <div class="row g-3 mb-4 small">
+                                    <div class="col-6">
+                                        <div class="text-secondary text-uppercase" style="font-size:.7rem">
+                                            Bill to
+                                        </div>
+                                        <div class="fw-semibold">{{ $clienteNombre }}</div>
+                                        <div>{{ $bill_to['line1'] }}</div>
+                                        @if ($bill_to['line2'])<div>{{ $bill_to['line2'] }}</div>@endif
+                                        <div>
+                                            {{ collect([$bill_to['city'], $bill_to['state']])->filter()->implode(', ') }}
+                                            {{ $bill_to['zip'] }}
+                                        </div>
+                                    </div>
 
-                        {{-- ── 2 · LO QUE SALE ── --}}
-                        <div class="pt-desglose">
-
-                            <div class="pt-fila">
-                                <span class="pt-etiqueta">{{ __('common.subtotal') }}</span>
-                                <span class="pt-valor">
-                                    ${{ number_format($this->totales['subtotal'], 2) }}
-                                </span>
-                            </div>
-
-                            @if ($this->totales['discount_amount'] > 0)
-                                <div class="pt-fila pt-resta">
-                                    <span class="pt-etiqueta">{{ __('common.discount') }}</span>
-                                    <span class="pt-valor">
-                                        −${{ number_format($this->totales['discount_amount'], 2) }}
-                                    </span>
-                                </div>
-                            @endif
-
-                            {{--
-                                Las dos bases van juntas y en su propio
-                                bloque, porque cuentan la misma historia:
-                                de todo lo cotizado, esto paga impuesto y
-                                esto no.
-
-                                Es el renglón que más preguntas evita.
-                                Sobre qué monto se calcula el 7% casi
-                                nunca es el total, y cuando el cliente
-                                pregunta hay que poder responderlo sin
-                                sacar la calculadora.
-                            --}}
-                            <div class="pt-bases">
-                                <div class="pt-fila pt-menor">
-                                    <span class="pt-etiqueta">
-                                        <i class="bi bi-dot"></i> {{ __('common.taxable_base') }}
-                                    </span>
-                                    <span class="pt-valor">
-                                        ${{ number_format($this->totales['taxable_base'], 2) }}
-                                    </span>
+                                    <div class="col-6">
+                                        <div class="text-secondary text-uppercase" style="font-size:.7rem">
+                                            Ship to
+                                        </div>
+                                        @if ($envioDistinto)
+                                            <div>{{ $ship_to['line1'] }}</div>
+                                            @if ($ship_to['line2'])<div>{{ $ship_to['line2'] }}</div>@endif
+                                            <div>
+                                                {{ collect([$ship_to['city'], $ship_to['state']])->filter()->implode(', ') }}
+                                                {{ $ship_to['zip'] }}
+                                            </div>
+                                        @else
+                                            <div class="fw-semibold">{{ $clienteNombre }}</div>
+                                            <div>{{ $bill_to['line1'] }}</div>
+                                            <div>
+                                                {{ collect([$bill_to['city'], $bill_to['state']])->filter()->implode(', ') }}
+                                                {{ $bill_to['zip'] }}
+                                            </div>
+                                        @endif
+                                    </div>
                                 </div>
 
-                                @if ($this->totales['non_taxable_base'] > 0)
-                                    <div class="pt-fila pt-menor">
-                                        <span class="pt-etiqueta">
-                                            <i class="bi bi-dot"></i> {{ __('estimates.non_taxable_freight') }}
-                                        </span>
-                                        <span class="pt-valor">
-                                            ${{ number_format($this->totales['non_taxable_base'], 2) }}
-                                        </span>
+                                {{--
+                                    LOS RENGLONES, YA AGRUPADOS
+
+                                    Aquí se ve lo que de verdad va a leer el
+                                    cliente: los renglones de un grupo salen
+                                    como UNO SOLO con el precio sumado. Es la
+                                    única pantalla donde se comprueba que el
+                                    agrupamiento quedó como se quería.
+                                --}}
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr class="border-bottom border-dark">
+                                            <th>{{ __('estimates.col_description') }}</th>
+                                            <th class="text-end" style="width:70px;">{{ __('estimates.col_qty') }}</th>
+                                            <th class="text-end" style="width:110px;">{{ __('estimates.col_price') }}</th>
+                                            <th class="text-end" style="width:110px;">{{ __('estimates.col_amount') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    @php
+                                        $yaPintados = [];
+                                        $hayAlgo    = false;
+                                    @endphp
+
+                                    @foreach ($lineas as $i => $linea)
+                                        @php
+                                            $gr = trim((string) ($linea['grupo'] ?? ''));
+                                            $esGrupo = $gr !== '' && in_array($gr, $grupos, true);
+                                        @endphp
+
+                                        @continue (blank($linea['description'] ?? null))
+                                        @continue ($esGrupo && in_array($gr, $yaPintados, true))
+
+                                        @php
+                                            $hayAlgo = true;
+                                            if ($esGrupo) { $yaPintados[] = $gr; }
+                                            $datos = $esGrupo
+                                                ? ($this->resumenGrupos[$gr] ?? ['total' => 0])
+                                                : null;
+                                            $texto = $esGrupo
+                                                ? (trim((string) ($gruposDescripcion[$gr] ?? '')) ?: $linea['description'])
+                                                : $linea['description'];
+                                            $importe = $esGrupo ? $datos['total'] : $this->importeLinea($i);
+                                        @endphp
+
+                                        <tr wire:key="rev-{{ $i }}">
+                                            <td>
+                                                {{ $texto }}
+
+                                                @if (! $esGrupo && ! empty($linea['work_details']))
+                                                    <div class="small text-secondary">{{ $linea['work_details'] }}</div>
+                                                @endif
+
+                                                @if (! $esGrupo && ! empty($linea['rental_months']))
+                                                    <div class="small text-secondary">
+                                                        {{ __('estimates.the_term') }}:
+                                                        {{ $linea['rental_months'] }}
+                                                        {{ __('estimates.month_abbr') }}
+                                                    </div>
+                                                @endif
+                                            </td>
+                                            <td class="text-end">
+                                                {{ $esGrupo ? 1 : rtrim(rtrim(number_format((float) $linea['quantity'], 2), '0'), '.') }}
+                                            </td>
+                                            <td class="text-end monto">${{ number_format($importe, 2) }}</td>
+                                            <td class="text-end monto">${{ number_format($importe, 2) }}</td>
+                                        </tr>
+                                    @endforeach
+
+                                    @if (! $hayAlgo)
+                                        <tr>
+                                            <td colspan="4" class="text-center text-secondary py-3">
+                                                {{ __('estimates.no_lines') }}
+                                            </td>
+                                        </tr>
+                                    @endif
+                                    </tbody>
+                                </table>
+
+                                {{-- LOS TOTALES, DEL LADO DERECHO COMO EN EL PAPEL --}}
+                                <div class="row">
+                                    <div class="col-6">
+                                        @if ($notes)
+                                            <div class="small">
+                                                <div class="text-secondary text-uppercase" style="font-size:.7rem">
+                                                    {{ __('estimates.doc_notes') }}
+                                                </div>
+                                                {{ $notes }}
+                                            </div>
+                                        @endif
+                                    </div>
+
+                                    <div class="col-6">
+                                        <table class="table table-sm mb-0">
+                                            <tbody>
+                                                <tr>
+                                                    <td class="text-secondary">{{ __('common.subtotal') }}</td>
+                                                    <td class="text-end monto">${{ number_format($t['subtotal'], 2) }}</td>
+                                                </tr>
+
+                                                @if ($t['discount_amount'] > 0)
+                                                    <tr>
+                                                        <td class="text-secondary">{{ __('common.discount') }}</td>
+                                                        <td class="text-end monto">−${{ number_format($t['discount_amount'], 2) }}</td>
+                                                    </tr>
+                                                @endif
+
+                                                <tr>
+                                                    <td class="text-secondary">
+                                                        {{ __('common.sales_tax') }}
+                                                        @if ($t['non_taxable_base'] > 0)
+                                                            <div class="small">
+                                                                ${{ number_format($t['non_taxable_base'], 2) }}
+                                                                {{ __('estimates.non_taxable_freight') }}
+                                                            </div>
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-end monto">${{ number_format($t['tax_amount'], 2) }}</td>
+                                                </tr>
+
+                                                @if ($t['credit_card_fee'] > 0)
+                                                    <tr>
+                                                        <td class="text-secondary">{{ __('common.card_surcharge') }}</td>
+                                                        <td class="text-end monto">${{ number_format($t['credit_card_fee'], 2) }}</td>
+                                                    </tr>
+                                                @endif
+
+                                                <tr class="fw-bold border-top border-dark fs-5">
+                                                    <td>{{ __('common.total') }}</td>
+                                                    <td class="text-end monto">${{ number_format($t['total'], 2) }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                @if ($footer_terms)
+                                    <div class="border-top mt-4 pt-2 small text-secondary">
+                                        {{ $footer_terms }}
                                     </div>
                                 @endif
-                            </div>
 
-                            <div class="pt-fila">
-                                <span class="pt-etiqueta">
-                                    {{ __('common.sales_tax') }}
-                                    <span class="pt-chip">
-                                        {{ number_format($tax_exempt ? 0 : $tax_rate, 2) }}%
-                                    </span>
-                                </span>
-                                <span class="pt-valor">
-                                    ${{ number_format($this->totales['tax_amount'], 2) }}
-                                </span>
                             </div>
+                        </div>
 
-                            @if ($this->totales['credit_card_fee'] > 0)
-                                <div class="pt-fila">
-                                    <span class="pt-etiqueta">
-                                        {{ __('common.card_surcharge') }}
-                                        <span class="pt-chip">
-                                            {{ number_format($credit_card_fee_percent, 2) }}%
-                                        </span>
-                                    </span>
-                                    <span class="pt-valor">
-                                        ${{ number_format($this->totales['credit_card_fee'], 2) }}
-                                    </span>
+                        {{-- ───── TEXTOS ───── --}}
+                        <div class="card mb-3 seccion seccion-notas">
+                            <div class="card-header">
+                                <h6 class="seccion-titulo mb-0">
+                                    <i class="bi bi-chat-left-text"></i>
+                                    <span>{{ __('estimates.section_notes') }}</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+
+                                {{--
+                                    .live y no .blur, por lo mismo que en
+                                    facturación: con .blur el texto solo viaja
+                                    cuando el campo pierde el foco, y al
+                                    pulsar un botón desde dentro del textarea
+                                    eso no siempre llega a tiempo.
+                                --}}
+                                <div class="mb-3">
+                                    <label class="form-label">{{ __('estimates.doc_notes') }}</label>
+                                    <textarea class="form-control" rows="2"
+                                              placeholder="{{ __('estimates.doc_notes_ph') }}"
+                                              wire:model.live.debounce.500ms="notes"></textarea>
                                 </div>
-                            @endif
 
-                        </div>
+                                <div>
+                                    <label class="form-label">{{ __('estimates.footer_terms') }}</label>
+                                    <textarea class="form-control" rows="2"
+                                              placeholder="{{ __('estimates.footer_terms_ph') }}"
+                                              wire:model.live.debounce.500ms="footer_terms"></textarea>
+                                </div>
 
-                        {{--
-                            ── 3 · LA BANDA DEL TOTAL ──
-
-                            Es el número que va a mirar el cliente y el
-                            que va a mirar quien cotiza, así que se lleva
-                            todo el peso visual del panel: banda verde,
-                            texto grande, moneda separada.
-
-                            Verde y no azul porque en este sistema el
-                            verde es dinero cerrado. El mismo criterio que
-                            en los contadores del listado.
-                        --}}
-                        <div class="pt-total">
-                            <span class="pt-total-label">{{ __('common.total') }}</span>
-                            <span class="pt-total-valor">
-                                <span class="pt-moneda">$</span>{{ number_format($this->totales['total'], 2) }}
-                            </span>
-                        </div>
-
-                        @if ($tax_exempt)
-                            <div class="pt-nota">
-                                <i class="bi bi-patch-check-fill"></i>
-                                <span>{{ __('estimates.exempt_note') }}</span>
                             </div>
-                        @endif
+                        </div>
 
                     </div>
 
-                    {{--
-                        Los botones se fueron al pie de navegación.
+                    {{-- ───── LOS NÚMEROS ───── --}}
+                    <div class="col-12 col-xl-5">
 
-                        Estaban acá Y en una barra abajo, los dos juegos
-                        con "Guardar borrador" y "Procesar". Dos botones
-                        iguales en la misma pantalla obligan a pararse a
-                        pensar si de verdad hacen lo mismo.
+                        <div class="card mb-3 seccion seccion-datos">
+                            <div class="card-header">
+                                <h6 class="seccion-titulo mb-0">
+                                    <span class="paso-num">6</span>
+                                    <i class="bi bi-calculator"></i>
+                                    <span>{{ __('common.totals') }}</span>
+                                </h6>
+                            </div>
 
-                        Lo que sí se queda es el resumen de errores: es
-                        donde el usuario tiene la vista cuando revisa los
-                        números.
-                    --}}
-                    <div class="card">
-                        <div class="card-body py-2">
-                            <x-ui.errores class="small mb-0 py-2" />
-                            <div class="leyenda-obligatorio">
-                                <strong>*</strong> {{ __('common.required_field') }}
+                            <div class="card-body">
+
+                                <div class="row g-2 mb-3">
+
+                                    <div class="col-6">
+                                        <label class="form-label small">{{ __('estimates.discount_field') }}</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">$</span>
+                                            <input type="number" step="0.01" min="0"
+                                                   class="form-control @error('discount_amount') is-invalid @enderror"
+                                                   wire:model.live.debounce.500ms="discount_amount">
+                                        </div>
+                                        @error('discount_amount')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+
+                                    <div class="col-6">
+                                        <label class="form-label small">{{ __('estimates.tax_rate_field') }}</label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" step="0.01" min="0" max="100"
+                                                   class="form-control @error('tax_rate') is-invalid @enderror"
+                                                   wire:model.live.debounce.500ms="tax_rate"
+                                                   @disabled($tax_exempt)>
+                                            <span class="input-group-text">%</span>
+                                        </div>
+                                        @if ($tax_exempt)
+                                            <div class="form-text text-success">
+                                                {{ __('estimates.exempt_note') }}
+                                            </div>
+                                        @endif
+                                        @error('tax_rate')
+                                            <div class="invalid-feedback d-block">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="exento" wire:model.live="tax_exempt">
+                                            <label class="form-check-label small" for="exento">
+                                                {{ __('estimates.customer_exempt') }}
+                                            </label>
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="tarjeta" wire:model.live="pagaConTarjeta">
+                                            <label class="form-check-label small" for="tarjeta">
+                                                {{ __('estimates.pays_with_card', [
+                                                    'percent' => number_format($credit_card_fee_percent, 2),
+                                                ]) }}
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                {{--
+                                    EL RECARGO DE TARJETA
+
+                                    Sale solo si se marcó tarjeta. Y con el
+                                    aviso del formulario firmado, porque ese
+                                    papel es lo único que protege a la empresa
+                                    si después el dueño de la tarjeta reclama
+                                    el cargo al banco (RB-011).
+                                --}}
+                                @if ($credit_card_fee_percent > 0)
+                                    <div class="alert alert-warning py-2 small">
+                                        <i class="bi bi-credit-card me-1"></i>
+                                        <strong>{{ __('common.card_surcharge') }}
+                                        {{ rtrim(rtrim(number_format($credit_card_fee_percent, 2), '0'), '.') }}%.</strong>
+                                        {{ __('estimates.card_needs_form') }}
+                                    </div>
+                                @endif
+
+                                {{-- ───── EL DESGLOSE ───── --}}
+                                <table class="table table-sm mb-0">
+                                    <tbody>
+                                        <tr>
+                                            <td class="text-secondary">{{ __('common.subtotal') }}</td>
+                                            <td class="text-end monto">${{ number_format($t['subtotal'], 2) }}</td>
+                                        </tr>
+
+                                        @if ($t['discount_amount'] > 0)
+                                            <tr>
+                                                <td class="text-secondary">{{ __('common.discount') }}</td>
+                                                <td class="text-end monto text-danger">
+                                                    −${{ number_format($t['discount_amount'], 2) }}
+                                                </td>
+                                            </tr>
+                                        @endif
+
+                                        <tr>
+                                            <td class="text-secondary">
+                                                {{ __('common.sales_tax') }}
+                                                @if ($t['taxable_base'] > 0)
+                                                    <div class="small">
+                                                        {{ __('common.taxable_base') }}:
+                                                        ${{ number_format($t['taxable_base'], 2) }}
+                                                        @if ($t['non_taxable_base'] > 0)
+                                                            · ${{ number_format($t['non_taxable_base'], 2) }}
+                                                            {{ __('estimates.non_taxable_freight') }}
+                                                        @endif
+                                                    </div>
+                                                @endif
+                                            </td>
+                                            <td class="text-end monto">${{ number_format($t['tax_amount'], 2) }}</td>
+                                        </tr>
+
+                                        @if ($t['credit_card_fee'] > 0)
+                                            <tr>
+                                                <td class="text-secondary">{{ __('common.card_surcharge') }}</td>
+                                                <td class="text-end monto">${{ number_format($t['credit_card_fee'], 2) }}</td>
+                                            </tr>
+                                        @endif
+
+                                        <tr class="fw-bold border-top fs-5">
+                                            <td>{{ __('common.total') }}</td>
+                                            <td class="text-end monto">${{ number_format($t['total'], 2) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
                             </div>
                         </div>
+
                     </div>
 
                 </div>
+
+                @endif {{-- fin paso 3 --}}
+
             </div>
 
         </div>
 
-        {{-- ═════════════════════════════════════════════════════════
-             LA BARRA DE TOTALES DE ABAJO
-
-             Aparece cuando la tarjeta de totales de la derecha no se ve
-             en pantalla, y desaparece cuando vuelve a verse.
-
-             ── POR QUÉ HAY DOS SITIOS CON LOS TOTALES ──
-
-             Porque el panel pegajoso de la derecha depende de que ninguna
-             regla del layout de AdminLTE rompa el `position: sticky`, y
-             eso ya falló una vez. Esta barra usa `position: fixed`, que
-             se calcula contra la ventana del navegador y no contra los
-             contenedores de la página: es mucho más difícil de romper.
-
-             Los botones van aquí también. Si estás abajo cargando la
-             línea ocho, no deberías tener que subir ni para ver el total
-             ni para guardar.
-
-             x-cloak evita que la barra se vea un instante antes de que
-             Alpine arranque.
-        ═════════════════════════════════════════════════════════ --}}
-        @if ($paso === 2)
-        <div class="barra-totales"
-             x-show="!totalesVisibles"
-             x-transition.opacity
-             x-cloak>
-
-            <div class="bt-linea justify-content-between">
-
-                <div class="bt-linea">
-
-                    <div class="bt-dato bt-oculto-movil">
-                        <span class="bt-etiqueta">{{ __('common.subtotal') }}</span>
-                        <span class="bt-valor">
-                            ${{ number_format($this->totales['subtotal'], 2) }}
-                        </span>
-                    </div>
-
-                    {{--
-                        La base gravable es el dato que más preguntas
-                        evita: sobre qué monto se calcula el 7%, que casi
-                        nunca es el total.
-                    --}}
-                    <div class="bt-dato bt-oculto-movil">
-                        <span class="bt-etiqueta">{{ __('common.taxable_base') }}</span>
-                        <span class="bt-valor">
-                            ${{ number_format($this->totales['taxable_base'], 2) }}
-                        </span>
-                    </div>
-
-                    <div class="bt-dato bt-oculto-movil">
-                        <span class="bt-etiqueta">
-                            {{ __('common.tax') }} {{ number_format($tax_exempt ? 0 : $tax_rate, 2) }}%
-                        </span>
-                        <span class="bt-valor">
-                            ${{ number_format($this->totales['tax_amount'], 2) }}
-                        </span>
-                    </div>
-
-                    @if ($this->totales['credit_card_fee'] > 0)
-                        <div class="bt-dato bt-oculto-movil">
-                            <span class="bt-etiqueta">{{ __('common.card_surcharge') }}</span>
-                            <span class="bt-valor">
-                                ${{ number_format($this->totales['credit_card_fee'], 2) }}
-                            </span>
-                        </div>
-                    @endif
-
-                    <div class="bt-dato bt-total">
-                        <span class="bt-etiqueta">{{ __('common.total') }}</span>
-                        <span class="bt-valor">
-                            ${{ number_format($this->totales['total'], 2) }}
-                        </span>
-                    </div>
-
-                </div>
-
-            </div>
-            @endif {{-- fin columna de totales --}}
-        </div>
-
-        @endif {{-- fin barra flotante de totales --}}
 
         {{--
             ═══════════════════════════════════════════════════════════════
@@ -1385,20 +1513,48 @@
             ═══════════════════════════════════════════════════════════════
 
             Un solo sitio con los botones, y solo los que aplican al paso.
+            Es el mismo pie de facturación.
 
-            Antes había dos juegos: uno en la columna derecha y otro en una
-            barra abajo, los dos con "Guardar borrador" y "Procesar". Dos
-            botones que hacen lo mismo en la misma pantalla obligan a
-            pensar si de verdad hacen lo mismo.
-
-            "Guardar borrador" está en los dos pasos a propósito: es la
+            "Guardar borrador" está en los pasos 1 y 2 a propósito: es la
             salida de emergencia de quien tiene que atender el teléfono a
             mitad de cotización.
+
+            En el paso 3 cambian: antes de guardar, "Guardar sin enviar" y
+            "Guardar y enviar"; después de guardar, "Imprimir", "Corregir"
+            y "Ver ficha", sin cambiar de pantalla.
         --}}
         <div class="ps-pie">
 
             <div>
-                @if ($paso > 1)
+                {{--
+                    ───── EL BOTON DE LA IZQUIERDA ─────
+
+                    Tres casos, y el del medio es el que estaba mal.
+
+                      PASO 1            "Cancelar": no hay nada detras.
+
+                      PASOS 2 y 3       "Atras": vuelve al paso anterior
+                                        para seguir editando.
+
+                      YA GUARDADO       "Volver al listado".
+
+                    ── QUE PASABA ──
+
+                    Despues de guardar, la flecha seguia diciendo "Atras" y
+                    llevaba al paso 2. O sea: acabas de cerrar el
+                    presupuesto y el sistema te devuelve a editarle los
+                    conceptos, como si no hubiera pasado nada.
+
+                    Una vez guardado, el trabajo terminado. Si hay que
+                    cambiar algo esta el boton "Corregir"; para eso es. La
+                    flecha tiene que sacarte, no meterte otra vez.
+                --}}
+                @if ($guardada && $paso === \App\Livewire\Estimates\Form::PASOS)
+                    <a href="{{ route('comercial.presupuestos.index') }}"
+                       class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-1"></i>{{ __('common.back_to_list') }}
+                    </a>
+                @elseif ($paso > 1)
                     <button type="button" class="btn btn-outline-secondary"
                             wire:click="pasoAnterior">
                         <i class="bi bi-arrow-left me-1"></i>{{ __('estimates.step_back') }}
@@ -1419,49 +1575,78 @@
                             ? __('estimates.missing_one')
                             : __('estimates.missing_many', ['count' => $errors->count()]) }}
                     </span>
-                @elseif ($paso === 2)
-                    {{ trans_choice('estimates.lines_count', count($lineas), ['count' => count($lineas)]) }}
                 @else
-                    {{ __('estimates.step_1_of', ['total' => \App\Livewire\Estimates\Form::PASOS + 1]) }}
+                    {{ __('estimates.step_n_of', [
+                        'paso'  => $paso,
+                        'total' => \App\Livewire\Estimates\Form::PASOS,
+                    ]) }}
                 @endif
 
-                <div wire:loading>
+                <div wire:loading wire:target="guardar">
                     <span class="spinner-border spinner-border-sm me-1"></span>
                     {{ __('common.saving') }}
                 </div>
             </div>
 
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-outline-primary">
-                    <i class="bi bi-save me-1"></i>{{ __('common.save_draft') }}
-                </button>
 
-                @if ($paso < 2)
+                @if ($paso < \App\Livewire\Estimates\Form::PASOS)
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="bi bi-save me-1"></i>{{ __('common.save_draft') }}
+                    </button>
+
                     <button type="button" class="btn btn-primary"
                             wire:click="siguientePaso">
                         {{ __('estimates.step_next') }}<i class="bi bi-arrow-right ms-1"></i>
                     </button>
-                @elseif ($this->puedeIrARevisar)
-                    {{--
-                        Ya procesado: el botón guarda los cambios y lleva
-                        a la ficha. Se llama "Revisar y enviar" y no
-                        "Procesar" porque es lo que hace, y porque el
-                        usuario ya sabe que ese paso existe: acaba de
-                        volver de él.
-                    --}}
-                    <button type="button" class="btn btn-success"
-                            wire:click="guardar(false, true)">
-                        {{ __('estimates.step_review') }}<i class="bi bi-arrow-right ms-1"></i>
-                    </button>
                 @else
-                    <button type="button" class="btn btn-success"
-                            wire:click="guardar(false, true)">
-                        <i class="bi bi-check2-circle me-1"></i>{{ __('estimates.process') }}
-                    </button>
+                    {{--
+                        DESPUÉS DE GUARDAR SE QUEDA AQUÍ.
+
+                        Antes saltaba a la ficha. Ahora la vista previa que
+                        ya se estaba mirando es el documento guardado, y
+                        las acciones salen debajo.
+
+                        Imprimir usa window.print() sobre esta misma
+                        pantalla: el CSS de impresión esconde todo lo demás.
+                    --}}
+                    @if ($guardada)
+                        <button type="button" class="btn btn-outline-primary"
+                                onclick="window.print()">
+                            <i class="bi bi-printer me-1"></i>{{ __('common.print') }}
+                        </button>
+
+                        <button type="submit" class="btn btn-outline-secondary"
+                                wire:loading.attr="disabled">
+                            <i class="bi bi-pencil me-1"></i>{{ __('common.fix') }}
+                        </button>
+
+                        <a href="{{ route('comercial.presupuestos.show', $estimateId) }}"
+                           class="btn btn-outline-secondary">
+                            <i class="bi bi-file-earmark-text me-1"></i>{{ __('common.view_record') }}
+                        </a>
+
+                        <button type="button" class="btn btn-success"
+                                wire:click="guardar(true, true)" wire:loading.attr="disabled">
+                            <i class="bi bi-envelope-check me-1"></i>{{ __('estimates.save_and_send') }}
+                        </button>
+                    @else
+                        <button type="button" class="btn btn-outline-success"
+                                wire:click="guardar(false, true)" wire:loading.attr="disabled">
+                            <i class="bi bi-save me-1"></i>{{ __('estimates.save_no_send') }}
+                        </button>
+
+                        <button type="button" class="btn btn-success"
+                                wire:click="guardar(true, true)" wire:loading.attr="disabled">
+                            <i class="bi bi-envelope-check me-1"></i>{{ __('estimates.save_and_send') }}
+                        </button>
+                    @endif
                 @endif
+
             </div>
 
         </div>
+
 
     </form>
 
@@ -1964,11 +2149,23 @@
                              | sepa que esa unidad ya esta prometida y decida.
                              */
                             $yaCotizada = $this->cotizadasEnOtros[$unidad->id] ?? null;
+
+                            /*
+                             | YA FACTURADA. Esto SÍ bloquea.
+                             |
+                             | Un presupuesto es una oferta que puede no
+                             | aceptarse nunca; una factura es dinero que se
+                             | está cobrando. Ofrecer esa unidad otra vez es
+                             | prometer algo que ya tiene dueño.
+                             */
+                            $yaFacturada = $this->comprometidasEnFacturas[$unidad->id] ?? null;
+
+                            $bloqueada = $usadaEnLinea || $yaFacturada;
                         @endphp
 
                         <button type="button" class="bu-item"
                                 wire:key="unidad-{{ $unidad->id }}"
-                                @disabled($usadaEnLinea)
+                                @disabled($bloqueada)
                                 wire:click="seleccionarContenedor({{ $unidad->id }})">
 
                             <div class="bu-item-datos">
@@ -1999,6 +2196,18 @@
                                     saber que ademas esta ofrecida a otro cliente
                                     sigue siendo util.
                                 --}}
+                                @if ($yaFacturada)
+                                    <span class="bu-aviso-usada">
+                                        <i class="bi bi-lock-fill me-1"></i>
+                                        Ya facturada en la {{ $yaFacturada->invoice_number }}
+                                        @if ((float) $yaFacturada->balance_due > 0)
+                                            · pendiente de cobro
+                                        @else
+                                            · cobrada
+                                        @endif
+                                    </span>
+                                @endif
+
                                 @if ($yaCotizada)
                                     <span class="bu-aviso-cotizada">
                                         <i class="bi bi-clock-history me-1"></i>{{ __('estimates.already_quoted', [

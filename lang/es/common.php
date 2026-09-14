@@ -88,4 +88,8 @@ return [
     'spanish'         => 'Español',
     'english'         => 'Inglés',
 
+
+    'fix'         => 'Corregir',
+    'view_record' => 'Ver ficha',
+
 ];

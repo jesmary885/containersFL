@@ -96,6 +96,15 @@ class Index extends Component
     /** Filtro de un clic desde el contador de "por vencer". */
     public bool $soloPorVencer = false;
 
+    /**
+     * Filtrar por las facturas emitidas este mes.
+     *
+     * Es el atajo del contador "Facturado del mes". Un número que no se
+     * puede pulsar obliga a traducirlo a mano en los filtros de al lado:
+     * un clic contra tres.
+     */
+    public bool $soloDelMes = false;
+
     #[Url(as: 'orden', except: 'issue_date')]
     public string $ordenarPor = 'issue_date';
 
@@ -167,6 +176,33 @@ class Index extends Component
 
         $this->soloPendientes = false;
         $this->soloPorVencer  = false;
+        $this->soloDelMes     = false;
+
+        $this->resetPage();
+    }
+
+    /**
+     * Atajo del contador "Facturado del mes".
+     *
+     * Enseña TODAS las emitidas este mes, cobradas y sin cobrar, porque
+     * eso es exactamente lo que suma el número del contador. Si filtrara
+     * solo las cobradas, el total de la tabla no cuadraría con el número
+     * que se acaba de pulsar, y eso hace dudar de los dos.
+     *
+     * Para ver solo las cobradas está el filtro de estado, que queda
+     * disponible encima de este.
+     *
+     * Vuelve a pulsarse para quitarlo.
+     */
+    public function verDelMes(): void
+    {
+        $this->soloDelMes = ! $this->soloDelMes;
+
+        // Los otros dos atajos se apagan: son recortes distintos y
+        // cruzarlos deja una tabla que no corresponde a ningún contador.
+        $this->soloPorVencer  = false;
+        $this->soloPendientes = false;
+        $this->estado         = '';
 
         $this->resetPage();
     }
@@ -235,6 +271,20 @@ class Index extends Component
                 ->where('balance_due', '>', 0)
                 ->whereDate('due_date', '>=', now()->toDateString())
                 ->whereDate('due_date', '<=', now()->addDays(self::DIAS_DE_AVISO)->toDateString()))
+
+            /*
+             | Las emitidas este mes.
+             |
+             | Por issue_date y no por created_at: lo que cuenta es la
+             | fecha del documento, que es la que ve el cliente y la que
+             | mira el contador. Una factura cargada hoy con fecha del mes
+             | pasado pertenece al mes pasado.
+             */
+            ->when($this->soloDelMes, fn ($q) => $q
+                ->whereBetween('issue_date', [
+                    now()->startOfMonth()->toDateString(),
+                    now()->endOfMonth()->toDateString(),
+                ]))
             ->orderBy($columna, $sentido)
             ->orderBy('id', 'desc')   // desempate estable
             ->paginate($this->porPagina);

@@ -70,6 +70,13 @@ class Form extends Component
 {
     use AuthorizesAccess;
 
+    /*
+     | Detecta las unidades que ya estan en una factura viva. Ver la
+     | explicacion completa dentro del trait: resuelve el caso de cotizar
+     | un contenedor que ya estaba facturado y a punto de cobrarse.
+     */
+    use \App\Livewire\Concerns\DetectaUnidadesComprometidas;
+
     /* =====================================================================
      | LOS PERMISOS
      |
@@ -288,7 +295,29 @@ class Form extends Component
 
     public int $paso = 1;
 
-    public const PASOS = 2;
+    /**
+     * AHORA SON TRES PASOS, COMO EN FACTURACION.
+     *
+     * Antes eran dos y el tercero era un enlace que sacaba de este
+     * formulario y llevaba a la ficha (show.blade.php). Eso obligaba a
+     * mirar el documento en una pantalla y corregirlo en otra: se veia
+     * un precio raro, habia que volver atras, cambiarlo, y procesar otra
+     * vez para volver a mirar.
+     *
+     * El paso 3 ahora vive AQUI DENTRO: la vista previa es el documento,
+     * y debajo salen los botones de imprimir, corregir y enviar sin
+     * cambiar de ventana.
+     */
+    public const PASOS = 3;
+
+    /**
+     * Si ya se guardo en esta misma pantalla.
+     *
+     * Es lo que cambia los botones del paso 3: antes de guardar se ven
+     * "Guardar sin enviar" y "Guardar y enviar"; despues, "Imprimir",
+     * "Corregir" y "Ver ficha".
+     */
+    public bool $guardada = false;
 
     /**
      * ¿Se puede saltar directo al paso 3 (la ficha)?
@@ -1290,6 +1319,27 @@ class Form extends Component
     public function seleccionarContenedor(int $contenedorId): void
     {
         if ($this->lineaEditando === null) {
+            return;
+        }
+
+        /* -----------------------------------------------------------------
+         | EL CANDADO DE VERDAD
+         |
+         | El botón deshabilitado del buscador es una ayuda visual, no una
+         | protección: se puede saltar. Y entre que se abrió el buscador y
+         | se pulsó, otra persona pudo facturar esa misma unidad.
+         |
+         | Por eso se vuelve a comprobar aquí, que es donde el dato entra
+         | de verdad al documento.
+         * -------------------------------------------------------------- */
+        if ($factura = ($this->comprometidasEnFacturas[$contenedorId] ?? null)) {
+            $this->cerrarBuscadorContenedor();
+
+            session()->flash('warning',
+                'La unidad ya está facturada en la '.$factura->invoice_number
+                .'. Si volvió a la yarda, regístrelo con el botón Mover de su ficha '
+                .'y vuelva a intentarlo.');
+
             return;
         }
 
@@ -2329,7 +2379,22 @@ class Form extends Component
             'Presupuesto '.$presupuesto->estimate_number.$queHizo
             .($avisoDireccion ? ' '.$avisoDireccion : ''));
 
-        return redirect()->route('comercial.presupuestos.show', $presupuesto);
+        /* -----------------------------------------------------------------
+         | NO SE REDIRIGE: SE QUEDA AQUI
+         |
+         | Antes esto saltaba a la ficha. El problema es que la ficha es
+         | otra pantalla: para corregir una coma habia que volver, y para
+         | volver a verla habia que procesar de nuevo.
+         |
+         | Es exactamente el cambio que ya se hizo en facturacion. Ahora
+         | el documento que se esta mirando en el paso 3 ES el documento
+         | guardado, y las acciones salen debajo.
+         * -------------------------------------------------------------- */
+        $this->estimateId = $presupuesto->id;
+        $this->numero     = $presupuesto->estimate_number;
+        $this->guardada   = true;
+
+        return null;
     }
 
     /**

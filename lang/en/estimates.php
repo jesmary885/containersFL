@@ -252,4 +252,15 @@ return [
     'no_units'           => 'No units available right now.',
     'no_units_match'     => 'No unit matches ":term".',
 
+
+    /* =====================================================================
+     | STEP 3 · REVIEW AND SEND
+     * ================================================================== */
+
+    'number_on_save'  => 'assigned on save',
+    'step_n_of'       => 'Step :paso of :total',
+    'card_needs_form' => 'Not charged until the signed authorization form is on file.',
+    'save_no_send'    => 'Save without sending',
+    'save_and_send'   => 'Save and send by email',
+
 ];

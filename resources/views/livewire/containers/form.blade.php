@@ -76,25 +76,46 @@
                     <div class="card-body">
                         <div class="row g-3">
 
+                            {{--
+                                maxlength + validación en vivo.
+
+                                El maxlength impide teclear de más: el error
+                                del máximo deja de poder ocurrir por la vía
+                                normal. Y con .live la revisión corre
+                                mientras se escribe, así que si el valor
+                                llega pegado desde el portapapeles el aviso
+                                rojo desaparece en cuanto se corrige.
+
+                                Antes iba con .blur y sin maxlength: el error
+                                salía al guardar y se quedaba fijo mientras
+                                se borraban letras, porque Livewire no vuelve
+                                a validar hasta el siguiente guardado.
+                            --}}
                             <div class="col-12 col-md-5">
                                 <label class="form-label">Código de la unidad</label>
                                 <input type="text"
+                                       maxlength="15"
                                        class="form-control text-uppercase font-monospace @error('container_number') is-invalid @enderror"
                                        placeholder="MSCU1234567"
-                                       wire:model.blur="container_number">
+                                       wire:model.live.debounce.500ms="container_number">
+                                <div class="form-text">
+                                    Número ISO: 4 letras y 7 dígitos. Máximo 15 caracteres.
+                                </div>
                                 @error('container_number')
-                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    <div class="invalid-feedback d-block">{{ $message }}</div>
                                 @enderror
                             </div>
 
                             <div class="col-12 col-md-4">
                                 <label class="form-label">Código interno</label>
                                 <input type="text"
+                                       maxlength="20"
                                        class="form-control @error('internal_code') is-invalid @enderror"
                                        placeholder="Unit #3"
-                                       wire:model.blur="internal_code">
+                                       wire:model.live.debounce.500ms="internal_code">
+                                <div class="form-text">Máximo 20 caracteres.</div>
                                 @error('internal_code')
-                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    <div class="invalid-feedback d-block">{{ $message }}</div>
                                 @enderror
                             </div>
 
