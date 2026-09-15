@@ -35,6 +35,7 @@ class DatabaseSeeder extends Seeder
             ContainerSeeder::class,
             ContainerPriceSeeder::class,
             NotificationRuleSeeder::class,
+            EmployeeSeeder::class,
         ]);
     }
 }

@@ -86,6 +86,111 @@
                 </div>
             </div>
 
+            {{--
+                ═══════════════════════════════════════════════════════════
+                LA AUTORIZACIÓN DE LA TARJETA
+                ═══════════════════════════════════════════════════════════
+
+                Solo sale si este cobro fue con tarjeta.
+
+                ── POR QUÉ AQUÍ Y NO EN LA FICHA DEL CLIENTE ──
+
+                Porque la autorización es de LA OPERACIÓN, no del cliente.
+                El papel que firma autoriza un cargo concreto por un
+                importe concreto, y se agota al usarse.
+
+                El sitio donde alguien la va a buscar es el pago que la
+                usó, y casi siempre por un motivo: el banco pidió el
+                respaldo de ese cargo. Por eso el botón de descarga está
+                al lado del importe que se cobró.
+            --}}
+            @if ($payment->cardAuth)
+                @php $auth = $payment->cardAuth; @endphp
+
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-credit-card me-1"></i>
+                            Autorización de la tarjeta
+                        </h6>
+
+                        @if ($auth->signatureDocument)
+                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                    wire:click="descargarAutorizacion">
+                                <i class="bi bi-download me-1"></i> Descargar el formulario
+                            </button>
+                        @else
+                            {{--
+                                Sin el papel no hay respaldo. Se dice en
+                                rojo y no en gris: si el cliente reclama
+                                este cargo al banco, no hay con qué
+                                defenderlo (RB-011).
+                            --}}
+                            <span class="badge text-bg-danger">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                Sin formulario adjunto
+                            </span>
+                        @endif
+                    </div>
+
+                    <div class="card-body">
+                        <dl class="row mb-0 small">
+
+                            <dt class="col-5">Titular</dt>
+                            <dd class="col-7">{{ $auth->cardholder_name }}</dd>
+
+                            <dt class="col-5">Tarjeta</dt>
+                            <dd class="col-7">{{ $auth->masked }}</dd>
+
+                            <dt class="col-5">Monto autorizado</dt>
+                            <dd class="col-7">
+                                @if ($auth->authorized_amount)
+                                    ${{ number_format((float) $auth->authorized_amount, 2) }}
+
+                                    {{--
+                                        La comparación que importa: si se
+                                        cobró más de lo autorizado, el papel
+                                        firmado deja de respaldar el cargo.
+                                    --}}
+                                    @if ((float) $payment->amount > (float) $auth->authorized_amount + 0.01)
+                                        <div class="text-danger">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                            Se cobraron
+                                            ${{ number_format((float) $payment->amount, 2) }}:
+                                            más de lo autorizado.
+                                        </div>
+                                    @endif
+                                @else
+                                    <span class="text-secondary">sin tope</span>
+                                @endif
+                            </dd>
+
+                            <dt class="col-5">Firmada el</dt>
+                            <dd class="col-7">
+                                {{ $auth->signed_at?->format('d/m/Y') ?? '—' }}
+                            </dd>
+
+                            <dt class="col-5">Tipo</dt>
+                            <dd class="col-7">
+                                {{ $auth->authorization_type === 'single_use'
+                                    ? 'De un solo uso'
+                                    : 'Recurrente' }}
+                            </dd>
+
+                            <dt class="col-5">Sunbiz</dt>
+                            <dd class="col-7">
+                                @if ($auth->sunbiz_verified)
+                                    <span class="badge text-bg-success">Verificada</span>
+                                @else
+                                    <span class="badge text-bg-secondary">Sin verificar</span>
+                                @endif
+                            </dd>
+
+                        </dl>
+                    </div>
+                </div>
+            @endif
+
             {{-- FACTURAS DONDE SE APLICÓ --}}
             <div class="card mb-3">
                 <div class="card-header"><h6 class="card-title mb-0">Aplicado a</h6></div>

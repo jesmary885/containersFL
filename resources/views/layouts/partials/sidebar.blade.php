@@ -128,6 +128,32 @@
                                 </li>
                             @endcan
 
+                            {{--
+                                VENTAS
+
+                                Volvió al menú, pero no es lo que era.
+
+                                Antes se quitó porque ofrecía una pantalla
+                                en construcción para algo que ya está
+                                resuelto en Facturación: la factura ES la
+                                venta.
+
+                                Ahora existe y es otra cosa: la pantalla de
+                                RENTABILIDAD. No se llena. Lee las facturas
+                                que ya existen, les junta el costo congelado
+                                de cada unidad y la comisión, y contesta la
+                                pregunta que hoy no tiene respuesta en
+                                ningún sitio: cuánto ganamos de verdad.
+                            --}}
+                            @can('sales.view')
+                                <li class="nav-item">
+                                    <a href="{{ route('comercial.ventas.index') }}"
+                                       class="nav-link {{ request()->routeIs('comercial.ventas.*') ? 'active' : '' }}">
+                                        <i class="nav-icon bi bi-graph-up-arrow"></i><p>{{ __('nav.sales') }}</p>
+                                    </a>
+                                </li>
+                            @endcan
+
                         </ul>
                     </li>
                 @endcanany

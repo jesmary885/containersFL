@@ -298,10 +298,28 @@
                                     @endif
                                 </div>
 
-                                <button type="button" class="btn btn-sm btn-outline-secondary"
-                                        wire:click="quitarCliente">
-                                    {{ __('common.change') }}
-                                </button>
+                                <div class="d-flex gap-2">
+                                    {{--
+                                        EL OJITO.
+
+                                        Abre la ficha del cliente encima del
+                                        documento, de solo lectura. Antes
+                                        había que irse al módulo de Clientes
+                                        a mirar una nota, y volver
+                                        significaba empezar el presupuesto
+                                        otra vez.
+                                    --}}
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                            wire:click="abrirFichaCliente"
+                                            title="Ver la ficha del cliente sin salir de aquí">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            wire:click="quitarCliente">
+                                        {{ __('common.change') }}
+                                    </button>
+                                </div>
                             </div>
                         @else
                             <label class="form-label">
@@ -2262,5 +2280,8 @@
             </div>
         </div>
     @endif
+
+
+    @include('livewire.partials.ficha-cliente')
 
 </div>

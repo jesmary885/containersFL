@@ -17,7 +17,34 @@
 <div class="vacio">
     <i class="bi bi-receipt"></i>
 
-    @if ($buscar || $estado || $tipo)
+    {{--
+        EL CASO QUE MÁS CONFUNDE VA PRIMERO.
+
+        Se busca un cliente, no sale nada, y el motivo real es que la
+        casilla "solo con saldo" —que viene marcada de fábrica— está
+        escondiendo sus facturas ya pagadas.
+
+        Ahora esa casilla se apaga sola al buscar, pero si alguien la
+        vuelve a marcar a mano, aquí se le dice por qué su búsqueda no
+        devuelve nada. Un listado vacío sin explicación es lo que hace
+        pensar que el sistema perdió la factura.
+    --}}
+    @if ($buscar && $soloPendientes)
+
+        No hay facturas <strong>con saldo</strong> que coincidan con
+        «{{ $buscar }}».
+        <div class="small text-secondary mt-1">
+            Puede que las suyas ya estén cobradas: el filtro «solo con saldo»
+            las esconde.
+        </div>
+        <div class="mt-2">
+            <button class="btn btn-sm btn-primary"
+                    wire:click="$set('soloPendientes', false)">
+                Buscar también en las cobradas
+            </button>
+        </div>
+
+    @elseif ($buscar || $estado || $tipo)
 
         No hay facturas que coincidan con el filtro.
         <div class="mt-2">

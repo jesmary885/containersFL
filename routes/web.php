@@ -166,7 +166,18 @@ Route::middleware('auth')->group(function () {
             ->name('comercial.presupuestos.show');
     });
 
-    Route::get('/comercial/ventas', Placeholder::class)
+    /* ---------------------------------------------------------------
+     | VENTAS
+     |
+     | Ya no es un placeholder. Es la pantalla de RENTABILIDAD: no se
+     | llena, lee las facturas que ya existen y les junta el costo de las
+     | unidades y la comisión.
+     |
+     | No hay ruta de crear ni de editar a propósito. En este sistema la
+     | factura ES la venta; una pantalla para teclearla otra vez sería
+     | capturar dos veces lo mismo.
+     * ------------------------------------------------------------ */
+    Route::get('/comercial/ventas', \App\Livewire\Sales\Index::class)
         ->middleware('can:sales.view')
         ->name('comercial.ventas.index');
 

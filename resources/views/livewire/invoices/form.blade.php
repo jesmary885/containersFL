@@ -284,10 +284,27 @@
                                 </div>
                             </div>
 
-                            <button type="button" class="btn btn-sm btn-outline-secondary"
-                                    wire:click="quitarCliente">
-                                <i class="bi bi-x-lg me-1"></i> Cambiar
+                            <div class="d-flex gap-2">
+                            {{--
+                                EL OJITO.
+
+                                Abre la ficha del cliente encima del
+                                documento, de solo lectura. Antes había que
+                                irse al módulo de Clientes a mirar una nota
+                                y volver significaba empezar el documento
+                                otra vez.
+                            --}}
+                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                    wire:click="abrirFichaCliente"
+                                    title="Ver la ficha del cliente sin salir de aquí">
+                                <i class="bi bi-eye"></i>
                             </button>
+
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        wire:click="quitarCliente">
+                                    <i class="bi bi-x-lg me-1"></i> Cambiar
+                                </button>
+                            </div>
                         </div>
 
                     @endif
@@ -1582,19 +1599,59 @@
                             guardada: repetir la palabra guardar hace
                             dudar de si se va a duplicar algo.
                         --}}
-                        <button type="button" class="btn btn-success"
-                                wire:click="guardar(true)" wire:loading.attr="disabled">
-                            <i class="bi bi-envelope-check me-1"></i> Enviar por correo
-                        </button>
+                        {{--
+                            ── EL BOTÓN SE APAGA DESPUÉS DE ENVIAR ──
+
+                            Antes seguía diciendo "Enviar por correo" para
+                            siempre. Cuando el envío automático esté
+                            conectado, eso serían diez correos idénticos al
+                            mismo cliente sin que nadie se entere.
+
+                            Ahora, una vez enviada, dice cuándo salió y el
+                            botón pasa a "Reenviar", que pide confirmación.
+                            Reenviar es legítimo —el cliente perdió el
+                            correo, cambió de contacto— pero tiene que ser
+                            una decisión, no un clic de más.
+                        --}}
+                        @if ($yaEnviada)
+                            <span class="badge text-bg-success align-self-center px-3 py-2">
+                                <i class="bi bi-envelope-check me-1"></i>
+                                Enviada
+                                @if ($enviadaEl)
+                                    el {{ $enviadaEl }}
+                                @endif
+                            </span>
+
+                            <button type="button" class="btn btn-outline-success"
+                                    wire:click="guardar(true)"
+                                    wire:confirm="Esta factura ya se envió{{ $enviadaEl ? ' el '.$enviadaEl : '' }}. ¿Volver a enviarla al cliente?"
+                                    wire:loading.attr="disabled">
+                                <i class="bi bi-arrow-repeat me-1"></i> Reenviar
+                            </button>
+                        @else
+                            <button type="button" class="btn btn-success"
+                                    wire:click="guardar(true)" wire:loading.attr="disabled">
+                                <i class="bi bi-envelope-check me-1"></i> Enviar por correo
+                            </button>
+                        @endif
                     @else
                         <button type="submit" class="btn btn-outline-success" wire:loading.attr="disabled">
                             <i class="bi bi-save me-1"></i> Guardar sin enviar
                         </button>
 
-                        <button type="button" class="btn btn-success"
-                                wire:click="guardar(true)" wire:loading.attr="disabled">
-                            <i class="bi bi-envelope-check me-1"></i> Guardar y enviar por correo
-                        </button>
+                        @if ($yaEnviada)
+                            <button type="button" class="btn btn-outline-success"
+                                    wire:click="guardar(true)"
+                                    wire:confirm="Esta factura ya se envió{{ $enviadaEl ? ' el '.$enviadaEl : '' }}. ¿Volver a enviarla al cliente?"
+                                    wire:loading.attr="disabled">
+                                <i class="bi bi-arrow-repeat me-1"></i> Guardar y reenviar
+                            </button>
+                        @else
+                            <button type="button" class="btn btn-success"
+                                    wire:click="guardar(true)" wire:loading.attr="disabled">
+                                <i class="bi bi-envelope-check me-1"></i> Guardar y enviar por correo
+                            </button>
+                        @endif
                     @endif
                 @endif
 
@@ -2221,5 +2278,8 @@
             </div>
         </div>
     @endif
+
+
+    @include('livewire.partials.ficha-cliente')
 
 </div>

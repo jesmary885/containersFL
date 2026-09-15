@@ -31,6 +31,59 @@ use App\Models\InvoiceItem;
 class InvoiceItemObserver
 {
     /**
+     * CONGELA EL COSTO DE LA UNIDAD ANTES DE GUARDAR.
+     *
+     * ── POR QUE AQUI Y NO EN EL FORMULARIO ──
+     *
+     * Porque un renglon de factura puede nacer de tres sitios: el
+     * formulario, la conversion de un presupuesto, o una duplicacion.
+     * Si el costo se copiara en el formulario, las facturas que vienen
+     * de un presupuesto —que son casi todas— saldrian sin costo.
+     *
+     * El observer se dispara pase por donde pase. Un solo sitio.
+     *
+     * ── POR QUE SE RECALCULA MIENTRAS SE PUEDE EDITAR ──
+     *
+     * Si se cambia el contenedor de un renglon en borrador, el costo
+     * tiene que seguirlo. En cuanto la factura queda bloqueada —pagada
+     * o anulada— ya no se guardan renglones, asi que el numero se
+     * congela solo. No hace falta ninguna bandera.
+     */
+    public function saving(InvoiceItem $item): void
+    {
+        /*
+         | Sin contenedor no hay costo de unidad.
+         |
+         | Una entrega, un cargo por mora o un almacenaje facturan algo
+         | que no es una unidad del inventario. Se deja en null, que es
+         | lo honesto: es distinto de cero. Un cero se leeria como
+         | margen del 100%.
+         */
+        if (! $item->container_id) {
+            $item->unit_cost = null;
+
+            return;
+        }
+
+        $unidad = \App\Models\Container::withoutGlobalScope('company')
+            ->find($item->container_id);
+
+        if (! $unidad) {
+            return;
+        }
+
+        /*
+         | total_cost = adquisicion + recogida + reacondicionamiento.
+         |
+         | Es el costo REAL puesto en yarda, el mismo que enseña la
+         | ficha del contenedor. Aqui se copia; a partir de este
+         | momento, lo que le pase al contenedor ya no cambia el
+         | resultado de esta venta.
+         */
+        $item->unit_cost = round((float) $unidad->total_cost, 2);
+    }
+
+    /**
      * Se dispara al crear una línea Y al modificarla.
      *
      * Se usa 'saved' en vez de 'created' + 'updated' porque los dos casos

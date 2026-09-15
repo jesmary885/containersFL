@@ -64,6 +64,23 @@
                 <div class="card mb-3 seccion seccion-cliente">
                     <div class="card-header">
                         <h6 class="seccion-titulo">
+                            @php
+                                /*
+                                    LA NUMERACIÓN SE CALCULA, NO SE ESCRIBE.
+
+                                    El bloque de la autorización solo existe
+                                    si se cobra con tarjeta. Con los números
+                                    escritos a mano, un pago en efectivo
+                                    enseñaba 1, 2 y 4: faltaba el 3 y parecía
+                                    que la pantalla se había roto.
+
+                                    Ahora el último bloque es el 3 o el 4
+                                    según haga falta la autorización.
+                                */
+                                $conTarjeta = $method === \App\Enums\PaymentMethod::CreditCard->value;
+                                $nAplicacion = $conTarjeta ? 4 : 3;
+                            @endphp
+
                             <span class="paso-num">1</span>
                             <i class="bi bi-person-vcard"></i>
                             <span>Cliente</span>
@@ -244,26 +261,16 @@
                             </div>
 
                             {{--
-                                ═══════════════════════════════════════════
                                 LA FACTURA NO TRAE EL 3.5%
-                                ═══════════════════════════════════════════
 
-                                El caso: se emitió la factura sin saber cómo
-                                iba a pagar el cliente, así que salió sin
-                                recargo. Después llama y dice que paga con
-                                tarjeta.
-
-                                Antes esto no tenía salida. O se cobraba lo
-                                que dice la factura y el 3.5% lo ponía la
-                                empresa, o se cobraba de más de lo que dice
-                                el documento, que es justo lo que provoca un
-                                chargeback.
+                                Se emitió sin saber cómo iba a pagar el
+                                cliente, así que salió sin recargo. Después
+                                llama y dice que paga con tarjeta.
 
                                 El recargo va en la FACTURA, no en el pago:
                                 es el documento que el cliente recibe y el
                                 importe que autoriza al firmar. Por eso aquí
-                                no se ajusta nada en silencio — se enseñan
-                                los números y se ofrece corregir.
+                                no se ajusta nada en silencio.
                             --}}
                             @if (count($this->facturasSinRecargo) > 0)
                                 <div class="alert alert-danger py-2 small">
@@ -317,14 +324,14 @@
 
                                     <div class="mt-2">
                                         <strong>Después hay que reenviarle la factura al cliente</strong>,
-                                        y el formulario de autorización tiene que firmarse por el
-                                        importe nuevo. Si el papel dice un monto y en la tarjeta se
-                                        pasa otro, el papel deja de proteger a la empresa.
+                                        y el formulario de autorización tiene que firmarse por el importe
+                                        nuevo. Si el papel dice un monto y en la tarjeta se pasa otro, el
+                                        papel deja de proteger a la empresa.
                                     </div>
 
                                     <div class="mt-1 text-secondary">
-                                        Si el cliente no acepta el recargo, cámbiele la forma de
-                                        pago: en efectivo, cheque, Zelle o transferencia no se cobra.
+                                        Si el cliente no acepta el recargo, cámbiele la forma de pago: en
+                                        efectivo, cheque, Zelle o transferencia no se cobra.
                                     </div>
 
                                 </div>
@@ -489,10 +496,79 @@
                 <div class="card mb-3 seccion seccion-lineas">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h6 class="seccion-titulo mb-0">
-                            <span class="paso-num">4</span>
+                            <span class="paso-num">{{ $nAplicacion }}</span>
                             <i class="bi bi-list-check"></i>
                             <span>Aplicación a facturas</span>
                         </h6>
+
+                    {{--
+                        ═══════════════════════════════════════════════════
+                        EL SALDO A FAVOR DEL CLIENTE
+                        ═══════════════════════════════════════════════════
+
+                        Aparece cuando el cliente tiene dinero entregado
+                        que todavía no se aplicó a ninguna factura: un
+                        anticipo o el depósito de una renta.
+
+                        ── POR QUÉ HACÍA FALTA ──
+
+                        Se registraba el anticipo, se emitía la renta, y al
+                        venir a cobrar el anticipo no salía por ningún
+                        lado. El dinero estaba guardado, pero esta pantalla
+                        no lo mencionaba.
+
+                        El motivo: aplicar un anticipo NO es registrar un
+                        pago nuevo. El dinero ya entró; lo que falta es
+                        repartirlo. Y eso solo se podía hacer desde la
+                        ficha de aquel pago, a la que nadie llega si no
+                        sabe que existe.
+                    --}}
+                    @if ($customer_id && $this->saldoAFavor > 0.001)
+                        <div class="alert alert-info py-2 small mb-0 rounded-0">
+
+                            <div class="mb-2">
+                                <i class="bi bi-piggy-bank me-1"></i>
+                                Este cliente tiene
+                                <strong>${{ number_format($this->saldoAFavor, 2) }} a favor</strong>,
+                                de dinero que ya entregó y todavía no se aplicó a ninguna factura.
+                            </div>
+
+                            <ul class="mb-2 ps-3">
+                                @foreach ($this->pagosAFavor as $aFavor)
+                                    <li wire:key="afavor-{{ $aFavor->id }}">
+                                        {{ $aFavor->payment_number }}
+                                        · {{ $aFavor->received_at?->format('d/m/Y') }}
+                                        · {{ $aFavor->method?->label() }}
+                                        · <strong>${{ number_format((float) $aFavor->unapplied_amount, 2) }}</strong>
+                                        sin aplicar
+                                        @if ($aFavor->is_deposit)
+                                            <span class="badge text-bg-secondary">depósito</span>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+
+                            @if ($this->facturasPendientes->isNotEmpty())
+                                <button type="button" class="btn btn-sm btn-info"
+                                        wire:click="aplicarSaldoAFavor"
+                                        wire:loading.attr="disabled">
+                                    <i class="bi bi-arrow-down-circle me-1"></i>
+                                    Usar el saldo a favor en estas facturas
+                                </button>
+
+                                <div class="mt-2 text-secondary">
+                                    Va de la factura más vieja a la más nueva. No registra un pago
+                                    nuevo: reparte el dinero que ya estaba guardado, así que el
+                                    monto de arriba no cambia.
+                                </div>
+                            @else
+                                <div class="text-secondary">
+                                    No hay facturas con saldo donde aplicarlo.
+                                </div>
+                            @endif
+
+                        </div>
+                    @endif
 
                         @if ($customer_id && $this->facturasPendientes->isNotEmpty())
                             <div class="d-flex gap-2">

@@ -542,6 +542,101 @@ class Invoice extends Model
     }
 
     /* =====================================================================
+     | LA RENTABILIDAD
+     |
+     | ── LA REGLA QUE ORDENA TODO ESTO ──
+     |
+     | Solo los renglones de VENTA tienen margen.
+     |
+     | En una renta el contenedor vuelve. Su costo no se consume: la unidad
+     | sigue siendo un activo de la empresa. Si se restara el costo del
+     | contenedor a la mensualidad, el primer mes daria una perdida enorme
+     | y los siguientes un beneficio del 100%. Los dos numeros serian
+     | falsos.
+     |
+     | Para las rentas la pregunta correcta es otra —cuanto de la inversion
+     | se ha recuperado ya— y se contesta aparte.
+     |
+     | Lo mismo con las entregas: su costo es lo que se le paga al chofer,
+     | y eso todavia no se registra en ningun sitio. Se deja fuera y se
+     | dice, en vez de fingir que el transporte es margen puro.
+     * ================================================================== */
+
+    /** Los renglones que son venta de contenedor. */
+    public function lineasDeVenta()
+    {
+        return $this->items->filter(fn ($linea) => $linea->product?->isSale());
+    }
+
+    /** Lo facturado por venta de contenedores, sin impuesto ni recargo. */
+    public function getIngresoPorVentaAttribute(): float
+    {
+        return round((float) $this->lineasDeVenta()->sum('amount'), 2);
+    }
+
+    /**
+     * Lo que costaron esas unidades.
+     *
+     * null si algun renglon de venta no tiene el costo congelado: son las
+     * facturas emitidas antes de que existiera la columna. De esas no
+     * sabemos el costo, y el sistema tiene que poder decir "no lo se" en
+     * vez de devolver un cero que se leeria como margen del 100%.
+     */
+    public function getCostoDeVentaAttribute(): ?float
+    {
+        $lineas = $this->lineasDeVenta();
+
+        if ($lineas->isEmpty()) {
+            return null;
+        }
+
+        if ($lineas->contains(fn ($l) => $l->unit_cost === null)) {
+            return null;
+        }
+
+        return round((float) $lineas->sum('unit_cost'), 2);
+    }
+
+    /** Lo que se vendio menos lo que costo. Sin descontar la comision. */
+    public function getMargenBrutoAttribute(): ?float
+    {
+        $costo = $this->costo_de_venta;
+
+        return $costo === null ? null : round($this->ingreso_por_venta - $costo, 2);
+    }
+
+    /**
+     * El margen despues de la comision del vendedor.
+     *
+     * La comision es un gasto directo de esta venta y ya esta congelada en
+     * el documento, asi que se puede restar hoy.
+     *
+     * NO incluye: gastos generales ni el pago al chofer. Cuando esos dos
+     * modulos existan, este numero bajara. Conviene decirlo en pantalla
+     * para que nadie lo lea como el resultado final.
+     */
+    public function getMargenNetoAttribute(): ?float
+    {
+        $bruto = $this->margen_bruto;
+
+        return $bruto === null
+            ? null
+            : round($bruto - (float) $this->commission_amount, 2);
+    }
+
+    /** El margen neto como porcentaje de lo vendido. */
+    public function getMargenPorcentajeAttribute(): ?float
+    {
+        $neto = $this->margen_neto;
+
+        if ($neto === null || $this->ingreso_por_venta <= 0.01) {
+            return null;
+        }
+
+        return round($neto / $this->ingreso_por_venta * 100, 1);
+    }
+
+    /* =====================================================================
      | EL EFECTO SOBRE EL INVENTARIO
      * ================================================================== */
 
