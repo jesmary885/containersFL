@@ -1788,10 +1788,32 @@
                                             </select>
 
                                             @if (($borrador['use_type'] ?? null) === 'export')
+                                                {{--
+                                                    ── QUÉ DECÍA ANTES ──
+
+                                                    "Exportación: no lleva sales tax
+                                                    y necesita certificado CSC."
+
+                                                    La segunda mitad es correcta y está
+                                                    respaldada por el certificado real
+                                                    que mandó el cliente.
+
+                                                    La primera no la dijo nadie en
+                                                    ninguna de las cinco fuentes del
+                                                    levantamiento. Se quitó hasta que el
+                                                    contador la confirme. Un letrero que
+                                                    afirma algo fiscal que nadie autorizó
+                                                    termina en una factura emitida sin
+                                                    el 7%, y ese dinero se le sigue
+                                                    debiendo al estado a fin de año.
+                                                --}}
                                                 <div class="alert alert-info py-2 small mt-2 mb-0">
                                                     <i class="bi bi-globe-americas me-1"></i>
-                                                    Exportación: no lleva sales tax y necesita
-                                                    certificado CSC.
+                                                    Exportación: el certificado CSC va
+                                                    incluido en el precio y hace falta
+                                                    antes de facturar. El impuesto se rige
+                                                    por el certificado del cliente, como
+                                                    en cualquier otra venta.
                                                 </div>
                                             @endif
                                         </div>
@@ -2166,6 +2188,23 @@
                         No salen las compradas que siguen en el depósito del proveedor:
                         no se factura lo que no se ha retirado (RB-019).
                     </p>
+
+                    {{--
+                        El aviso de exportación.
+
+                        Antes no había ninguno: el letrero del renglón
+                        decía que hacía falta certificado CSC y aquí
+                        salían todas las unidades por igual, AS-IS
+                        incluidas.
+                    --}}
+                    @if (($borrador['use_type'] ?? null) === 'export')
+                        <p class="bu-ayuda">
+                            <i class="bi bi-globe-americas me-1"></i>
+                            Este renglón es de <strong>exportación</strong>: solo se pueden
+                            elegir las unidades aptas y con el certificado CSC vigente.
+                            Las demás salen en gris con el motivo.
+                        </p>
+                    @endif
                 </div>
 
                 <div class="bu-lista">
@@ -2192,7 +2231,22 @@
                              */
                             $yaFacturada = $this->comprometidasEnFacturas[$unidad->id] ?? null;
 
-                            $bloqueada = $usadaEnLinea || $yaFacturada;
+                            /*
+                             | NO CALIFICA PARA EXPORTAR. Esto SÍ bloquea.
+                             |
+                             | Solo tiene valor cuando el renglón es de
+                             | exportación; en cualquier otro caso la
+                             | propiedad viene vacía y esto es null.
+                             |
+                             | Se bloquea en vez de esconderse: quien
+                             | busca una unidad y no la encuentra cree que
+                             | el sistema la perdió. Viéndola en gris con
+                             | el motivo al lado sabe que existe y qué le
+                             | falta.
+                             */
+                            $noExportable = $this->motivosNoExportable[$unidad->id] ?? null;
+
+                            $bloqueada = $usadaEnLinea || $yaFacturada || $noExportable;
                         @endphp
 
                         <button type="button" class="bu-item"
@@ -2226,6 +2280,13 @@
                                         @else
                                             · cobrada
                                         @endif
+                                    </span>
+                                @endif
+
+                                @if ($noExportable)
+                                    <span class="bu-aviso-usada">
+                                        <i class="bi bi-globe-americas me-1"></i>
+                                        {{ $noExportable }}
                                     </span>
                                 @endif
 
@@ -2268,6 +2329,21 @@
                     <span class="bu-conteo">
                         {{ $this->resultadosContenedor->count() }}
                         {{ $this->resultadosContenedor->count() === 1 ? 'unidad' : 'unidades' }}
+
+                        {{--
+                            En exportación el número de arriba engaña: dice
+                            cuántas hay, no cuántas sirven. Se dice la
+                            segunda cifra al lado.
+                        --}}
+                        @if (($borrador['use_type'] ?? null) === 'export')
+                            @php
+                                $aptas = $this->resultadosContenedor->count()
+                                         - count($this->motivosNoExportable);
+                            @endphp
+                            <span class="{{ $aptas > 0 ? 'text-muted' : 'text-danger fw-semibold' }}">
+                                · {{ $aptas }} apta{{ $aptas === 1 ? '' : 's' }} para exportar
+                            </span>
+                        @endif
                     </span>
                     <button type="button" class="bu-btn-cerrar"
                             wire:click="cerrarBuscadorContenedor">

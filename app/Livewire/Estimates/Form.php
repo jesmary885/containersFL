@@ -1077,13 +1077,22 @@ class Form extends Component
         }
 
         /* -----------------------------------------------------------------
-         | CAMBIÓ EL TIPO DE USO (RB-006, RB-016, RB-017)
+         | CAMBIÓ EL TIPO DE USO (RB-016, RB-017)
+         |
+         | ── QUÉ CAMBIÓ ACÁ (15-sep) ──
+         |
+         | Este bloque recorría TODAS las líneas del presupuesto y les
+         | quitaba el impuesto en cuanto se elegía "Exportación". Se
+         | quitó: el uso no es un motivo de exención, y esa regla no
+         | aparece en ninguna fuente del levantamiento. Ver la
+         | explicación completa en App\Enums\UseType.
+         |
+         | Era además el más destructivo de los tres: desmarcaba líneas
+         | que la persona podía haber marcado a mano, sin avisar.
+         |
+         | El uso sigue exigiendo el certificado CSC (RB-016) y sigue
+         | escondiendo la entrega (RB-017). Eso no se tocó.
          * -------------------------------------------------------------- */
-        if ($campo === 'use_type' && $this->use_type === UseType::Export->value) {
-            foreach ($this->lineas as $i => $linea) {
-                $this->lineas[$i]['taxable'] = false;
-            }
-        }
     }
 
     /** Precarga una línea con los datos del concepto elegido. */
@@ -1128,10 +1137,9 @@ class Form extends Component
             $this->borrador['unit_price'] = $defaults['unit_price'];
         }
 
-        // En exportación nada paga impuesto, sin importar el concepto.
-        $this->borrador['taxable'] = $this->use_type === UseType::Export->value
-            ? false
-            : $defaults['taxable'];
+        // El impuesto lo manda el catálogo de conceptos. La exportación
+        // ya no lo desmarca (15-sep): ver App\Enums\UseType.
+        $this->borrador['taxable'] = $defaults['taxable'];
 
         // Si el concepto no es un contenedor, se limpia la unidad que
         // pudiera haber quedado seleccionada de antes.
@@ -1223,6 +1231,55 @@ class Form extends Component
             ->orderBy('internal_code')
             ->limit(15)
             ->get();
+    }
+
+    /**
+     * Por qué cada unidad del resultado NO se puede exportar.
+     *
+     * Devuelve [container_id => motivo]. Vacío cuando la línea que se
+     * está armando no es de exportación.
+     *
+     * Es la misma lógica que en el formulario de factura, y a propósito:
+     * el presupuesto y la factura tienen que ofrecer exactamente las
+     * mismas unidades. Si el presupuesto cotiza una unidad que después
+     * la factura no acepta, el cliente ya recibió una oferta que no se
+     * puede cumplir.
+     *
+     * Los dos motivos son exactamente los de Container::exportEligible(),
+     * que es el mismo scope que usa el filtro "exportables" del listado
+     * de Contenedores. Una sola definición para las tres pantallas.
+     *
+     * Las unidades que no califican se muestran BLOQUEADAS, no se
+     * esconden: quien busca el 803847-3 y no lo encuentra no concluye
+     * "ese no sirve para exportar", concluye que el sistema lo perdió.
+     */
+    public function getMotivosNoExportableProperty(): array
+    {
+        if (($this->borrador['use_type'] ?? null) !== UseType::Export->value) {
+            return [];
+        }
+
+        $motivos = [];
+
+        foreach ($this->resultadosContenedor as $unidad) {
+
+            if (! $unidad->is_export_eligible) {
+                $motivos[$unidad->id] = 'No está marcada como apta para exportar';
+
+                continue;
+            }
+
+            // Contra el arranque del día: un certificado que vence HOY
+            // todavía vale hoy. Es la misma comparación del scope.
+            if ($unidad->csc_valid_through
+                && $unidad->csc_valid_through->lt(now()->startOfDay())) {
+
+                $motivos[$unidad->id] = 'Certificado CSC vencido el '
+                    .$unidad->csc_valid_through->format('d/m/Y');
+            }
+        }
+
+        return $motivos;
     }
 
     /**
@@ -1422,8 +1479,9 @@ class Form extends Component
                 : $contenedor->lineDescription();
         }
 
-        // El contenedor sí paga el 7% (RB-006), salvo en exportación.
-        $this->borrador['taxable'] = $this->use_type !== UseType::Export->value;
+        // El contenedor sí paga el 7% (RB-006). La exportación ya no lo
+        // exime (15-sep): ver App\Enums\UseType.
+        $this->borrador['taxable'] = true;
 
         $this->resetValidation('borrador.description');
         $this->resetValidation('borrador.unit_price');

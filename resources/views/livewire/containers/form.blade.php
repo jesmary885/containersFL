@@ -206,11 +206,11 @@
                                        wire:model.blur="tare_weight_lbs">
                             </div>
 
-                            <div class="col-6 col-md-3">
+                            {{-- <div class="col-6 col-md-3">
                                 <label class="form-label">Peso máximo (lbs)</label>
                                 <input type="number" class="form-control"
                                        wire:model.blur="max_weight_lbs">
-                            </div>
+                            </div> --}}
 
                         </div>
                     </div>

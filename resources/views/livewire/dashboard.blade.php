@@ -39,7 +39,14 @@
             <strong><i class="bi bi-bell me-1"></i> Para hoy:</strong>
 
             @if ($totalMorosos > 0)
-                <a href="{{ route('finanzas.facturacion.index') }}" class="text-decoration-none">
+                {{--
+                    El enlace lleva al listado YA FILTRADO por vencidas.
+                    Antes abría el listado completo y había que volver a
+                    elegir el filtro a mano: se hacía clic en "5 facturas
+                    vencidas" y aparecían las 300.
+                --}}
+                <a href="{{ route('finanzas.facturacion.index', ['estado' => 'overdue']) }}"
+                   class="text-decoration-none">
                     {{ $totalMorosos }}
                     {{ $totalMorosos === 1 ? 'factura vencida' : 'facturas vencidas' }}
                     por ${{ number_format($totalDeuda, 2) }}
@@ -175,7 +182,7 @@
 
                 {{-- POR COBRAR --}}
                 <div class="col-6 col-xl-3">
-                    <a href="{{ route('finanzas.facturacion.index') }}"
+                    <a href="{{ route('finanzas.facturacion.index', $totalMorosos > 0 ? ['estado' => 'overdue'] : []) }}"
                        class="kpi {{ $indicadores['por_cobrar'] > 0 ? 'kpi-bad' : 'kpi-apagado' }} text-decoration-none">
                         <span class="kpi-icono"><i class="bi bi-cash-stack"></i></span>
                         <span class="kpi-cuerpo">
@@ -311,11 +318,27 @@
 
             <div class="card-tools">
 
+                {{--
+                    ── QUÉ ESTABA MAL ──
+
+                    Este botón llevaba a Finanzas › Pagos, que es el
+                    listado de los pagos RECIBIDOS: justo lo contrario de
+                    lo que hay en esta tarjeta.
+
+                    Quien hacía clic en "Ver todos" desde una lista de
+                    facturas sin cobrar aterrizaba en una pantalla de
+                    cobros hechos, casi siempre vacía en un sistema
+                    recién montado. Se leía como que el panel no
+                    funcionaba.
+
+                    Lo que corresponde es el listado de Facturación
+                    filtrado por vencidas.
+                --}}
                 <a
-                    href="{{ route('finanzas.pagos.index') }}"
+                    href="{{ route('finanzas.facturacion.index', ['estado' => 'overdue']) }}"
                     class="btn btn-sm btn-outline-danger"
                 >
-                    Ver todos
+                    Ver todas
                 </a>
 
             </div>
@@ -327,13 +350,29 @@
 
             <div class="d-flex justify-content-between align-items-center mb-3">
 
+                {{--
+                    Decía "N clientes con pagos pendientes" pero N era el
+                    número de FACTURAS. Un cliente con tres facturas
+                    vencidas contaba como tres clientes.
+
+                    Ahora se dicen las dos cosas, que son dos preguntas
+                    distintas: cuántos documentos hay que reclamar, y a
+                    cuánta gente hay que llamar.
+                --}}
                 <div>
 
                     <strong>
                         {{ $totalMorosos }}
                     </strong>
 
-                    clientes con pagos pendientes
+                    {{ $totalMorosos === 1 ? 'factura vencida' : 'facturas vencidas' }}
+
+                    @if ($clientesMorosos > 0)
+                        <span class="text-muted">
+                            · {{ $clientesMorosos }}
+                            {{ $clientesMorosos === 1 ? 'cliente' : 'clientes' }}
+                        </span>
+                    @endif
 
                 </div>
 
@@ -362,7 +401,13 @@
 
                             <th>Cliente</th>
 
-                            <th>Contenedor</th>
+                            {{--
+                                Decía "Contenedor" y debajo salía el
+                                número de factura. La columna cambió de
+                                contenido en su momento y el título se
+                                quedó con el nombre viejo.
+                            --}}
+                            <th>Factura</th>
 
                             <th>Vencimiento</th>
 
@@ -374,9 +419,16 @@
 
                     <tbody>
 
+                        {{--
+                            Cada fila abre su factura. Antes no llevaba a
+                            ninguna parte: se veía quién debía y había que
+                            ir a buscarla a mano al listado.
+                        --}}
                         @forelse ($pagosPendientes as $pago)
 
-                            <tr>
+                            <tr class="rn-fila-click"
+                                onclick="window.location='{{ route('finanzas.facturacion.show', $pago['id']) }}'"
+                                style="cursor:pointer">
 
                                 <td>
                                     {{ $pago['cliente'] }}
@@ -384,7 +436,7 @@
 
                                 <td>
                                     <span class="badge text-bg-secondary">
-                                        {{ $pago['contenedor'] }}
+                                        {{ $pago['factura'] }}
                                     </span>
                                 </td>
 
@@ -412,11 +464,42 @@
 
                         @empty
 
+                            {{--
+                                ── POR QUÉ ESTE MENSAJE CAMBIÓ ──
+
+                                Decía "No existen pagos pendientes." y
+                                punto. Ese texto no distingue entre "está
+                                todo cobrado" y "esta pantalla no
+                                funciona", y en un sistema en construcción
+                                lo segundo es lo que uno asume.
+
+                                Ahora dice por qué está vacía: si hay
+                                facturas con saldo que todavía no llegaron
+                                a su fecha, lo enseña. Así se ve de un
+                                vistazo que la tarjeta sí está leyendo la
+                                base de datos.
+                            --}}
                             <tr>
 
-                                <td colspan="4" class="text-center text-muted py-4">
+                                <td colspan="4" class="text-center py-4">
 
-                                    No existen pagos pendientes.
+                                    <div class="text-muted">
+                                        <i class="bi bi-check-circle text-success me-1"></i>
+                                        Ninguna factura vencida.
+                                    </div>
+
+                                    @if ($conSaldoSinVencer > 0)
+                                        <div class="small text-muted mt-1">
+                                            Hay {{ $conSaldoSinVencer }}
+                                            {{ $conSaldoSinVencer === 1
+                                                ? 'factura con saldo que aún no vence'
+                                                : 'facturas con saldo que aún no vencen' }}.
+                                        </div>
+                                    @else
+                                        <div class="small text-muted mt-1">
+                                            Tampoco hay facturas con saldo pendiente.
+                                        </div>
+                                    @endif
 
                                 </td>
 
@@ -429,6 +512,23 @@
                 </table>
 
             </div>
+
+            {{--
+                La tabla enseña 8. Si hay más, hay que decirlo: una lista
+                recortada en silencio se lee como la lista completa, y
+                quien la mire va a creer que la deuda entera son esas
+                ocho filas.
+            --}}
+            @if ($vencidasOcultas > 0)
+                <div class="text-center small text-muted mt-2">
+                    y {{ $vencidasOcultas }}
+                    {{ $vencidasOcultas === 1 ? 'factura vencida más' : 'facturas vencidas más' }}
+                    —
+                    <a href="{{ route('finanzas.facturacion.index', ['estado' => 'overdue']) }}">
+                        verlas todas
+                    </a>
+                </div>
+            @endif
 
         </div>
 

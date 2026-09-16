@@ -1131,18 +1131,25 @@ class Form extends Component
         }
 
         /*
-         | EL CONTENEDOR SI PAGA EL 7% (RB-006), salvo en exportacion.
+         | EL CONTENEDOR SI PAGA EL 7% (RB-006).
          |
-         | El uso se mira en el propio renglon y no en la cabecera: una
-         | factura puede llevar una unidad para almacenaje y otra para
-         | exportar, y solo la segunda va sin impuesto.
+         | ── QUE CAMBIO ACA (15-sep) ──
          |
-         | Y transporte nunca lleva impuesto, sea cual sea el uso (RB-005).
+         | Antes esta linea desmarcaba el impuesto cuando el uso era
+         | exportacion. Esa regla NO aparece en ninguna de las cinco
+         | fuentes del levantamiento: nadie la dijo nunca. Ver la
+         | explicacion completa en App\Enums\UseType.
+         |
+         | El uso previsto sigue importando —decide el certificado CSC y
+         | si hay entrega— pero NO decide el impuesto.
+         |
+         | Transporte sigue sin llevar impuesto, sea cual sea el uso
+         | (RB-005). Esa si esta confirmada: "nada de transportacion
+         | lleva tax", 14-ago 01:13:33.
          */
-        $esExport    = ($this->borrador['use_type'] ?? null) === UseType::Export->value;
         $esTransport = $this->type === InvoiceType::Transport->value;
 
-        $this->borrador['taxable'] = ! $esExport && ! $esTransport;
+        $this->borrador['taxable'] = ! $esTransport;
 
         $this->resetValidation('borrador.description');
         $this->resetValidation('borrador.unit_price');
@@ -1263,6 +1270,81 @@ class Form extends Component
             ->orderBy('internal_code')
             ->limit(15)
             ->get();
+    }
+
+    /**
+     * Por que cada unidad del resultado NO se puede exportar.
+     *
+     * Devuelve [container_id => motivo]. Vacio cuando el renglon que se
+     * esta armando no es de exportacion.
+     *
+     * ── POR QUE ESTO NO EXISTIA ──
+     *
+     * El letrero de exportacion decia "necesita certificado CSC" desde
+     * el primer dia, y el buscador seguia ofreciendo cualquier unidad
+     * disponible. El scope Container::exportEligible() estaba escrito y
+     * bien escrito —el listado de Contenedores lo usa en su filtro
+     * "exportables"— pero nadie lo llamaba desde aca.
+     *
+     * ── POR QUE SE ENSENAN BLOQUEADAS Y NO SE ESCONDEN ──
+     *
+     * Porque esconderlas contesta la pregunta equivocada. Quien busca el
+     * contenedor 803847-3 y no lo encuentra no concluye "ese no sirve
+     * para exportar": concluye que el sistema lo perdio, y llama por
+     * telefono.
+     *
+     * Ensenarlo en gris con el motivo al lado contesta las dos cosas a
+     * la vez: existe, y esto es lo que le falta.
+     *
+     * Y ademas sirve de recordatorio: "CSC vencido el 05/2026" es un
+     * trabajo pendiente del inventario que nadie mira hasta que hace
+     * falta la unidad.
+     *
+     * ── LOS DOS MOTIVOS SON EXACTAMENTE LOS DEL SCOPE ──
+     *
+     * A proposito. Si un dia cambia la definicion de "apta para
+     * exportar", tiene que cambiar en Container::scopeExportEligible()
+     * y las dos pantallas se enteran solas. Dos definiciones de la
+     * misma cosa terminan siempre diciendo cosas distintas.
+     */
+    public function getMotivosNoExportableProperty(): array
+    {
+        // Solo cuando el renglon en curso es de exportacion. En una
+        // venta de almacenaje cualquier unidad disponible sirve.
+        if (($this->borrador['use_type'] ?? null) !== UseType::Export->value) {
+            return [];
+        }
+
+        $motivos = [];
+
+        foreach ($this->resultadosContenedor as $unidad) {
+
+            if (! $unidad->is_export_eligible) {
+                $motivos[$unidad->id] = 'No esta marcada como apta para exportar';
+
+                continue;
+            }
+
+            /*
+             | El CSC vencido.
+             |
+             | Se compara contra el ARRANQUE del dia, no contra la hora
+             | actual. Un certificado que vence HOY todavia vale hoy, y
+             | con isPast() un vencimiento de hoy a las 00:00 se leeria
+             | como vencido a las 09:00 de la manana.
+             |
+             | Es la misma comparacion que hace el scope con
+             | whereDate(csc_valid_through, '>=', hoy).
+             */
+            if ($unidad->csc_valid_through
+                && $unidad->csc_valid_through->lt(now()->startOfDay())) {
+
+                $motivos[$unidad->id] = 'Certificado CSC vencido el '
+                    .$unidad->csc_valid_through->format('d/m/Y');
+            }
+        }
+
+        return $motivos;
     }
 
     /**
@@ -1479,16 +1561,23 @@ class Form extends Component
         }
 
         /* -----------------------------------------------------------------
-         | CAMBIO EL USO PREVISTO DE ESA UNIDAD (RB-006, RB-016)
+         | CAMBIO EL USO PREVISTO DE ESA UNIDAD (RB-016, RB-017)
          |
-         | En exportacion no se cobra sales tax de Florida. Se desmarca
-         | SOLO este renglon: la factura puede llevar una unidad para
-         | almacenaje y otra para exportar.
+         | ── QUE CAMBIO ACA (15-sep) ──
+         |
+         | Este bloque ponia taxable = false en cuanto se elegia
+         | "Exportacion". Se quito: el uso no es un motivo de exencion.
+         |
+         | Si una venta de exportacion tiene que salir sin impuesto, es
+         | porque el CLIENTE tiene su certificado vigente, y eso se marca
+         | arriba con tax_exempt + el id del certificado que lo justifica
+         | (RB-015). Asi queda la prueba guardada, que es lo que pide una
+         | auditoria del estado.
+         |
+         | El uso sigue haciendo dos cosas, y esas no se tocaron:
+         |   · exige el certificado CSC antes de facturar   (RB-016)
+         |   · esconde el bloque de entrega                 (RB-017)
          * -------------------------------------------------------------- */
-        if ($campo === 'borrador.use_type'
-            && ($this->borrador['use_type'] ?? null) === UseType::Export->value) {
-            $this->borrador['taxable'] = false;
-        }
 
         /* -----------------------------------------------------------------
          | CAMBIO LA UNIDAD DENTRO DEL MODAL
@@ -1652,13 +1741,15 @@ class Form extends Component
         /* -----------------------------------------------------------------
          | EL IMPUESTO
          |
-         | Transporte nunca lleva sales tax (RB-005) y exportacion tampoco
-         | (RB-016). Fuera de esos dos casos manda lo que diga el catalogo.
+         | Transporte nunca lleva sales tax (RB-005). Fuera de ese caso
+         | manda lo que diga el catalogo de conceptos.
+         |
+         | La exportacion YA NO desmarca el impuesto (15-sep): ver
+         | App\Enums\UseType para el porque.
          * -------------------------------------------------------------- */
         $esTransport = $this->type === InvoiceType::Transport->value;
-        $esExport    = ($this->borrador['use_type'] ?? null) === UseType::Export->value;
 
-        $this->borrador['taxable'] = ($esTransport || $esExport)
+        $this->borrador['taxable'] = $esTransport
             ? false
             : $defaults['taxable'];
 

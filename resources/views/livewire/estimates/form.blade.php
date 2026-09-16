@@ -2150,6 +2150,20 @@
                     <p class="bu-ayuda">
                         <i class="bi bi-info-circle me-1"></i>{{ __('estimates.unit_picker_help') }}
                     </p>
+
+                    {{--
+                        El aviso de exportación. No existía: el letrero de
+                        la línea pedía certificado CSC y aquí salían todas
+                        las unidades por igual.
+                    --}}
+                    @if (($borrador['use_type'] ?? null) === 'export')
+                        <p class="bu-ayuda">
+                            <i class="bi bi-globe-americas me-1"></i>
+                            Esta línea es de <strong>exportación</strong>: solo se pueden
+                            cotizar las unidades aptas y con el certificado CSC vigente.
+                            Las demás salen en gris con el motivo.
+                        </p>
+                    @endif
                 </div>
 
                 {{-- RESULTADOS --}}
@@ -2178,7 +2192,22 @@
                              */
                             $yaFacturada = $this->comprometidasEnFacturas[$unidad->id] ?? null;
 
-                            $bloqueada = $usadaEnLinea || $yaFacturada;
+                            /*
+                             | NO CALIFICA PARA EXPORTAR. Esto SÍ bloquea.
+                             |
+                             | Solo tiene valor cuando la línea es de
+                             | exportación; fuera de ese caso la propiedad
+                             | viene vacía y esto es null.
+                             |
+                             | Bloquear aquí importa tanto o más que en la
+                             | factura: un presupuesto que cotiza una
+                             | unidad que después la factura no acepta es
+                             | una oferta que ya salió y no se puede
+                             | cumplir.
+                             */
+                            $noExportable = $this->motivosNoExportable[$unidad->id] ?? null;
+
+                            $bloqueada = $usadaEnLinea || $yaFacturada || $noExportable;
                         @endphp
 
                         <button type="button" class="bu-item"
@@ -2226,6 +2255,13 @@
                                     </span>
                                 @endif
 
+                                @if ($noExportable)
+                                    <span class="bu-aviso-usada">
+                                        <i class="bi bi-globe-americas me-1"></i>
+                                        {{ $noExportable }}
+                                    </span>
+                                @endif
+
                                 @if ($yaCotizada)
                                     <span class="bu-aviso-cotizada">
                                         <i class="bi bi-clock-history me-1"></i>{{ __('estimates.already_quoted', [
@@ -2270,6 +2306,17 @@
                         {{ trans_choice('estimates.units_found', $this->resultadosContenedor->count(), [
                             'count' => $this->resultadosContenedor->count(),
                         ]) }}
+
+                        {{-- En exportación, cuántas sirven de verdad. --}}
+                        @if (($borrador['use_type'] ?? null) === 'export')
+                            @php
+                                $aptas = $this->resultadosContenedor->count()
+                                         - count($this->motivosNoExportable);
+                            @endphp
+                            <span class="{{ $aptas > 0 ? 'text-muted' : 'text-danger fw-semibold' }}">
+                                · {{ $aptas }} apta{{ $aptas === 1 ? '' : 's' }} para exportar
+                            </span>
+                        @endif
                     </span>
                     <button type="button" class="bu-btn-cerrar"
                             wire:click="cerrarBuscadorContenedor">

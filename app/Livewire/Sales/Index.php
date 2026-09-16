@@ -75,6 +75,8 @@ class Index extends Component
         }
     }
 
+    protected string $permisoBase = 'invoices';
+
     public function updatedMes(): void     { $this->resetPage(); }
     public function updatedBuscar(): void  { $this->resetPage(); }
     public function updatedSoloCobradas(): void { $this->resetPage(); }

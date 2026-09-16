@@ -53,6 +53,35 @@ use Livewire\Component;
 #[Layout('layouts.app')]
 class Dashboard extends Component
 {
+    /**
+     * Cuántas facturas vencidas se dibujan en la tarjeta.
+     *
+     * Es un panel, no un listado: ocho caben sin hacer scroll. El resto
+     * está a un clic en "Ver todas".
+     *
+     * ── OJO: ESTE NÚMERO NO LIMITA LOS TOTALES ──
+     *
+     * El conteo y la suma de arriba se calculan sobre la consulta
+     * completa, no sobre estas ocho filas. Era justo el error que tenía
+     * esta pantalla.
+     */
+    public const FILAS_VENCIDAS = 8;
+
+    /**
+     * ── ESTA PANTALLA NO NECESITA NINGÚN COMANDO NI NINGÚN CRON ──
+     *
+     * Vale la pena dejarlo escrito porque es la primera sospecha cuando
+     * algo de un panel se ve vacío.
+     *
+     * "Vencida" no es un estado que alguien tenga que ir a poner: es una
+     * resta contra la fecha de hoy, que se hace en el momento de abrir la
+     * pantalla. Una factura vencida ayer a medianoche ya sale hoy sin que
+     * nadie haya ejecutado nada.
+     *
+     * El único proceso programado que existe hoy es el que vence los
+     * presupuestos a los 3 días (routes/console.php), y ese sí necesita
+     * la línea de cron en el servidor. Pero no toca las facturas.
+     */
     public function render()
     {
         $empresa = app(CompanyContext::class)->get();
@@ -203,25 +232,80 @@ class Dashboard extends Component
          | Ordenadas por la MÁS VIEJA primero. Cuanto más tiempo lleva sin
          | cobrarse, más difícil es cobrarla, así que es la que hay que
          | llamar antes.
+         |
+         | ── QUÉ SE CORRIGIÓ ACÁ (15-sep) ──
+         |
+         | 1. LA CONDICIÓN SE DUPLICABA. Este bloque traía escrita a mano
+         |    la definición de "vencida", y el listado de Facturación usa
+         |    el scope overdue() del modelo. Dos definiciones de la misma
+         |    cosa terminan siempre diciendo números distintos. Ahora las
+         |    dos pantallas preguntan lo mismo: Invoice::overdue().
+         |
+         |    La diferencia no era teórica: el de acá solo descartaba las
+         |    anuladas, y el del modelo descarta también las pagadas.
+         |
+         | 2. LOS TOTALES SE SACABAN DE LA LISTA RECORTADA. La tabla
+         |    enseña 8 filas —está bien, es un panel, no un listado— pero
+         |    el conteo y la suma se calculaban sobre esas 8.
+         |
+         |    Con 30 facturas vencidas por $80.000, el panel decía
+         |    "8 facturas vencidas por $19.000" en tres sitios a la vez:
+         |    la barra "Para hoy", el pie del contador "Por cobrar" y la
+         |    cabecera de esta tarjeta. Y el listado de Facturación, que
+         |    sí cuenta bien, decía otra cosa.
+         |
+         |    Ahora el conteo y la suma salen de count() y sum() sobre la
+         |    consulta ENTERA, y las 8 filas son solo lo que se dibuja.
          * ================================================================== */
 
-        $vencidas = Invoice::query()
+        // La pregunta se escribe una vez y se usa cuatro veces. Cada
+        // llamada arranca una consulta nueva: un Builder se consume al
+        // ejecutarlo y reutilizar la misma variable encadena condiciones
+        // sobre las anteriores.
+        $vencidasQuery = fn () => Invoice::query()->overdue();
+
+        // Los totales, sobre TODAS las vencidas.
+        $totalMorosos = $vencidasQuery()->count();
+        $totalDeuda   = (float) $vencidasQuery()->sum('balance_due');
+
+        // Cuántos CLIENTES distintos hay detrás. No es lo mismo diez
+        // facturas de un cliente que diez facturas de diez clientes: la
+        // primera es una llamada, la segunda es un problema de cobranza.
+        $clientesMorosos = (int) $vencidasQuery()->distinct()->count('customer_id');
+
+        // Y las que tienen saldo pero TODAVÍA NO vencen. No se enseñan en
+        // la tabla —no hay nada que reclamar aún— pero sirven para que el
+        // mensaje de "no hay vencidas" diga algo útil en vez de dejar la
+        // duda de si la pantalla está rota.
+        $conSaldoSinVencer = Invoice::query()
+            ->unpaid()
+            ->whereDate('due_date', '>=', now()->toDateString())
+            ->count();
+
+        // Las filas que se dibujan: las 8 más viejas.
+        $vencidas = $vencidasQuery()
             ->with('customer:id,display_name,company_name')
-            ->where('status', '!=', 'void')
-            ->where('balance_due', '>', 0)
-            ->whereDate('due_date', '<', now()->toDateString())
             ->orderBy('due_date')
-            ->limit(8)
+            ->limit(self::FILAS_VENCIDAS)
             ->get();
 
         $pagosPendientes = $vencidas->map(fn (Invoice $f) => [
+
+            // El id, para poder abrir la factura desde el panel. Antes la
+            // fila no llevaba a ninguna parte: se veía quién debe y había
+            // que ir a buscarla a mano al listado.
+            'id'         => $f->id,
+
             'cliente'    => $f->customer?->display_name
                             ?? $f->customer?->company_name
                             ?? 'Sin cliente',
 
-            // Antes decía "contenedor". Ahora el número de factura, que es
-            // lo que se busca para llamar y cobrar.
-            'contenedor' => $f->invoice_number,
+            // El número de factura, que es lo que se busca para llamar y
+            // cobrar. La clave se llamaba 'contenedor' de cuando la tabla
+            // enseñaba la unidad; el dato ya era el número de factura y la
+            // cabecera de la tabla seguía diciendo "Contenedor". Se
+            // renombra para que el nombre diga lo que trae.
+            'factura'    => $f->invoice_number,
 
             'vencido'    => $f->due_date?->translatedFormat('d M') ?? '—',
             'monto'      => (float) $f->balance_due,
@@ -335,9 +419,21 @@ class Dashboard extends Component
 
         return view('livewire.dashboard', [
             'indicadores'     => $indicadores,
+
+            // Las filas que se dibujan (8 como máximo)…
             'pagosPendientes' => $pagosPendientes,
-            'totalMorosos'    => $pagosPendientes->count(),
-            'totalDeuda'      => $pagosPendientes->sum('monto'),
+
+            // …y los totales de verdad, que salen de la consulta entera.
+            'totalMorosos'    => $totalMorosos,
+            'totalDeuda'      => $totalDeuda,
+            'clientesMorosos' => $clientesMorosos,
+
+            // Cuántas quedaron fuera de las 8 que se enseñan.
+            'vencidasOcultas' => max(0, $totalMorosos - $pagosPendientes->count()),
+
+            // Para el mensaje de "no hay vencidas".
+            'conSaldoSinVencer' => $conSaldoSinVencer,
+
             'ventasMensuales' => $ventasMensuales,
             'estadoCuentas'   => $estadoCuentas,
             'atencion'        => $atencion,
