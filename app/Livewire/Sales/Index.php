@@ -197,7 +197,7 @@ class Index extends Component
         return view('livewire.sales.index', [
             'facturas' => $this->consulta()->paginate(20),
             'titulo'   => \Carbon\Carbon::parse($this->mes.'-01')
-                            ->translatedFormat('F Y'),
+                    ->translatedFormat('F Y'),
         ]);
     }
 }
