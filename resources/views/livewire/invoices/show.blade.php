@@ -396,6 +396,58 @@
                         </div>
                     </div>
 
+                    {{-- ═════════════════════════════════════════════════
+                         FORMAS DE PAGO · REUNIÓN 16-09
+
+                         Denisse lo pidió así, con estas palabras: una sección
+                         estática al pie de la factura con toda la información
+                         bancaria y los métodos de pago, para que el cliente
+                         decida cómo pagar.
+
+                         Es ESTÁTICA a propósito: no depende de lo que se haya
+                         elegido en esta factura. El cliente recibe el PDF y
+                         elige. Por eso se lee de la ficha de la compañía y no
+                         del documento.
+
+                         Cada compañía tiene las suyas, y son distintas: la de
+                         contenedores y la de transporte cobran en cuentas
+                         separadas. Se cargan en Configuración → Datos de la
+                         empresa.
+                    ═════════════════════════════════════════════════ --}}
+                    @php
+                        $formasDePago = $invoice->company?->payment_instructions ?? [];
+                    @endphp
+
+                    @if (! empty($formasDePago))
+                        <hr>
+                        <div class="mt-2">
+                            <div class="fw-semibold small text-uppercase text-secondary mb-2">
+                                {{ __('companies.payment_methods') }}
+                            </div>
+
+                            <div class="row g-2">
+                                @foreach ($formasDePago as $forma)
+                                    @continue (empty($forma['label']) && empty($forma['details']))
+
+                                    <div class="col-12 col-md-6">
+                                        <div class="border rounded px-2 py-1 h-100">
+                                            @if (! empty($forma['label']))
+                                                <div class="small fw-semibold">{{ $forma['label'] }}</div>
+                                            @endif
+
+                                            @if (! empty($forma['details']))
+                                                {{-- nl2br para respetar los saltos de línea tal como
+                                                     se tecleó: los datos de una transferencia se leen
+                                                     en renglones, no en un párrafo. --}}
+                                                <div class="small text-secondary" style="white-space: pre-line;">{{ $forma['details'] }}</div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
                     @if ($invoice->footer_terms || $invoice->company?->invoice_footer_terms)
                         <hr>
                         <p class="small text-secondary mb-0">

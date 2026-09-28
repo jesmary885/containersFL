@@ -53,6 +53,7 @@ return [
     'reports'          => 'Reports',
     'catalogs'         => 'Catalogs',
     'settings'         => 'Settings',
+    'delivery_rates'   => 'Delivery rates',
     'users'            => 'Users',
     'roles'            => 'Roles & permissions',
 

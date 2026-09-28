@@ -13,6 +13,7 @@ use App\Models\Estimate;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\InvoiceCalculator;
+use App\Services\DistanceResolver;
 use App\Services\PricingResolver;
 use App\Support\CompanyContext;
 use Illuminate\Support\Carbon;
@@ -1514,6 +1515,76 @@ class Form extends Component
      * Todo lo que escribe este método queda editable en la línea: es
      * una sugerencia para no teclear el caso normal, no un candado.
      */
+    /* =====================================================================
+     | CALCULAR LAS MILLAS SOLO — REUNIÓN 16-09
+     |
+     | Se acordó calcular las millas con la API de Google Maps a partir del
+     | código postal del destino.
+     |
+     | Acá es donde de verdad hace falta: Denisse cotiza por teléfono. El
+     | cliente le manda el zip y ella calcula las millas, pone el shipping y
+     | da el precio junto. Ese cálculo es el que deja de hacerse a mano.
+     |
+     | ── LO QUE PASA SI FALLA ──
+     |
+     | Nada grave, a propósito. Sin clave de Google, sin internet o con un
+     | zip mal escrito devuelve null, se avisa, y el campo de millas sigue
+     | siendo editable a mano. Una cotización no puede depender de que
+     | Google conteste.
+     * ================================================================== */
+    public function calcularMillas(): void
+    {
+        $this->exigirPermiso($this->estimateId ? 'update' : 'create');
+
+        $zip = trim((string) ($this->borrador['delivery_zip'] ?? ''));
+
+        if ($zip === '') {
+            $this->addError('borrador.delivery_zip',
+                'Escriba el código postal del destino para poder calcular las millas.');
+
+            return;
+        }
+
+        $empresa = app(CompanyContext::class)->get();
+
+        $millas = app(DistanceResolver::class)->milesFromCompany($empresa, $zip);
+
+        if ($millas === null) {
+            $this->addError('borrador.miles',
+                'No se pudo calcular la distancia. Escriba las millas a mano y siga; '
+                .'el sistema no las necesita para cotizar.');
+
+            return;
+        }
+
+        $this->borrador['miles'] = $millas;
+
+        /*
+         | Se vuelve a resolver la tarifa porque las millas pueden haber
+         | cambiado de rango: 98 y 130 millas no cuestan lo mismo por milla.
+         | Se pisa la anterior a propósito — quien pulsa "calcular" pide
+         | justamente eso.
+         */
+        $this->borrador['rate_per_mile'] = app(PricingResolver::class)
+            ->effectiveRatePerMile($empresa, null, $millas);
+
+        $this->borrador['unit_price'] = round(
+            $millas * (float) $this->borrador['rate_per_mile'],
+            2,
+        );
+
+        $this->borrador['quantity'] = 1;
+        $this->borrador['taxable']  = false;   // RB-005
+
+        $this->resetValidation(['borrador.miles', 'borrador.delivery_zip', 'borrador.unit_price']);
+    }
+
+    /** ¿Se puede ofrecer el botón de calcular? Solo si hay clave de Google. */
+    public function getPuedeCalcularMillasProperty(): bool
+    {
+        return filled(config('services.google_maps.key'));
+    }
+
     protected function aplicarPrecioDeTransporte(Product $producto): void
     {
         if (! $producto->isDelivery()) {
@@ -1523,13 +1594,29 @@ class Form extends Component
         $empresa  = app(CompanyContext::class)->get();
         $resolver = app(PricingResolver::class);
 
-        // La tarifa se precarga una sola vez por línea. Si el usuario la
-        // pisó a mano, se respeta.
-        if (($this->borrador['rate_per_mile'] ?? null) === null) {
-            $this->borrador['rate_per_mile'] = $resolver->ratePerMile($empresa);
-        }
-
         $millas = (float) ($this->borrador['miles'] ?? 0);
+
+        /* -----------------------------------------------------------------
+         | LA TARIFA SALE DEL RANGO — REUNIÓN 16-09
+         |
+         | Se le pasan las millas para que elija el rango: hasta 100, de 100
+         | a 200, o más de 200. Sin millas todavía no hay rango posible y
+         | devuelve la tarifa general.
+         |
+         | effectiveRatePerMile() suma el recargo por combustible, hoy en
+         | cero y pendiente de que Denisse lo confirme.
+         |
+         | Se precarga una sola vez por línea: si la persona la pisó a mano
+         | se respeta, que es lo que se acordó — tarifas editables sobre una
+         | base estándar.
+         * -------------------------------------------------------------- */
+        if (($this->borrador['rate_per_mile'] ?? null) === null) {
+            $this->borrador['rate_per_mile'] = $resolver->effectiveRatePerMile(
+                $empresa,
+                null,
+                $millas > 0 ? $millas : null,
+            );
+        }
 
         // Sin millas no hay nada que calcular todavía. En cuanto las
         // escriba, updated() vuelve a pasar por acá.

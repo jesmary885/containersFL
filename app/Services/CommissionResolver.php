@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Enums\CommissionBase;
 use App\Enums\CommissionMode;
+use App\Enums\ProductType;
 use App\Enums\CommissionStatus;
 use App\Models\Commission;
 use App\Models\Invoice;
@@ -63,7 +65,21 @@ class CommissionResolver
      */
     public function syncFromInvoice(Invoice $invoice): ?Commission
     {
-        if (! $invoice->salesperson_id || ! $invoice->commission_mode) {
+        /* -----------------------------------------------------------------
+         | EL VENDEDOR ES UN TRABAJADOR — CORREGIDO 25-09
+         |
+         | Antes esta línea miraba `salesperson_id`, que apunta a USUARIOS
+         | del sistema. El formulario de la factura nunca la llenaba: guarda
+         | el vendedor en `sold_by_employee_id`, que apunta a TRABAJADORES.
+         |
+         | Resultado: el resolver salía por acá siempre y NO SE CREÓ NUNCA
+         | UNA SOLA COMISIÓN. Se elegía el vendedor, se emitía la factura, y
+         | no aparecía nada.
+         |
+         | Gana trabajadores porque es lo que dice el negocio: Miguelito
+         | vende desde 2024 y probablemente nunca ha abierto el sistema.
+         * -------------------------------------------------------------- */
+        if (! $invoice->sold_by_employee_id || ! $invoice->commission_mode) {
             return null;
         }
 
@@ -107,9 +123,13 @@ class CommissionResolver
                 'invoice_id'     => $invoice->id,
                 'sale_id'        => $invoice->sale_id,
                 'salesperson_id' => $invoice->salesperson_id,
+                'employee_id'    => $invoice->sold_by_employee_id,
                 'sale_date'      => $invoice->issue_date,
 
                 'base_amount'    => $base,
+                'base_type'      => $invoice->commission_base instanceof CommissionBase
+                    ? $invoice->commission_base->value
+                    : (string) ($invoice->commission_base ?: CommissionBase::Subtotal->value),
                 'mode'           => $modo->value,
                 'percent'        => $modo === CommissionMode::Percent
                     ? $invoice->commission_percent
@@ -143,6 +163,42 @@ class CommissionResolver
      */
     public function baseAmount(Invoice $invoice): float
     {
+        $base = $invoice->commission_base instanceof CommissionBase
+            ? $invoice->commission_base
+            : CommissionBase::tryFrom((string) $invoice->commission_base);
+
+        /* -----------------------------------------------------------------
+         | SOLO LOS CONTENEDORES — REUNIÓN 16-09
+         |
+         | Denisse dijo que el vendedor principal cobra un porcentaje
+         | "aplicado específicamente en unidades de venta directa". Con esta
+         | opción el delivery y los servicios quedan fuera de la base.
+         |
+         | En una venta de $2,650 con $650 de delivery, al 5%, la diferencia
+         | es $132.50 contra $100.00. Por venta.
+         |
+         | El descuento se reparte a prorrata entre lo que sí comisiona:
+         | si se descontaron $100 de una venta donde los contenedores son el
+         | 75% del subtotal, la base baja $75 y no $100. Restarlo entero
+         | castigaría al vendedor por un descuento que también afectó al
+         | transporte, que no es suyo.
+         * -------------------------------------------------------------- */
+        if ($base === CommissionBase::Containers) {
+
+            $subtotal = (float) $invoice->subtotal;
+
+            $deContenedores = (float) $invoice->items()
+                ->whereHas('product', fn ($q) => $q->where('type', ProductType::Container->value))
+                ->sum('amount');
+
+            $descuento = (float) $invoice->discount_amount;
+
+            $proporcion = $subtotal > 0 ? $deContenedores / $subtotal : 0;
+
+            return max(0, round($deContenedores - ($descuento * $proporcion), 2));
+        }
+
+        // Por defecto: toda la venta menos el descuento.
         return max(0, round(
             (float) $invoice->subtotal - (float) $invoice->discount_amount,
             2,

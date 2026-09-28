@@ -24,6 +24,7 @@ class Commission extends Model
         return [
             'status'      => CommissionStatus::class,
             'mode'        => \App\Enums\CommissionMode::class,
+            'base_type'   => \App\Enums\CommissionBase::class,
             'base_amount' => 'decimal:2',   // sobre qué monto se calculó
             'percent'     => 'decimal:2',
             'amount'      => 'decimal:2',
@@ -41,6 +42,18 @@ class Commission extends Model
     public function invoice()     { return $this->belongsTo(Invoice::class); }
     public function payments()    { return $this->hasMany(CommissionPayment::class); }
     public function salesperson() { return $this->belongsTo(User::class, 'salesperson_id'); }
+
+    /*
+     | EL VENDEDOR DE VERDAD — CORREGIDO 25-09
+     |
+     | salesperson() apunta a un USUARIO del sistema, y los vendedores no
+     | tienen cuenta. Miguelito vende desde 2024 y probablemente nunca ha
+     | abierto el sistema.
+     |
+     | Esta es la relación que hay que usar. La otra se queda por las filas
+     | viejas y porque a veces quien registra sí es un usuario.
+     */
+    public function employee() { return $this->belongsTo(Employee::class, 'employee_id'); }
     public function container() { return $this->belongsTo(Container::class); }
 
     /* =====================================================================

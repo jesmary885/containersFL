@@ -43,4 +43,19 @@ return [
     'created_at_issue' => 'The commission is created when the invoice is issued, not when it is paid.',
     'has_payments'     => 'Already has payments: the amount is not recalculated automatically.',
 
+
+    /* ── The salesperson with special terms · 16-Sep meeting ── */
+    'no_commission'        => 'This invoice pays no commission',
+    'default_mode'         => 'Which one is proposed when invoicing?',
+    'default_mode_hint'    => 'Both an amount and a percentage are set. The one picked here gets '
+                             .'proposed; the other stays available and is one click away on each invoice.',
+    'no_mode_warning'      => 'There is a salesperson but no calculation method, so this invoice will '
+                             .'not generate a commission. Pick amount or percentage.',
+
+    'base'                 => 'Calculated on',
+    'base_subtotal'        => 'The whole sale',
+    'base_subtotal_hint'   => 'Includes delivery and services. Excludes tax and card surcharge.',
+    'base_containers'      => 'Containers only',
+    'base_containers_hint' => 'Leaves out delivery and services. This is the "direct unit sales" case.',
+
 ];

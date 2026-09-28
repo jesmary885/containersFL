@@ -388,9 +388,19 @@
 
                             @can('settings.view')
                                 <li class="nav-item">
-                                    <a href="{{ route('configuracion.index') }}"
-                                       class="nav-link {{ request()->routeIs('configuracion.*') ? 'active' : '' }}">
+                                    <a href="{{ route('configuracion.empresa') }}"
+                                       class="nav-link {{ request()->routeIs('configuracion.index', 'configuracion.empresa') ? 'active' : '' }}">
                                         <i class="nav-icon bi bi-gear"></i><p>{{ __('nav.settings') }}</p>
+                                    </a>
+                                </li>
+
+                                {{-- REUNIÓN 16-09 · las tarifas de entrega salen al menú
+                                     y no quedan escondidas dentro de otra pantalla: es lo
+                                     que Denisse va a cambiar cuando se mueva el combustible. --}}
+                                <li class="nav-item">
+                                    <a href="{{ route('configuracion.tarifas.index') }}"
+                                       class="nav-link {{ request()->routeIs('configuracion.tarifas.*') ? 'active' : '' }}">
+                                        <i class="nav-icon bi bi-signpost-split"></i><p>{{ __('nav.delivery_rates') }}</p>
                                     </a>
                                 </li>
                             @endcan

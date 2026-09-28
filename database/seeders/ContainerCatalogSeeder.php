@@ -22,18 +22,33 @@ class ContainerCatalogSeeder extends Seeder
     /** Cómo está construido el contenedor */
     private function types(): void
     {
+        /*
+         | La cuarta columna es NUEVA (reunión 16-09): ¿este tipo lleva una
+         | inspección que VENCE?
+         |
+         | Solo el tanque. En los demás el certificado lo emite el inspector
+         | el día de la venta y no hay nada que vigilar mientras la unidad
+         | está en la yarda.
+         |
+         | "Oficina" entra en la lista porque Denisse la nombró entre los
+         | tipos que manejan (seco, refrigerado y oficina, de 20 y 40 pies)
+         | y no estaba en el catálogo.
+         */
         $types = [
-            ['dry',       'Dry / Estándar',      'Dry',          10],
-            ['reefer',    'Refrigerado',         'Reefer',       20],
-            ['open_top',  'Open Top',            'Open Top',     30],
-            ['flat_rack', 'Flat Rack',           'Flat Rack',    40],
-            ['other',     'Otro',                'Other',        999],
+            ['dry',       'Dry / Estándar',      'Dry',          10,  false],
+            ['reefer',    'Refrigerado',         'Reefer',       20,  false],
+            ['open_top',  'Open Top',            'Open Top',     30,  false],
+            ['flat_rack', 'Flat Rack',           'Flat Rack',    40,  false],
+            ['office',    'Oficina',             'Office',       50,  false],
+            ['tank',      'Tanque',              'Tank',         60,  true],
+            ['other',     'Otro',                'Other',        999, false],
         ];
 
-        foreach ($types as [$code, $name, $nameEn, $order]) {
+        foreach ($types as [$code, $name, $nameEn, $order, $inspecciona]) {
             ContainerType::updateOrCreate(
                 ['code' => $code],
-                ['name' => $name, 'name_en' => $nameEn, 'sort_order' => $order, 'is_active' => true],
+                ['name' => $name, 'name_en' => $nameEn, 'sort_order' => $order,
+                 'requires_service_inspection' => $inspecciona, 'is_active' => true],
             );
         }
     }

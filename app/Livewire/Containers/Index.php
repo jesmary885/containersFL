@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Containers;
 
+use App\Enums\ContainerColor;
 use App\Enums\ContainerStatus;
 use App\Livewire\Concerns\AuthorizesAccess;
 use App\Models\Container;
@@ -89,6 +90,20 @@ class Index extends Component
     #[Url(as: 'ubicacion', except: '')]
     public string $ubicacion = '';
 
+    /* ---------------------------------------------------------------------
+     | COLOR Y REPARACIÓN — REUNIÓN 16-09
+     |
+     | Los dos filtros que pidió Denisse. El color es lo que distingue una
+     | unidad de otra caminando por la yarda; "por reparar" es la lista que
+     | hoy vive en una pizarra.
+     * ------------------------------------------------------------------ */
+    #[Url(as: 'color', except: '')]
+    public string $color = '';
+
+    /** '' todas · 'si' las que necesitan reparación · 'no' las listas */
+    #[Url(as: 'reparacion', except: '')]
+    public string $reparacion = '';
+
     /** Filtros de un clic desde los contadores de arriba. */
     #[Url(as: 'marca', except: '')]
     public string $marca = '';
@@ -116,6 +131,8 @@ class Index extends Component
     public function updatingCondicion(): void { $this->resetPage(); }
     public function updatingGrado(): void     { $this->resetPage(); }
     public function updatingUbicacion(): void { $this->resetPage(); }
+    public function updatingColor(): void     { $this->resetPage(); }
+    public function updatingReparacion(): void{ $this->resetPage(); }
 
     public function ordenar(string $columna): void
     {
@@ -140,7 +157,8 @@ class Index extends Component
 
     public function limpiarFiltros(): void
     {
-        $this->reset(['buscar', 'estado', 'medida', 'condicion', 'grado', 'ubicacion', 'marca']);
+        $this->reset(['buscar', 'estado', 'medida', 'condicion', 'grado', 'ubicacion',
+                      'color', 'reparacion', 'marca']);
 
         $this->ordenarPor = 'created_at';
         $this->direccion  = 'desc';
@@ -152,7 +170,7 @@ class Index extends Component
     {
         return filled($this->buscar) || filled($this->estado) || filled($this->medida)
             || filled($this->condicion) || filled($this->grado) || filled($this->ubicacion)
-            || filled($this->marca);
+            || filled($this->color) || filled($this->reparacion) || filled($this->marca);
     }
 
     /* =====================================================================
@@ -191,6 +209,15 @@ class Index extends Component
             ->when($this->condicion, fn ($q) => $q->where('container_condition_id', $this->condicion))
             ->when($this->grado,     fn ($q) => $q->where('container_grade_id', $this->grado))
             ->when($this->ubicacion, fn ($q) => $q->where('location_id', $this->ubicacion))
+            ->when($this->color,     fn ($q) => $q->where('color', $this->color))
+
+            /*
+             | El filtro de reparación usa === y no when() con el valor,
+             | porque 'no' es un filtro real y `when('no')` y `when('si')`
+             | son los dos verdaderos. Distinguirlos hace falta.
+             */
+            ->when($this->reparacion === 'si', fn ($q) => $q->where('needs_repair', true))
+            ->when($this->reparacion === 'no', fn ($q) => $q->where('needs_repair', false))
 
             /* -------------------------------------------------------------
              | LOS FILTROS DE LOS CONTADORES
@@ -208,6 +235,7 @@ class Index extends Component
             ]))
             ->when($this->marca === 'exportables', fn ($q) => $q->exportEligible())
             ->when($this->marca === 'sin_precio',  fn ($q) => $q->whereNull('list_price'))
+            ->when($this->marca === 'por_reparar', fn ($q) => $q->where('needs_repair', true))
 
             ->orderBy($orden, $this->direccion === 'asc' ? 'asc' : 'desc')
             ->paginate($this->porPagina);
@@ -244,6 +272,7 @@ class Index extends Component
                                  ])->count(),
                 'exportables' => $base()->available()->exportEligible()->count(),
                 'sinPrecio'   => $base()->available()->whereNull('list_price')->count(),
+                'porReparar'  => $base()->where('needs_repair', true)->count(),
                 'valor'       => $valorEnYarda,
             ],
 
@@ -264,6 +293,7 @@ class Index extends Component
             'condiciones'=> ContainerCondition::active()->get(),
             'grados'     => ContainerGrade::active()->get(),
             'ubicaciones'=> Location::where('is_active', true)->orderBy('name')->get(),
+            'colores'    => ContainerColor::options(),
         ]);
     }
 }

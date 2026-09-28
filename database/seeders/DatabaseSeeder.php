@@ -27,6 +27,10 @@ class DatabaseSeeder extends Seeder
             ContainerCatalogSeeder::class,
             SupplierSeeder::class,
             DepotSeeder::class,
+
+            // REUNIÓN 16-09 · los tres rangos de tarifa por milla.
+            DeliveryRateSeeder::class,
+
             CarrierSeeder::class,
             DriverSeeder::class,
             VehicleSeeder::class,

@@ -46,6 +46,14 @@ use App\Livewire\Users\Index as UserIndex;
 
 use App\Livewire\Roles\Index as RoleIndex;
 
+/* REUNIÓN 16-09 · dos pantallas nuevas de configuración. */
+use App\Livewire\Companies\Form          as CompanyForm;
+use App\Livewire\Trips\Index              as TripIndex;
+use App\Livewire\Trips\Form               as TripForm;
+use App\Livewire\Trips\Show               as TripShow;
+use App\Livewire\Trips\WeeklyBilling      as TripWeeklyBilling;
+use App\Livewire\DeliveryRates\Index     as DeliveryRateIndex;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -212,8 +220,32 @@ Route::middleware('auth')->group(function () {
     Route::get('/operaciones/rentas', Placeholder::class)
         ->middleware('can:rentals.view')->name('operaciones.rentas.index');
 
-    Route::get('/operaciones/viajes', Placeholder::class)
+    /* ---------------------------------------------------------------
+     | VIAJES — REUNIÓN 16-09
+     |
+     | Dejó de ser una pantalla en construcción. Denisse pidió poder
+     | registrar el viaje con su compañía cliente y facturar la semana
+     | de golpe, porque hacen transporte para terceros (Florida
+     | Logistics, Maritin, Ricardo) además del propio.
+     |
+     | El orden importa: /facturacion va ANTES de /{trip}, porque si no
+     | Laravel leería la palabra "facturacion" como si fuera el id de un
+     | viaje y devolvería un 404.
+     * ------------------------------------------------------------ */
+    Route::get('/operaciones/viajes', TripIndex::class)
         ->middleware('can:trips.view')->name('operaciones.viajes.index');
+
+    Route::get('/operaciones/viajes/nuevo', TripForm::class)
+        ->middleware('can:trips.create')->name('operaciones.viajes.create');
+
+    Route::get('/operaciones/viajes/facturacion', TripWeeklyBilling::class)
+        ->middleware('can:invoices.create')->name('operaciones.viajes.facturacion');
+
+    Route::get('/operaciones/viajes/{trip}/editar', TripForm::class)
+        ->middleware('can:trips.update')->name('operaciones.viajes.edit');
+
+    Route::get('/operaciones/viajes/{trip}', TripShow::class)
+        ->middleware('can:trips.view')->name('operaciones.viajes.show');
 
     Route::get('/operaciones/releases', Placeholder::class)
         ->middleware('can:purchases.view')->name('operaciones.releases.index');
@@ -426,7 +458,32 @@ Route::middleware('auth')->group(function () {
             ->name('sistema.trabajadores.edit');
     });
 
-    Route::get('/configuracion', Placeholder::class)
-        ->middleware('can:settings.view')->name('configuracion.index');
+    /* ---------------------------------------------------------------
+     | CONFIGURACIÓN — REUNIÓN 16-09
+     |
+     | Dejó de ser una pantalla en construcción. Hoy son dos cosas que
+     | el cliente tiene que poder cambiar sin llamarnos:
+     |
+     |   Datos de la empresa    las formas de pago que salen al pie de
+     |                          la factura, que fue lo que pidió Denisse
+     |
+     |   Tarifas de entrega     los rangos de millas, que se acordó
+     |                          dejar editables "sobre una base
+     |                          estándar" para ajustarlos según los
+     |                          costos
+     |
+     | Las dos van bajo el permiso `settings`, que ya existía en Roles.
+     * ------------------------------------------------------------ */
+    Route::middleware('can:settings.view')->group(function () {
+
+        Route::get('/configuracion', CompanyForm::class)
+            ->name('configuracion.index');
+
+        Route::get('/configuracion/empresa', CompanyForm::class)
+            ->name('configuracion.empresa');
+
+        Route::get('/configuracion/tarifas-entrega', DeliveryRateIndex::class)
+            ->name('configuracion.tarifas.index');
+    });
 
 });

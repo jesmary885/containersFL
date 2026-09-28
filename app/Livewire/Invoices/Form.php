@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Invoices;
 
+use App\Enums\CommissionBase;
+use App\Enums\CommissionMode;
 use App\Enums\DocumentCategory;
 use App\Enums\EstimateStatus;
 use App\Enums\InvoiceType;
@@ -12,6 +14,7 @@ use App\Models\Customer;
 use App\Models\EstimateItem;
 use App\Models\Invoice;
 use App\Models\Product;
+use App\Services\DistanceResolver;
 use App\Services\InvoiceCalculator;
 use App\Services\PricingResolver;
 use App\Support\CompanyContext;
@@ -225,6 +228,33 @@ class Form extends Component
      * ================================================================== */
 
     public ?int $sold_by_employee_id = null;
+
+    /* ---------------------------------------------------------------------
+     | LO PACTADO CON EL VENDEDOR, CONGELADO EN ESTA FACTURA
+     |
+     | ── POR QUÉ HACÍAN FALTA ──
+     |
+     | Sin estos campos la comisión NO SE CREABA NUNCA. El formulario
+     | guardaba el vendedor y nada más; el CommissionResolver necesita
+     | además saber cómo se calcula, y al no encontrarlo se salía sin hacer
+     | nada. Se elegía el vendedor, se emitía la factura, y la comisión no
+     | aparecía en ninguna parte.
+     |
+     | ── LOS CUATRO SON EDITABLES ──
+     |
+     | Se proponen desde la ficha del vendedor y se cambian acá con un clic.
+     | Lo que quede escrito es lo que manda (RB-058): si mañana cambia el
+     | acuerdo, esta factura sigue explicando su propio número.
+     * ------------------------------------------------------------------ */
+
+    /** 'percent' | 'fixed' | null = esta factura no genera comisión. */
+    public ?string $commission_mode = null;
+
+    public $commission_percent = null;
+    public $commission_amount  = null;
+
+    /** 'subtotal' | 'containers' — lo de "unidades de venta directa". */
+    public string $commission_base = 'subtotal';
 
     public int $paso = 1;
 
@@ -503,6 +533,13 @@ class Form extends Component
 
         $this->customer_id          = $invoice->customer_id;
         $this->sold_by_employee_id  = $invoice->sold_by_employee_id;
+
+        $this->commission_mode    = $invoice->commission_mode?->value;
+        $this->commission_percent = $invoice->commission_percent;
+        $this->commission_amount  = $invoice->commission_amount;
+        $this->commission_base    = $invoice->commission_base instanceof CommissionBase
+            ? $invoice->commission_base->value
+            : ((string) $invoice->commission_base ?: 'subtotal');
         $this->clienteNombre = $invoice->customer?->name ?? '';
 
         $this->type       = $invoice->type?->value ?? 'sale';
@@ -1156,6 +1193,80 @@ class Form extends Component
     }
 
     /* =====================================================================
+     | CALCULAR LAS MILLAS SOLO — REUNIÓN 16-09
+     |
+     | Se acordó calcular las millas automáticamente con la API de Google
+     | Maps a partir del código postal del destino.
+     |
+     | ── LO QUE PASA SI FALLA ──
+     |
+     | Nada grave, a propósito. Sin clave de Google, sin internet o con un
+     | código postal mal escrito, el servicio devuelve null, se avisa en
+     | pantalla y el campo de millas sigue siendo editable a mano.
+     |
+     | Esto no es un detalle: una cotización no puede depender de que
+     | Google conteste.
+     |
+     | ── DE DÓNDE SALE EL ORIGEN ──
+     |
+     | De la dirección de la compañía activa, que es la yarda. Si no tiene
+     | código postal cargado, no hay desde dónde medir y se avisa: se
+     | carga en Configuración → Datos de la empresa.
+     * ================================================================== */
+    public function calcularMillas(): void
+    {
+        $this->exigirPermiso($this->invoiceId ? 'update' : 'create');
+
+        $zip = trim((string) ($this->borrador['delivery_zip'] ?? ''));
+
+        if ($zip === '') {
+            $this->addError('borrador.delivery_zip',
+                'Escriba el código postal del destino para poder calcular las millas.');
+
+            return;
+        }
+
+        $empresa = app(CompanyContext::class)->get();
+
+        $millas = app(DistanceResolver::class)->milesFromCompany($empresa, $zip);
+
+        if ($millas === null) {
+            $this->addError('borrador.miles',
+                'No se pudo calcular la distancia. Escriba las millas a mano y siga; '
+                .'el sistema no las necesita para cotizar.');
+
+            return;
+        }
+
+        $this->borrador['miles'] = $millas;
+
+        /*
+         | La tarifa se vuelve a resolver porque las millas pueden haber
+         | cambiado de rango: 98 millas y 130 millas no cuestan lo mismo
+         | por milla. Se pisa la tarifa anterior a propósito — quien pulsa
+         | "calcular" está pidiendo justamente eso.
+         */
+        $this->borrador['rate_per_mile'] = app(PricingResolver::class)
+            ->effectiveRatePerMile($empresa, null, $millas);
+
+        $this->borrador['unit_price'] = round(
+            $millas * (float) $this->borrador['rate_per_mile'],
+            2,
+        );
+
+        $this->borrador['quantity'] = 1;
+        $this->borrador['taxable']  = false;   // RB-005
+
+        $this->resetValidation(['borrador.miles', 'borrador.delivery_zip', 'borrador.unit_price']);
+    }
+
+    /** ¿Se puede ofrecer el botón de calcular? Solo si hay clave de Google. */
+    public function getPuedeCalcularMillasProperty(): bool
+    {
+        return filled(config('services.google_maps.key'));
+    }
+
+    /* =====================================================================
      | LOS PRECIOS DEL TRANSPORTE
      * ================================================================== */
 
@@ -1187,13 +1298,29 @@ class Form extends Component
         $empresa  = app(CompanyContext::class)->get();
         $resolver = app(PricingResolver::class);
 
-        // La tarifa se precarga una sola vez por renglon. Si la persona
-        // la piso a mano, se respeta.
-        if (($this->borrador['rate_per_mile'] ?? null) === null) {
-            $this->borrador['rate_per_mile'] = $resolver->ratePerMile($empresa);
-        }
-
         $millas = (float) ($this->borrador['miles'] ?? 0);
+
+        /* -----------------------------------------------------------------
+         | LA TARIFA SALE DEL RANGO — REUNIÓN 16-09
+         |
+         | Se le pasan las millas para que elija el rango que toca: hasta
+         | 100, de 100 a 200, o más de 200. Sin millas todavía no hay rango
+         | posible y devuelve la tarifa general.
+         |
+         | effectiveRatePerMile() incluye el recargo por combustible, que
+         | hoy está en cero y pendiente de que Denisse lo confirme.
+         |
+         | Se precarga una sola vez por renglón: si la persona la pisó a
+         | mano, se respeta. Eso es lo que se acordó, tarifas editables
+         | sobre una base estándar.
+         * -------------------------------------------------------------- */
+        if (($this->borrador['rate_per_mile'] ?? null) === null) {
+            $this->borrador['rate_per_mile'] = $resolver->effectiveRatePerMile(
+                $empresa,
+                null,
+                $millas > 0 ? $millas : null,
+            );
+        }
 
         // Sin millas no hay nada que calcular todavia. En cuanto las
         // escriba, updated() vuelve a pasar por aqui.
@@ -1508,6 +1635,49 @@ class Form extends Component
      * Livewire llama a este método con el nombre de la propiedad que
      * acaba de cambiar, por ejemplo "lineas.2.product_id".
      */
+    /* =====================================================================
+     | LA COMISION QUE PROPONE LA FICHA DEL VENDEDOR
+     |
+     | Tres casos, y ninguno obliga a nada:
+     |
+     |   Sin vendedor        se limpia todo. Esta factura no comisiona.
+     |   Un solo valor       se usa ese, sin preguntar.
+     |   Los dos valores     se usa el que el vendedor tenga marcado como
+     |                       preferido; si no marco ninguno, el monto, que
+     |                       es lo que usa el Excel en la hoja de comisiones.
+     * ================================================================== */
+    protected function proponerComision(): void
+    {
+        if (! $this->sold_by_employee_id) {
+            $this->commission_mode    = null;
+            $this->commission_percent = null;
+            $this->commission_amount  = null;
+            $this->commission_base    = 'subtotal';
+
+            return;
+        }
+
+        $vendedor = \App\Models\Employee::find($this->sold_by_employee_id);
+
+        if (! $vendedor) {
+            return;
+        }
+
+        $this->commission_percent = $vendedor->default_commission_percent;
+        $this->commission_amount  = $vendedor->default_commission_amount;
+
+        $this->commission_base = $vendedor->default_commission_base?->value ?: 'subtotal';
+
+        $this->commission_mode = $vendedor->default_commission_mode?->value
+            ?? match (true) {
+                $vendedor->default_commission_amount  !== null => CommissionMode::Fixed->value,
+                $vendedor->default_commission_percent !== null => CommissionMode::Percent->value,
+                default                                        => null,
+            };
+
+        $this->resetValidation(['commission_mode', 'commission_percent', 'commission_amount']);
+    }
+
     public function updated(string $campo): void
     {
         /* -----------------------------------------------------------------
@@ -1521,6 +1691,21 @@ class Form extends Component
             $this->terms = $this->termsSeleccion === self::TERMINO_OTRO
                 ? ($this->termsOtro ?: null)
                 : ($this->termsSeleccion ?: null);
+        }
+
+        /* -----------------------------------------------------------------
+         | SE ELIGIO VENDEDOR -> SE PROPONE SU COMISION
+         |
+         | Todo lo que escribe esto queda editable debajo. Es para no
+         | teclear el caso normal, no un candado: el acuerdo con un vendedor
+         | puede ser distinto en una venta puntual y eso se cambia con un
+         | clic.
+         |
+         | Se propone SOLO al cambiar de vendedor. Si alguien ya ajusto los
+         | numeros a mano, volver a pasar por aqui los borraria.
+         * -------------------------------------------------------------- */
+        if ($campo === 'sold_by_employee_id') {
+            $this->proponerComision();
         }
 
         /* -----------------------------------------------------------------
@@ -1974,6 +2159,11 @@ class Form extends Component
         return [
             'customer_id'         => ['required', 'exists:customers,id'],
             'sold_by_employee_id' => ['nullable', 'exists:employees,id'],
+
+            'commission_mode'    => ['nullable', Rule::in(CommissionMode::values())],
+            'commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'commission_amount'  => ['nullable', 'numeric', 'min:0', 'max:999999'],
+            'commission_base'    => ['required', Rule::in(CommissionBase::values())],
             'type'        => ['required', Rule::in(InvoiceType::values())],
             'issue_date'  => ['required', 'date'],
             'due_date'    => ['nullable', 'date', 'after_or_equal:issue_date'],
@@ -2050,6 +2240,9 @@ class Form extends Component
             'expected_payment_method' => 'forma de pago prevista',
             'tax_rate'             => 'porcentaje de impuesto',
             'discount_amount'      => 'descuento',
+            'commission_percent'   => 'porcentaje de comisión',
+            'commission_amount'    => 'monto de comisión',
+            'commission_base'      => 'base de la comisión',
             'deposit_applied'      => 'anticipo aplicado',
             'bill_to.line1'        => 'dirección de facturación',
         ];
@@ -2141,6 +2334,18 @@ class Form extends Component
                 'company_id'  => $empresa->id,
                 'customer_id' => $this->customer_id,
                 'sold_by_employee_id' => $this->sold_by_employee_id ?: null,
+
+                /*
+                 | Sin vendedor no hay comisión, y sin comisión no se guarda
+                 | un modo suelto: una factura con modo y sin vendedor le
+                 | haría creer al resolver que hay algo que calcular.
+                 */
+                'commission_mode'    => $this->sold_by_employee_id ? ($this->commission_mode ?: null) : null,
+                'commission_percent' => ($this->sold_by_employee_id && $this->commission_percent !== '')
+                    ? $this->commission_percent : null,
+                'commission_amount'  => ($this->sold_by_employee_id && $this->commission_amount !== '')
+                    ? $this->commission_amount : null,
+                'commission_base'    => $this->commission_base ?: 'subtotal',
                 /* Lo decide el contenido, no una pregunta de cabecera. */
                 'type'        => $this->tipoDelDocumento(),
                 'issue_date'  => $this->issue_date,
@@ -2538,6 +2743,9 @@ class Form extends Component
              | Vendedores y administradores de la empresa activa,
              | mas los que trabajan para las dos.
              */
+            'modosComision' => CommissionMode::options(),
+            'basesComision' => CommissionBase::cases(),
+
             'vendedores' => \App\Models\Employee::salespeople()
                 ->forCompany(app(\App\Support\CompanyContext::class)->get()?->id)
                 ->orderBy('first_name')

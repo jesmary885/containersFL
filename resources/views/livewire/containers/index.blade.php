@@ -248,6 +248,24 @@
                     </select>
                 </div>
 
+                {{-- COLOR Y REPARACIÓN · reunión 16-09 --}}
+                <div class="col-6 col-md-3">
+                    <select class="form-select form-select-sm" wire:model.live="color">
+                        <option value="">{{ __('containers.color_any') }}</option>
+                        @foreach ($colores as $valor => $etiqueta)
+                            <option value="{{ $valor }}">{{ $etiqueta }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="col-6 col-md-3">
+                    <select class="form-select form-select-sm" wire:model.live="reparacion">
+                        <option value="">{{ __('containers.repair_filter_any') }}</option>
+                        <option value="si">{{ __('containers.repair_filter_yes') }}</option>
+                        <option value="no">{{ __('containers.repair_filter_no') }}</option>
+                    </select>
+                </div>
+
             </div>
         </div>
 
@@ -302,6 +320,17 @@
                             <tr wire:key="comp-{{ $u->id }}" class="fila-estado {{ $franja }}">
 
                                 <td>
+                                    {{-- El puntito de color · reunión 16-09.
+                                         Un círculo de 10px dice lo mismo que una columna
+                                         entera y no le roba ancho a la tabla. --}}
+                                    @if ($u->color_enum)
+                                        <span title="{{ $u->color_enum->label() }}"
+                                              style="display:inline-block;width:10px;height:10px;
+                                                     border-radius:50%;border:1px solid #cbd5e1;
+                                                     margin-right:.35rem;vertical-align:middle;
+                                                     background: {{ $u->color_enum->hex() }};"></span>
+                                    @endif
+
                                     <a href="{{ route('operaciones.contenedores.show', $u) }}"
                                        class="doc-numero">{{ $u->full_identifier }}</a>
 
@@ -316,6 +345,13 @@
                                     @if ($u->is_export_eligible)
                                         <span class="badge bg-info-subtle text-info-emphasis">
                                             <i class="bi bi-globe-americas"></i> Exportable
+                                        </span>
+                                    @endif
+
+                                    @if ($u->needs_repair)
+                                        <span class="badge bg-warning-subtle text-warning-emphasis"
+                                              @if ($u->repair_notes) title="{{ $u->repair_notes }}" @endif>
+                                            <i class="bi bi-tools"></i> {{ __('containers.needs_repair_short') }}
                                         </span>
                                     @endif
                                 </td>

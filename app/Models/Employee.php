@@ -28,6 +28,19 @@ class Employee extends Model
             'hired_at'                   => 'date',
             'default_commission_amount'  => 'decimal:2',
             'default_commission_percent' => 'decimal:2',
+
+            /*
+             | REUNIÓN 16-09 · el vendedor con condiciones especiales.
+             |
+             | mode  cuál de los dos valores se PROPONE al facturar, cuando
+             |       hay dos cargados. Con uno solo, se usa ese.
+             | base  sobre qué se calcula el porcentaje.
+             |
+             | Las dos son sugerencias: lo que manda es lo que quede escrito
+             | en la factura (RB-058).
+             */
+            'default_commission_mode'    => \App\Enums\CommissionMode::class,
+            'default_commission_base'    => \App\Enums\CommissionBase::class,
             'is_active'                  => 'boolean',
         ];
     }

@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Containers;
 
+use App\Enums\ContainerColor;
 use App\Enums\ContainerStatus;
 use App\Enums\MovementType;
 use App\Livewire\Concerns\AuthorizesAccess;
@@ -97,7 +98,15 @@ class Form extends Component
     public ?int $container_condition_id = null;
     public ?int $container_grade_id     = null;
 
-    public ?string $material = 'steel';
+    /* =====================================================================
+     | EL COLOR
+     |
+     | Reemplaza al campo "material" desde la reunión del 16-09. Arranca
+     | vacío a propósito: "acero" era una suposición segura, un color no.
+     | Si nadie lo eligió, es mejor que quede en blanco a que todas las
+     | unidades salgan amarillas.
+     * ================================================================== */
+    public ?string $color = null;
 
     public ?int $tare_weight_lbs = null;
     public ?int $max_weight_lbs  = null;
@@ -130,7 +139,26 @@ class Form extends Component
 
     public bool $is_export_eligible = false;
 
+    /* ---------------------------------------------------------------------
+     | LA FECHA DE INSPECCIÓN — REUNIÓN 16-09
+     |
+     | Antes este campo se pedía a toda unidad marcada como exportable, y
+     | eso era incorrecto. Denisse lo aclaró en la reunión:
+     |
+     |   Contenedor corriente  el certificado lo emite el inspector EN EL
+     |                         MOMENTO DE LA VENTA. Nada que vigilar antes.
+     |
+     |   Tanque                la inspección VENCE, y vencida lo deja fuera
+     |                         de servicio. Esa fecha hay que verla venir.
+     |
+     | Por eso la fecha ya no depende de `is_export_eligible` sino del TIPO
+     | de la unidad. Quién la pide lo dice el catálogo, en la columna
+     | `container_types.requires_service_inspection`.
+     * ------------------------------------------------------------------ */
     public ?string $csc_valid_through = null;
+
+    /** Si el tipo elegido lleva inspección con vencimiento (tanques). */
+    public bool $requiereInspeccion = false;
 
     /* =====================================================================
      | DE QUIÉN ES
@@ -140,6 +168,16 @@ class Form extends Component
     public ?int $billing_company_id = null;
 
     public ?string $condition_notes = null;
+
+    /* ---------------------------------------------------------------------
+     | REPARACIÓN — REUNIÓN 16-09
+     |
+     | Una marca de sí o no, como las pizarritas de la yarda. Acá se puede
+     | quitar cuando la unidad ya se arregló; se pone al recibirla, en la
+     | pantalla de la compra.
+     * ------------------------------------------------------------------ */
+    public bool $needs_repair   = false;
+    public ?string $repair_notes = null;
 
     /* =====================================================================
      | ARRANQUE
@@ -184,7 +222,7 @@ class Form extends Component
         $this->container_condition_id = $c->container_condition_id;
         $this->container_grade_id     = $c->container_grade_id;
 
-        $this->material        = $c->material ?: 'steel';
+        $this->color           = $c->color ?: null;
         $this->tare_weight_lbs = $c->tare_weight_lbs;
         $this->max_weight_lbs  = $c->max_weight_lbs;
 
@@ -203,10 +241,14 @@ class Form extends Component
         $this->is_export_eligible = (bool) $c->is_export_eligible;
         $this->csc_valid_through  = $c->csc_valid_through?->toDateString();
 
+        $this->refrescarInspeccion();
+
         $this->owner_company_id   = $c->owner_company_id;
         $this->billing_company_id = $c->billing_company_id;
 
         $this->condition_notes = $c->condition_notes;
+        $this->needs_repair    = (bool) $c->needs_repair;
+        $this->repair_notes    = $c->repair_notes;
     }
 
     /* =====================================================================
@@ -273,6 +315,23 @@ class Form extends Component
                 : null;
 
             $this->is_export_eligible = (bool) $calidad?->is_export_eligible;
+        }
+
+        /* -----------------------------------------------------------------
+         | CAMBIÓ EL TIPO → ¿ESTA UNIDAD LLEVA INSPECCIÓN?
+         |
+         | Solo los tipos marcados en el catálogo (hoy, los tanques). Al
+         | cambiar a un tipo que no inspecciona se borra la fecha: dejarla
+         | puesta haría que el sistema avisara del vencimiento de algo que
+         | no vence.
+         * -------------------------------------------------------------- */
+        if ($campo === 'container_type_id') {
+
+            $this->refrescarInspeccion();
+
+            if (! $this->requiereInspeccion) {
+                $this->csc_valid_through = null;
+            }
         }
 
         /* -----------------------------------------------------------------
@@ -361,7 +420,7 @@ class Form extends Component
             'container_condition_id' => ['nullable', 'exists:container_conditions,id'],
             'container_grade_id'     => ['nullable', 'exists:container_grades,id'],
 
-            'material'        => ['nullable', Rule::in(['steel', 'aluminum', 'frp'])],
+            'color'           => ['nullable', Rule::in(ContainerColor::values())],
             'tare_weight_lbs' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'max_weight_lbs'  => ['nullable', 'integer', 'min:0', 'max:200000'],
 
@@ -383,12 +442,15 @@ class Form extends Component
             'billing_company_id' => ['required', 'exists:companies,id'],
 
             'condition_notes' => ['nullable', 'string', 'max:2000'],
+            'needs_repair'    => ['boolean'],
+            'repair_notes'    => ['nullable', 'string', 'max:255'],
         ];
     }
 
     protected function validationAttributes(): array
     {
         return [
+            'color'                  => 'color',
             'container_number'       => 'número de contenedor',
             'internal_code'          => 'código interno',
             'container_size_id'      => 'la medida',
@@ -482,7 +544,7 @@ class Form extends Component
                 'container_condition_id' => $this->container_condition_id ?: null,
                 'container_grade_id'     => $this->container_grade_id ?: null,
 
-                'material'        => $this->material ?: null,
+                'color'           => $this->color ?: null,
                 'tare_weight_lbs' => $this->tare_weight_lbs ?: null,
                 'max_weight_lbs'  => $this->max_weight_lbs ?: null,
 
@@ -520,6 +582,14 @@ class Form extends Component
                 'billing_company_id' => $this->billing_company_id,
 
                 'condition_notes' => $this->condition_notes ?: null,
+
+                /*
+                 | Sin marca no hay nota: si alguien desmarca "necesita
+                 | reparación" y deja escrito "puerta izquierda", la lista
+                 | de pendientes quedaría con un texto que ya no aplica.
+                 */
+                'needs_repair'    => $this->needs_repair,
+                'repair_notes'    => $this->needs_repair ? ($this->repair_notes ?: null) : null,
             ]);
 
             if ($esNueva) {
@@ -632,6 +702,23 @@ class Form extends Component
      | LO QUE SE PINTA
      * ================================================================== */
 
+    /* =====================================================================
+     | ¿ESTE TIPO LLEVA INSPECCIÓN CON VENCIMIENTO?
+     |
+     | Una sola pregunta al catálogo, en un solo sitio. La pantalla la usa
+     | para decidir si enseña el campo de fecha; el guardado la usa para
+     | decidir si lo valida. Si se resolviera en los dos lados por separado,
+     | tarde o temprano dirían cosas distintas.
+     * ================================================================== */
+    private function refrescarInspeccion(): void
+    {
+        $tipo = $this->container_type_id
+            ? ContainerType::find($this->container_type_id)
+            : null;
+
+        $this->requiereInspeccion = (bool) $tipo?->requires_service_inspection;
+    }
+
     public function render()
     {
         return view('livewire.containers.form', [
@@ -647,11 +734,7 @@ class Form extends Component
 
             'estados' => ContainerStatus::options(),
 
-            'materiales' => [
-                'steel'    => 'Acero',
-                'aluminum' => 'Aluminio',
-                'frp'      => 'Fibra de vidrio',
-            ],
+            'colores' => ContainerColor::options(),
         ]);
     }
 }

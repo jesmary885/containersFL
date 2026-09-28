@@ -43,4 +43,26 @@ return [
     'created_at_issue' => 'La comisión nace al emitir la factura, no al cobrarla.',
     'has_payments'     => 'Ya tiene abonos: el monto no se recalcula solo.',
 
+
+    /* ── El vendedor con condiciones especiales · reunión 16-09 ──
+     |
+     | Denisse: la mayoría maneja montos fijos, salvo un vendedor principal
+     | que cobra porcentaje sobre unidades de venta directa.
+     |
+     | Por eso se pueden cargar los dos valores en la ficha del vendedor y
+     | por eso hace falta decir cuál se propone.
+     */
+    'no_commission'        => 'Esta factura no comisiona',
+    'default_mode'         => '¿Cuál se propone al facturar?',
+    'default_mode_hint'    => 'Tiene cargados monto y porcentaje. Se propone el que elija acá, '
+                             .'y el otro sigue disponible: en cada factura se cambia con un clic.',
+    'no_mode_warning'      => 'Hay vendedor pero no se eligió cómo se calcula, así que esta factura '
+                             .'no va a generar comisión. Elija monto o porcentaje.',
+
+    'base'                 => 'Se calcula sobre',
+    'base_subtotal'        => 'Toda la venta',
+    'base_subtotal_hint'   => 'Incluye el delivery y los servicios. Sin impuesto ni recargo de tarjeta.',
+    'base_containers'      => 'Solo los contenedores',
+    'base_containers_hint' => 'Deja fuera el delivery y los servicios. Es lo de "unidades de venta directa".',
+
 ];

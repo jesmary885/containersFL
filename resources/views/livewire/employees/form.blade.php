@@ -137,6 +137,60 @@
                                 @enderror
                             </div>
 
+                            {{-- ─────────────────────────────────────────────────
+                                 EL VENDEDOR CON CONDICIONES ESPECIALES · 16-09
+
+                                 Se pueden llenar los dos campos. Antes no: el
+                                 formulario lo prohibía y ese vendedor no se
+                                 podía guardar.
+
+                                 Con los dos llenos aparece esta pregunta, que
+                                 es la única que hacía falta para levantar la
+                                 prohibición.
+                            ───────────────────────────────────────────────── --}}
+                            @if (filled($default_commission_amount) && filled($default_commission_percent))
+                                <div class="mb-3">
+                                    <label class="form-label">
+                                        {{ __('commissions.default_mode') }}
+                                    </label>
+                                    <select class="form-select @error('default_commission_mode') is-invalid @enderror"
+                                            wire:model.live="default_commission_mode">
+                                        <option value="">— Elegir —</option>
+                                        @foreach ($modos as $valor => $etiqueta)
+                                            <option value="{{ $valor }}">{{ $etiqueta }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('default_commission_mode')
+                                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                                    @enderror
+                                    <div class="form-text">{{ __('commissions.default_mode_hint') }}</div>
+                                </div>
+                            @endif
+
+                            {{-- SOBRE QUÉ SE CALCULA · lo de "unidades de venta directa" --}}
+                            @if (filled($default_commission_percent))
+                                <div class="mb-3">
+                                    <label class="form-label">{{ __('commissions.base') }}</label>
+
+                                    @foreach ($bases as $b)
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio"
+                                                   id="base-{{ $b->value }}"
+                                                   value="{{ $b->value }}"
+                                                   wire:model.live="default_commission_base">
+                                            <label class="form-check-label" for="base-{{ $b->value }}">
+                                                {{ $b->label() }}
+                                                <div class="small text-secondary">{{ $b->hint() }}</div>
+                                            </label>
+                                        </div>
+                                    @endforeach
+
+                                    @error('default_commission_base')
+                                        <div class="text-danger small">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            @endif
+
                         @endif
 
                         <hr>

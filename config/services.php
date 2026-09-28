@@ -35,4 +35,25 @@ return [
         ],
     ],
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Google Maps — REUNIÓN 16-09-2026
+    |--------------------------------------------------------------------------
+    |
+    | Para calcular automáticamente las millas del delivery a partir del
+    | código postal del cliente, en vez de estimarlas a ojo.
+    |
+    | La clave necesita la Distance Matrix API habilitada en Google Cloud y
+    | conviene restringirla por IP del servidor.
+    |
+    | Sin clave el sistema funciona igual: el campo de millas sigue siendo
+    | editable a mano y el botón de calcular no aparece.
+    |
+    */
+
+    'google_maps' => [
+        'key' => env('GOOGLE_MAPS_KEY'),
+    ],
+
 ];

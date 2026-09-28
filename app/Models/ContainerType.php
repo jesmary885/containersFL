@@ -18,7 +18,16 @@ class ContainerType extends Model
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return [
+            'is_active' => 'boolean',
+
+            /*
+             | REUNIÓN 16-09 · Los tanques llevan una inspección que vence
+             | y hay que verla venir. Los demás tipos no: su certificado se
+             | emite el día de la venta.
+             */
+            'requires_service_inspection' => 'boolean',
+        ];
     }
 
      /* =====================================================================

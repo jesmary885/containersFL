@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Carrier;
 use App\Models\Company;
+use App\Models\DeliveryRate;
 use App\Models\Depot;
 use App\Models\Driver;
 use App\Models\Trip;
@@ -60,15 +61,88 @@ class PricingResolver
      *
      *   3. ¿Tampoco? $3.50, que es lo que se dejó cargado en el seeder.
      */
-    public function ratePerMile(?Company $company, Carrier|int|null $carrier = null): float
-    {
+    public function ratePerMile(
+        ?Company $company,
+        Carrier|int|null $carrier = null,
+        ?float $miles = null,
+    ): float {
         $carrier = $this->comoCarrier($carrier);
 
         if ($carrier && $carrier->default_rate_per_mile !== null) {
             return (float) $carrier->default_rate_per_mile;
         }
 
+        /* -----------------------------------------------------------------
+         | LOS RANGOS — REUNIÓN 16-09
+         |
+         | Solo se puede elegir un rango si se sabe cuántas millas son. Al
+         | cotizar a ciegas, antes de tener el código postal, no hay rango
+         | posible y se cae al valor general de Configuración.
+         |
+         | Se consulta la tabla entera y se elige en PHP en vez de armar un
+         | WHERE. Son tres filas: traerlas cuesta menos que un BETWEEN con
+         | un NULL haciendo de infinito, y covers() deja escrito en un solo
+         | sitio que el límite de abajo entra y el de arriba no.
+         * -------------------------------------------------------------- */
+        if ($miles !== null && $miles >= 0) {
+
+            $rango = DeliveryRate::query()
+                ->active()
+                ->forCompany($company?->id)
+                ->get()
+                ->first(fn (DeliveryRate $r) => $r->covers((float) $miles));
+
+            if ($rango) {
+                return (float) $rango->rate_per_mile;
+            }
+        }
+
         return (float) ($company?->setting('operations', 'default_rate_per_mile', 3.50) ?? 3.50);
+    }
+
+    /* ---------------------------------------------------------------------
+     | EL RECARGO POR COMBUSTIBLE — REUNIÓN 16-09
+     |
+     | ARRANCA EN CERO Y ES EDITABLE. NO HAY NADA QUE ESPERAR.
+     |
+     | La minuta dice que las tarifas se ven afectadas por "el precio del
+     | petróleo actual de 6 dólares". Seis dólares de qué no quedó dicho:
+     | puede ser el precio del galón de diésel (el contexto de por qué las
+     | tarifas están donde están), un recargo fijo por milla, o un recargo
+     | por viaje.
+     |
+     | Las tres lecturas dan cotizaciones muy distintas, así que el sistema
+     | no elige ninguna. El recargo existe, vive en la pantalla de Tarifas
+     | de entrega y arranca en $0.00 —sin efecto—. Cuando alguien quiera
+     | aplicarlo, teclea el número y empieza a valer. No hace falta tocar
+     | código ni esperar a nadie.
+     |
+     | Se suma a la tarifa por milla, que es como lo cobra el transporte de
+     | carga en general. Si resultara ser por viaje, hay que moverlo a
+     | customer_price y no dejarlo acá.
+     * ------------------------------------------------------------------ */
+    public function fuelSurchargePerMile(?Company $company): float
+    {
+        return (float) ($company?->setting('operations', 'fuel_surcharge_per_mile', 0.00) ?? 0.00);
+    }
+
+    /**
+     * La tarifa que de verdad se cobra: el rango más el combustible.
+     *
+     * Es la que deben usar las pantallas. ratePerMile() queda expuesta
+     * aparte para poder enseñar los dos números por separado cuando haya
+     * que explicar de dónde sale el total.
+     */
+    public function effectiveRatePerMile(
+        ?Company $company,
+        Carrier|int|null $carrier = null,
+        ?float $miles = null,
+    ): float {
+        return round(
+            $this->ratePerMile($company, $carrier, $miles)
+            + $this->fuelSurchargePerMile($company),
+            2,
+        );
     }
 
     /* =====================================================================

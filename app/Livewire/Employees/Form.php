@@ -2,6 +2,8 @@
 
 namespace App\Livewire\Employees;
 
+use App\Enums\CommissionBase;
+use App\Enums\CommissionMode;
 use App\Livewire\Concerns\AuthorizesAccess;
 use App\Models\Company;
 use App\Models\Employee;
@@ -53,6 +55,23 @@ class Form extends Component
     public $default_commission_amount  = null;
     public $default_commission_percent = null;
 
+    /* ---------------------------------------------------------------------
+     | EL VENDEDOR CON CONDICIONES ESPECIALES — REUNIÓN 16-09
+     |
+     | Denisse: la mayoría maneja montos fijos, salvo un vendedor principal
+     | que recibe un porcentaje sobre unidades de venta directa.
+     |
+     | Antes esto no se podía guardar: el formulario prohibía llenar los dos
+     | campos. Ahora se pueden llenar los dos y estas dos preguntas resuelven
+     | la ambigüedad que motivaba la prohibición.
+     * ------------------------------------------------------------------ */
+
+    /** 'fixed' | 'percent' — cuál se propone al facturar. */
+    public ?string $default_commission_mode = null;
+
+    /** 'subtotal' | 'containers' — sobre qué se calcula el porcentaje. */
+    public string $default_commission_base = 'subtotal';
+
     public bool $is_active = true;
     public ?string $notes  = null;
 
@@ -94,6 +113,8 @@ class Form extends Component
 
             $this->default_commission_amount  = $employee->default_commission_amount;
             $this->default_commission_percent = $employee->default_commission_percent;
+            $this->default_commission_mode    = $employee->default_commission_mode?->value;
+            $this->default_commission_base    = $employee->default_commission_base?->value ?: 'subtotal';
 
             $this->cobraComision = $employee->default_commission_amount !== null
                 || $employee->default_commission_percent !== null;
@@ -133,6 +154,8 @@ class Form extends Component
 
             'default_commission_amount'  => ['nullable', 'numeric', 'min:0', 'max:99999'],
             'default_commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'default_commission_mode'    => ['nullable', Rule::in(CommissionMode::values())],
+            'default_commission_base'    => ['required', Rule::in(CommissionBase::values())],
 
             'notes' => ['nullable', 'string', 'max:2000'],
 
@@ -168,27 +191,64 @@ class Form extends Component
         $this->validate();
 
         /* -----------------------------------------------------------------
-         | LAS DOS FORMAS DE COMISIÓN SON EXCLUYENTES
+         | LAS DOS FORMAS PUEDEN CONVIVIR — CAMBIADO 25-09
          |
-         | O un monto pactado o un porcentaje. Las dos a la vez no
-         | significan nada: al facturar habría que elegir una, y esa
-         | elección la tomaría el código sin que nadie lo decidiera.
+         | ── QUÉ HABÍA ANTES ──
          |
-         | Gana el monto, porque es lo que usa el Excel: en la hoja de
-         | comisiones no hay ni un porcentaje.
+         | El formulario PROHIBÍA llenar monto y porcentaje a la vez, con un
+         | argumento razonable: con los dos llenos, el sistema no sabría cuál
+         | usar y la decisión la tomaría el código.
+         |
+         | ── POR QUÉ CAMBIÓ ──
+         |
+         | Porque en la reunión del 16-09 apareció el caso que la regla no
+         | contemplaba: un vendedor principal que cobra porcentaje en venta
+         | directa de unidades, y monto en lo demás. Con la prohibición
+         | puesta, ese vendedor no se podía guardar.
+         |
+         | ── POR QUÉ YA NO HACE FALTA LA PROHIBICIÓN ──
+         |
+         | Porque ahora hay a quién preguntarle: `default_commission_mode`
+         | dice cuál se propone. Con un solo valor cargado no se pregunta
+         | nada, se usa ese.
+         |
+         | Y sobre todo: lo que decide de verdad es la FACTURA, donde queda
+         | congelado lo pactado (RB-058). Esto es una sugerencia para no
+         | teclear el caso normal.
          * -------------------------------------------------------------- */
-        /* Sin comisión, los dos campos se descartan. */
+
+        /* Sin comisión, todo lo de comisión se descarta. */
         if (! $this->cobraComision) {
             $this->default_commission_amount  = null;
             $this->default_commission_percent = null;
+            $this->default_commission_mode    = null;
         }
 
-        if (filled($this->default_commission_amount) && filled($this->default_commission_percent)) {
-            $this->addError('default_commission_percent',
-                'Elija una de las dos: monto pactado o porcentaje. Las dos a la vez '
-                .'dejarían al sistema decidiendo cuál usar.');
+        /*
+         | Con los dos valores cargados hace falta saber cuál se propone.
+         | Es la única pregunta que reemplaza a la antigua prohibición.
+         */
+        if (filled($this->default_commission_amount)
+            && filled($this->default_commission_percent)
+            && blank($this->default_commission_mode)) {
+
+            $this->addError('default_commission_mode',
+                'Tiene cargados monto y porcentaje. Indique cuál se propone al facturar; '
+                .'el otro sigue disponible y se elige con un clic en cada factura.');
 
             return null;
+        }
+
+        /*
+         | Con un solo valor cargado, el modo se deduce. Guardarlo explícito
+         | evita que el formulario de la factura tenga que adivinar.
+         */
+        if (blank($this->default_commission_mode)) {
+            $this->default_commission_mode = match (true) {
+                filled($this->default_commission_percent) => CommissionMode::Percent->value,
+                filled($this->default_commission_amount)  => CommissionMode::Fixed->value,
+                default                                   => null,
+            };
         }
 
         $trabajador = $this->employeeId
@@ -208,6 +268,9 @@ class Form extends Component
                 ? $this->default_commission_amount : null,
             'default_commission_percent' => $this->default_commission_percent !== ''
                 ? $this->default_commission_percent : null,
+
+            'default_commission_mode'    => $this->default_commission_mode ?: null,
+            'default_commission_base'    => $this->default_commission_base ?: 'subtotal',
 
             'is_active' => $this->is_active,
             'notes'     => $this->notes ?: null,
@@ -276,6 +339,8 @@ class Form extends Component
         return view('livewire.employees.form', [
             'roles'    => Employee::ROLES,
             'empresas' => Company::where('is_active', true)->orderBy('name')->get(),
+            'modos'    => CommissionMode::options(),
+            'bases'    => CommissionBase::cases(),
         ]);
     }
 }

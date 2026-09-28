@@ -38,6 +38,21 @@ class SettingSeeder extends Seeder
 
             ['payments', 'credit_card_fee_percent', 3.50, 'decimal',
              'Recargo por tarjeta (%)'],
+            /* ===========================================================
+             | OPERACIONES · REUNIÓN 16-09
+             * ======================================================== */
+
+            ['operations', 'fuel_surcharge_per_mile', 0.00, 'decimal',
+             'Recargo por combustible ($/milla)'],
+            // En la reunión del 16-09 se habló del "precio del petróleo
+            // actual de 6 dólares" afectando las tarifas. Seis dólares de
+            // qué no quedó dicho, así que el sistema no decide por nadie:
+            // el recargo existe, es editable desde la pantalla de Tarifas
+            // de entrega y arranca en 0.00, o sea sin efecto.
+            //
+            // El PricingResolver ya lo suma a la tarifa del rango. Poner un
+            // número ahí es todo lo que hace falta para activarlo.
+
             // RB-009: constante 3.5%.
 
             ['payments', 'cc_fee_base', 'total_with_tax', 'string',

@@ -1939,9 +1939,34 @@
 
                                     <div class="rn-c3">
                                         <label>{{ __('estimates.miles') }} <span class="rn-req">*</span></label>
-                                        <input type="number" step="0.1" min="0"
-                                               class="form-control text-end @error('borrador.miles') is-invalid @enderror"
-                                               wire:model.live.debounce.500ms="borrador.miles">
+
+                                        {{-- CALCULAR SOLO · reunión 16-09.
+                                             Solo aparece si hay clave de Google configurada.
+                                             Sin ella la pantalla se ve igual que siempre. --}}
+                                        @if ($this->puedeCalcularMillas)
+                                            <div class="input-group">
+                                                <input type="number" step="0.1" min="0"
+                                                       class="form-control text-end @error('borrador.miles') is-invalid @enderror"
+                                                       wire:model.live.debounce.500ms="borrador.miles">
+
+                                                <button type="button" class="btn btn-outline-secondary"
+                                                        wire:click="calcularMillas"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="calcularMillas"
+                                                        title="Calcular con Google Maps desde el ZIP de destino">
+                                                    <span wire:loading.remove wire:target="calcularMillas">
+                                                        <i class="bi bi-geo-alt"></i>
+                                                    </span>
+                                                    <span wire:loading wire:target="calcularMillas"
+                                                          class="spinner-border spinner-border-sm"></span>
+                                                </button>
+                                            </div>
+                                        @else
+                                            <input type="number" step="0.1" min="0"
+                                                   class="form-control text-end @error('borrador.miles') is-invalid @enderror"
+                                                   wire:model.live.debounce.500ms="borrador.miles">
+                                        @endif
+
                                         @error('borrador.miles')
                                             <div class="invalid-feedback d-block">{{ $message }}</div>
                                         @enderror

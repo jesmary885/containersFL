@@ -185,6 +185,21 @@ class Show extends Component
                  | en el mismo viaje vienen de los dos.
                  */
                 'pickup' => $sugerido,
+
+                /*
+                 | REUNIÓN 16-09 · el marcado de reparaciones.
+                 |
+                 | Denisse preguntó cómo registrar las reparaciones de los
+                 | contenedores que llegan cada semana. Lo que se acordó es
+                 | esto: una marca de sí o no al recibirlos, como las
+                 | pizarritas que usan en la yarda, y la nota de qué tiene.
+                 |
+                 | Arranca en false porque lo normal es que la unidad llegue
+                 | bien. Si arrancara marcada, quien recibe 14 contenedores
+                 | tendría que desmarcar 14 casillas.
+                 */
+                'reparar' => false,
+                'repnota' => null,
             ];
         }
 
@@ -252,6 +267,8 @@ class Show extends Component
                                               'distinct', 'unique:containers,container_number'],
             'unidadesDelRetiro.*.codigo'  => ['nullable', 'string', 'max:20'],
             'unidadesDelRetiro.*.pickup'  => ['nullable', 'numeric', 'min:0', 'max:99999'],
+            'unidadesDelRetiro.*.reparar' => ['boolean'],
+            'unidadesDelRetiro.*.repnota' => ['nullable', 'string', 'max:255'],
         ], [
             'unidadesDelRetiro.*.numero.unique'   => 'Ese numero ya esta en el inventario. '
                                                     .'Un contenedor no puede estar dos veces.',
@@ -316,6 +333,16 @@ class Show extends Component
                     'billing_company_id' => $this->purchase->company_id,
 
                     'condition_notes' => $this->notaRetiro ?: null,
+
+                    /*
+                     | Sin marca no se guarda nota: una nota suelta dejaría
+                     | la lista de pendientes con texto que ya no aplica.
+                     */
+                    'needs_repair'    => (bool) ($u['reparar'] ?? false),
+                    'repair_notes'    => ($u['reparar'] ?? false)
+                        ? (($u['repnota'] ?? null) ?: null)
+                        : null,
+
                     'created_by'      => auth()->id(),
                 ]);
 

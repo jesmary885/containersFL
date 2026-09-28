@@ -60,6 +60,7 @@ return [
     'reports'          => 'Reportes',
     'catalogs'         => 'Catálogos',
     'settings'         => 'Configuración',
+    'delivery_rates'   => 'Tarifas de entrega',
     'users'            => 'Usuarios',
     'roles'            => 'Roles y permisos',
 

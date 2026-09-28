@@ -163,7 +163,10 @@
 
                             <div class="col-12 col-md-4">
                                 <label class="form-label">Tipo</label>
-                                <select class="form-select" wire:model="container_type_id">
+                                {{-- .live porque al cambiar el tipo el formulario decide si pide la fecha
+                                     de inspección (solo los tanques). Sin .live habría que
+                                     guardar y volver a entrar para verlo. --}}
+                                <select class="form-select" wire:model.live="container_type_id">
                                     <option value="">— Elegir —</option>
                                     @foreach ($tipos as $t)
                                         <option value="{{ $t->id }}">{{ $t->name }}</option>
@@ -191,13 +194,26 @@
                                 </select>
                             </div>
 
+                            {{-- COLOR · reemplaza a "Material" desde la reunión del 16-09.
+                                 Denisse lo pidió para poder filtrar el inventario por lo
+                                 que se ve a simple vista en la yarda. --}}
                             <div class="col-6 col-md-2">
-                                <label class="form-label">Material</label>
-                                <select class="form-select" wire:model="material">
-                                    @foreach ($materiales as $valor => $etiqueta)
+                                <label class="form-label">{{ __('containers.color') }}</label>
+                                <select class="form-select" wire:model.live="color">
+                                    <option value="">— Elegir —</option>
+                                    @foreach ($colores as $valor => $etiqueta)
                                         <option value="{{ $valor }}">{{ $etiqueta }}</option>
                                     @endforeach
                                 </select>
+
+                                @if ($color)
+                                    <div class="small text-secondary mt-1 d-flex align-items-center gap-1">
+                                        <span style="display:inline-block;width:12px;height:12px;
+                                                     border-radius:50%;border:1px solid #cbd5e1;
+                                                     background: {{ \App\Enums\ContainerColor::from($color)->hex() }};"></span>
+                                        {{ \App\Enums\ContainerColor::from($color)->label() }}
+                                    </div>
+                                @endif
                             </div>
 
                             <div class="col-6 col-md-3">
@@ -283,6 +299,26 @@
                                           wire:model.blur="condition_notes"></textarea>
                             </div>
 
+                            {{-- REPARACIÓN · reunión 16-09.
+                                 Se marca al recibir la unidad y se desmarca acá cuando
+                                 ya se arregló. La lista de inventario filtra por esto. --}}
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox"
+                                           id="necesitaReparacion" wire:model.live="needs_repair">
+                                    <label class="form-check-label" for="necesitaReparacion">
+                                        {{ __('containers.needs_repair') }}
+                                    </label>
+                                </div>
+
+                                @if ($needs_repair)
+                                    <input type="text" class="form-control mt-2"
+                                           maxlength="255"
+                                           placeholder="{{ __('containers.repair_notes') }}: puerta izquierda, techo, pintura..."
+                                           wire:model.blur="repair_notes">
+                                @endif
+                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -305,16 +341,36 @@
                                     <input class="form-check-input" type="checkbox"
                                            id="exportable" wire:model.live="is_export_eligible">
                                     <label class="form-check-label" for="exportable">
-                                        Apta para exportación
+                                        {{ __('containers.export_eligible') }}
                                     </label>
                                 </div>
                             </div>
 
-                            @if ($is_export_eligible)
+                            {{-- ─────────────────────────────────────────────────────
+                                 REUNIÓN 16-09 · LA FECHA YA NO DEPENDE DE EXPORTACIÓN
+
+                                 Antes, marcar "apta para exportación" pedía una fecha
+                                 de CSC. Denisse aclaró que en un contenedor corriente
+                                 el certificado lo emite el inspector EN LA VENTA, así
+                                 que esa fecha no existe todavía y había que inventarla.
+
+                                 Ahora la fecha la piden solo los tipos que de verdad
+                                 vencen: los tanques. Eso lo decide el catálogo, no
+                                 esta pantalla.
+                            ───────────────────────────────────────────────────── --}}
+                            @if ($requiereInspeccion)
                                 <div class="col-12 col-md-6">
-                                    <label class="form-label">CSC vigente hasta</label>
+                                    <label class="form-label">{{ __('containers.inspection_due') }}</label>
                                     <input type="date" class="form-control"
                                            wire:model="csc_valid_through">
+                                    <div class="form-text">{{ __('containers.inspection_due_hint') }}</div>
+                                </div>
+                            @elseif ($is_export_eligible)
+                                <div class="col-12 col-md-6">
+                                    <div class="alert alert-light border mb-0 py-2 px-3 small">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        {{ __('containers.csc_at_sale_hint') }}
+                                    </div>
                                 </div>
                             @endif
 

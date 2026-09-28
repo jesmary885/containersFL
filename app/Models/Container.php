@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ContainerColor;
 use App\Enums\ContainerStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -50,6 +51,9 @@ class Container extends Model
         return [
             'status'              => ContainerStatus::class,
             'is_export_eligible'  => 'boolean',
+
+            // REUNIÓN 16-09 · la marca de reparación de la yarda.
+            'needs_repair'        => 'boolean',
             'acquisition_cost'    => 'decimal:2',
             'pickup_cost'         => 'decimal:2',
             'reconditioning_cost' => 'decimal:2',
@@ -210,6 +214,32 @@ class Container extends Model
     public function scopeAtSupplier(Builder $q): Builder { return $q->where('status', ContainerStatus::AtSupplier); }
 
     /** Apto para exportar: marcado como tal y con CSC vigente (o sin CSC). */
+    /* ---------------------------------------------------------------------
+     | LO QUE HAY POR ARREGLAR — REUNIÓN 16-09
+     |
+     | La lista que hoy vive en una pizarra de la yarda.
+     * ------------------------------------------------------------------ */
+    public function scopeNeedsRepair(Builder $q): Builder
+    {
+        return $q->where('needs_repair', true);
+    }
+
+    /* ---------------------------------------------------------------------
+     | INSPECCIONES QUE SE VENCEN — REUNIÓN 16-09
+     |
+     | Solo mira las unidades cuyo TIPO lleva inspección (hoy, los tanques).
+     | Un contenedor corriente con una fecha vieja cargada por error no
+     | tiene por qué salir en esta lista: su certificado se emite al vender.
+     |
+     | $dias es el aviso anticipado. Con 0 devuelve solo las ya vencidas.
+     * ------------------------------------------------------------------ */
+    public function scopeInspectionDue(Builder $q, int $dias = 30): Builder
+    {
+        return $q->whereNotNull('csc_valid_through')
+                 ->whereDate('csc_valid_through', '<=', now()->addDays($dias))
+                 ->whereHas('type', fn ($t) => $t->where('requires_service_inspection', true));
+    }
+
     public function scopeExportEligible(Builder $q): Builder
     {
         return $q->where('is_export_eligible', true)
@@ -284,6 +314,22 @@ class Container extends Model
     public function getFullIdentifierAttribute(): string
     {
         return $this->container_number ?: ($this->internal_code ?: '#'.$this->id);
+    }
+
+    /* ---------------------------------------------------------------------
+     | EL COLOR, COMO OBJETO
+     |
+     | `color` es un texto en la base ('yellow'). Esto lo devuelve como el
+     | enum, que es quien sabe su nombre traducido y su hexadecimal.
+     |
+     | No se castea a enum en casts() a propósito: si alguna vez llega un
+     | valor viejo o escrito a mano que no esté en la lista, un cast haría
+     | reventar la pantalla entera. Así, devuelve null y la fila se pinta
+     | sin puntito.
+     * ------------------------------------------------------------------ */
+    public function getColorEnumAttribute(): ?ContainerColor
+    {
+        return $this->color ? ContainerColor::tryFrom($this->color) : null;
     }
 
     /** "20FT · Usado · Cargo Worthy". Tolera catálogos vacíos. */

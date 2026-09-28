@@ -518,6 +518,8 @@
                                         <th>Código de la unidad</th>
                                         <th>Código interno</th>
                                         <th class="text-end" style="width: 130px;">Traslado</th>
+                                        {{-- REUNIÓN 16-09 · marcado de reparaciones --}}
+                                        <th class="text-center" style="width: 110px;">¿Reparar?</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -547,6 +549,20 @@
                                                 <input type="number" step="0.01" class="form-control text-end"
                                                        wire:model.live.debounce.500ms="unidadesDelRetiro.{{ $i }}.pickup">
                                             </div>
+                                        </td>
+
+                                        {{-- Una casilla y, si se marca, una línea para decir qué tiene.
+                                             Nada más: no es un módulo de reparaciones. --}}
+                                        <td class="text-center">
+                                            <input class="form-check-input" type="checkbox"
+                                                   wire:model.live="unidadesDelRetiro.{{ $i }}.reparar">
+
+                                            @if (! empty($u['reparar']))
+                                                <input type="text" class="form-control form-control-sm mt-1"
+                                                       maxlength="255"
+                                                       placeholder="Puerta, techo, pintura..."
+                                                       wire:model.blur="unidadesDelRetiro.{{ $i }}.repnota">
+                                            @endif
                                         </td>
                                     </tr>
                                 @endforeach

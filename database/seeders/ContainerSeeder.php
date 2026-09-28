@@ -151,7 +151,7 @@ class ContainerSeeder extends Seeder
                 'container_size_id'      => $sizes[$c['size']] ?? null,
                 'container_condition_id' => $c['condition'] ? ($conditions[$c['condition']] ?? null) : null,
                 'container_grade_id'     => $grade,
-                'material'               => 'steel',
+                'color'                  => 'gray',
 
                 'status'      => $c['status'],
                 'location_id' => $c['in_yard'] ? $yard?->id : null,

@@ -360,6 +360,84 @@
                             @enderror
                         </div>
 
+                        {{-- ═══════════════════════════════════════════════════
+                             LO PACTADO, EDITABLE · REUNIÓN 16-09
+
+                             Se propone desde la ficha del vendedor y se cambia
+                             acá con un clic. Antes estos campos no existían y
+                             la comisión NO se creaba nunca: se elegía el
+                             vendedor y no aparecía en ninguna parte.
+                        ═══════════════════════════════════════════════════ --}}
+                        @if ($sold_by_employee_id)
+
+                            <div class="col-6 col-md-3">
+                                <label class="form-label">{{ __('commissions.mode') }}</label>
+                                <select class="form-select @error('commission_mode') is-invalid @enderror"
+                                        wire:model.live="commission_mode">
+                                    <option value="">{{ __('commissions.no_commission') }}</option>
+                                    @foreach ($modosComision as $valor => $etiqueta)
+                                        <option value="{{ $valor }}">{{ $etiqueta }}</option>
+                                    @endforeach
+                                </select>
+                                @error('commission_mode')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            @if ($commission_mode === 'percent')
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label">{{ __('commissions.percent') }}</label>
+                                    <div class="input-group">
+                                        <input type="number" step="0.01" min="0"
+                                               class="form-control text-end @error('commission_percent') is-invalid @enderror"
+                                               wire:model.live.debounce.500ms="commission_percent">
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                    @error('commission_percent')
+                                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label">{{ __('commissions.base') }}</label>
+                                    <select class="form-select @error('commission_base') is-invalid @enderror"
+                                            wire:model.live="commission_base">
+                                        @foreach ($basesComision as $b)
+                                            <option value="{{ $b->value }}">{{ $b->label() }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('commission_base')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            @endif
+
+                            @if ($commission_mode === 'fixed')
+                                <div class="col-6 col-md-3">
+                                    <label class="form-label">{{ __('commissions.fixed_amount') }}</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input type="number" step="0.01" min="0"
+                                               class="form-control text-end @error('commission_amount') is-invalid @enderror"
+                                               wire:model.live.debounce.500ms="commission_amount">
+                                    </div>
+                                    @error('commission_amount')
+                                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            @endif
+
+                            @if (! $commission_mode)
+                                <div class="col-12">
+                                    <div class="alert alert-warning py-2 small mb-0">
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                        {{ __('commissions.no_mode_warning') }}
+                                    </div>
+                                </div>
+                            @endif
+
+                        @endif
+
                         <div class="col-12 col-md-7">
                             @if ($vendedores->isEmpty())
                                 <div class="alert alert-warning py-2 small mb-0">
@@ -1947,9 +2025,35 @@
 
                                     <div class="rn-c3">
                                         <label>Millas <span class="rn-req">*</span></label>
-                                        <input type="number" step="0.1" min="0"
-                                               class="form-control text-end @error('borrador.miles') is-invalid @enderror"
-                                               wire:model.live.debounce.500ms="borrador.miles">
+
+                                        {{-- CALCULAR SOLO · reunión 16-09.
+                                             El botón solo aparece si hay clave de Google
+                                             configurada. Sin ella la pantalla se ve igual
+                                             que siempre y las millas se escriben a mano. --}}
+                                        @if ($this->puedeCalcularMillas)
+                                            <div class="input-group">
+                                                <input type="number" step="0.1" min="0"
+                                                       class="form-control text-end @error('borrador.miles') is-invalid @enderror"
+                                                       wire:model.live.debounce.500ms="borrador.miles">
+
+                                                <button type="button" class="btn btn-outline-secondary"
+                                                        wire:click="calcularMillas"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="calcularMillas"
+                                                        title="Calcular con Google Maps desde el ZIP de destino">
+                                                    <span wire:loading.remove wire:target="calcularMillas">
+                                                        <i class="bi bi-geo-alt"></i>
+                                                    </span>
+                                                    <span wire:loading wire:target="calcularMillas"
+                                                          class="spinner-border spinner-border-sm"></span>
+                                                </button>
+                                            </div>
+                                        @else
+                                            <input type="number" step="0.1" min="0"
+                                                   class="form-control text-end @error('borrador.miles') is-invalid @enderror"
+                                                   wire:model.live.debounce.500ms="borrador.miles">
+                                        @endif
+
                                         @error('borrador.miles')
                                             <div class="invalid-feedback d-block">{{ $message }}</div>
                                         @enderror
