@@ -48,6 +48,9 @@ use App\Livewire\Roles\Index as RoleIndex;
 
 /* REUNIÓN 16-09 · dos pantallas nuevas de configuración. */
 use App\Livewire\Companies\Form          as CompanyForm;
+use App\Livewire\Rentals\Index            as RentalIndex;
+use App\Livewire\Rentals\Form             as RentalForm;
+use App\Livewire\Rentals\Show             as RentalShow;
 use App\Livewire\Trips\Index              as TripIndex;
 use App\Livewire\Trips\Form               as TripForm;
 use App\Livewire\Trips\Show               as TripShow;
@@ -217,8 +220,24 @@ Route::middleware('auth')->group(function () {
             ->name('operaciones.contenedores.show');
     });
 
-    Route::get('/operaciones/rentas', Placeholder::class)
+    /* ---------------------------------------------------------------
+     | RENTAS
+     |
+     | Dos negocios en el mismo módulo: la mensual (el cliente se lleva
+     | un contenedor nuestro) y la de yarda (el cliente deja el suyo
+     | acá y se cobra por día). Salen de dos hojas distintas del Excel.
+     * ------------------------------------------------------------ */
+    Route::get('/operaciones/rentas', RentalIndex::class)
         ->middleware('can:rentals.view')->name('operaciones.rentas.index');
+
+    Route::get('/operaciones/rentas/nueva', RentalForm::class)
+        ->middleware('can:rentals.create')->name('operaciones.rentas.create');
+
+    Route::get('/operaciones/rentas/{rental}/editar', RentalForm::class)
+        ->middleware('can:rentals.update')->name('operaciones.rentas.edit');
+
+    Route::get('/operaciones/rentas/{rental}', RentalShow::class)
+        ->middleware('can:rentals.view')->name('operaciones.rentas.show');
 
     /* ---------------------------------------------------------------
      | VIAJES — REUNIÓN 16-09
