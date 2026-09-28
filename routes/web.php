@@ -52,6 +52,7 @@ use App\Livewire\Drivers\Index            as DriverIndex;
 use App\Livewire\Vehicles\Index           as VehicleIndex;
 use App\Livewire\Expenses\Index           as ExpenseIndex;
 use App\Livewire\Settlements\Index        as SettlementIndex;
+use App\Livewire\Reports\Index            as ReportIndex;
 use App\Livewire\Rentals\Index            as RentalIndex;
 use App\Livewire\Rentals\Form             as RentalForm;
 use App\Livewire\Rentals\Show             as RentalShow;
@@ -467,7 +468,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/documentos/{document}/descargar', DocumentDownloadController::class)
         ->name('documentos.descargar');
 
-    Route::get('/reportes', Placeholder::class)
+    /* ---------------------------------------------------------------
+     | REPORTES
+     |
+     | Los cinco básicos más el de impuestos, que es lo acordado para
+     | esta fase. El 1099 y la caja con saldo corrido quedaron para la
+     | siguiente.
+     * ------------------------------------------------------------ */
+    Route::get('/reportes', ReportIndex::class)
         ->middleware('can:reports.view')->name('reportes.index');
 
     Route::get('/sistema/catalogos', Placeholder::class)
