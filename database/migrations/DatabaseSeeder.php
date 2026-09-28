@@ -1,0 +1,45 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\User;
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    use WithoutModelEvents;
+
+    /**
+     * Seed the application's database.
+     */
+    public function run(): void
+    {
+        $this->call([
+            CompanySeeder::class,
+            SettingSeeder::class,
+            RoleSeeder::class,
+            UserSeeder::class,
+            DocumentSequenceSeeder::class,
+            ExpenseCategorySeeder::class,
+            LocationSeeder::class,
+            ProductSeeder::class,
+            ContainerCatalogSeeder::class,
+            SupplierSeeder::class,
+            DepotSeeder::class,
+
+            // REUNIÓN 16-09 · los tres rangos de tarifa por milla.
+            DeliveryRateSeeder::class,
+
+            CarrierSeeder::class,
+            DriverSeeder::class,
+            VehicleSeeder::class,
+            CustomerSeeder::class,
+            CustomerAddressSeeder::class,
+            ContainerSeeder::class,
+            ContainerPriceSeeder::class,
+            NotificationRuleSeeder::class,
+            EmployeeSeeder::class,
+        ]);
+    }
+}

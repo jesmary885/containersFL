@@ -48,6 +48,10 @@ use App\Livewire\Roles\Index as RoleIndex;
 
 /* REUNIÓN 16-09 · dos pantallas nuevas de configuración. */
 use App\Livewire\Companies\Form          as CompanyForm;
+use App\Livewire\Drivers\Index            as DriverIndex;
+use App\Livewire\Vehicles\Index           as VehicleIndex;
+use App\Livewire\Expenses\Index           as ExpenseIndex;
+use App\Livewire\Settlements\Index        as SettlementIndex;
 use App\Livewire\Rentals\Index            as RentalIndex;
 use App\Livewire\Rentals\Form             as RentalForm;
 use App\Livewire\Rentals\Show             as RentalShow;
@@ -269,7 +273,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/operaciones/releases', Placeholder::class)
         ->middleware('can:purchases.view')->name('operaciones.releases.index');
 
-    Route::get('/operaciones/choferes', Placeholder::class)
+    /* Choferes y camiones: lista y panel lateral en la misma pantalla.
+       Son pocos registros y se corrigen sobre la marcha. */
+    Route::get('/operaciones/choferes', DriverIndex::class)
         ->middleware('can:drivers.view')->name('operaciones.choferes.index');
 
     /* ---------------------------------------------------------------
@@ -279,7 +285,7 @@ Route::middleware('auth')->group(function () {
      | donde lo pone la pantalla de Roles, y el menu ahora dice lo
      | mismo que Roles.
      * ------------------------------------------------------------ */
-    Route::get('/operaciones/camiones', Placeholder::class)
+    Route::get('/operaciones/camiones', VehicleIndex::class)
         ->middleware('can:vehicles.view')->name('operaciones.camiones.index');
 
     /* ---------------------------------------------------------------
@@ -397,13 +403,28 @@ Route::middleware('auth')->group(function () {
      | desde el principio y no tenian ruta: el menu ensenaba "Gastos"
      | como un enlace a "#", que no lleva a ningun lado y parece roto.
      * ------------------------------------------------------------ */
-    Route::get('/finanzas/gastos', Placeholder::class)
+    /* ---------------------------------------------------------------
+     | GASTOS
+     |
+     | Es lo que hace que la rentabilidad signifique algo: el margen de
+     | un contenedor y el "queda para la empresa" de un viaje son
+     | mentira mientras el combustible y las reparaciones no estén
+     | cargados en ninguna parte.
+     * ------------------------------------------------------------ */
+    Route::get('/finanzas/gastos', ExpenseIndex::class)
         ->middleware('can:expenses.view')->name('finanzas.gastos.index');
 
     Route::get('/finanzas/comisiones', Placeholder::class)
         ->middleware('can:commissions.view')->name('finanzas.comisiones.index');
 
-    Route::get('/finanzas/liquidaciones', Placeholder::class)
+    /* ---------------------------------------------------------------
+     | LIQUIDACIÓN DE CHOFERES
+     |
+     | De la transportista, no de la de contenedores. Quedó aclarado en
+     | la reunión del 16-09: los choferes son de RST y es RST quien les
+     | liquida. Por eso la pantalla trabaja sobre la compañía activa.
+     * ------------------------------------------------------------ */
+    Route::get('/finanzas/liquidaciones', SettlementIndex::class)
         ->middleware('can:settlements.view')->name('finanzas.liquidaciones.index');
 
     /* ---------------------------------------------------------------
